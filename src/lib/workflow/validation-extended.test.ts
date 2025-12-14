@@ -393,7 +393,9 @@ describe("validateWorkflow - Extended", () => {
 				errors.some(
 					(e) =>
 						e.nodeId === "reject-1" &&
-						e.message.includes("debe conectarse al checkpoint anterior más próximo"),
+						e.message.includes(
+							"debe conectarse al checkpoint anterior más próximo",
+						),
 				),
 			).toBe(true);
 		});

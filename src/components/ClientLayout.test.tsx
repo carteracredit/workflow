@@ -20,7 +20,9 @@ describe("ClientLayout", () => {
 		expect(
 			container.querySelector('[data-testid="theme-provider"]'),
 		).toBeInTheDocument();
-		expect(container.querySelector('[data-testid="child"]')).toBeInTheDocument();
+		expect(
+			container.querySelector('[data-testid="child"]'),
+		).toBeInTheDocument();
 	});
 
 	it("should render multiple children", () => {
@@ -31,7 +33,11 @@ describe("ClientLayout", () => {
 			</ClientLayout>,
 		);
 
-		expect(container.querySelector('[data-testid="child-1"]')).toBeInTheDocument();
-		expect(container.querySelector('[data-testid="child-2"]')).toBeInTheDocument();
+		expect(
+			container.querySelector('[data-testid="child-1"]'),
+		).toBeInTheDocument();
+		expect(
+			container.querySelector('[data-testid="child-2"]'),
+		).toBeInTheDocument();
 	});
 });

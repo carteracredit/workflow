@@ -67,7 +67,6 @@ describe("ThemeSwitcher", () => {
 		}
 	});
 
-
 	it("should display sun icon in light mode", () => {
 		mockUseTheme.mockReturnValue({
 			theme: "light",

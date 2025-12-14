@@ -3,9 +3,8 @@ import {
 	findNearestPreviousCheckpoint,
 	findAllNearestPreviousCheckpoints,
 	getCheckpointNode,
-	type WorkflowNode,
-	type WorkflowEdge,
 } from "./graph-utils";
+import type { WorkflowNode, WorkflowEdge } from "./types";
 
 describe("graph-utils", () => {
 	describe("findNearestPreviousCheckpoint", () => {

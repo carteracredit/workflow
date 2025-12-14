@@ -5,9 +5,8 @@ import {
 	getMaxIncomingConnections,
 	canNodeHaveOutgoingConnections,
 	canCreateConnection,
-	type WorkflowNode,
-	type WorkflowEdge,
 } from "./connection-rules";
+import type { WorkflowNode, WorkflowEdge } from "./types";
 
 describe("connection-rules", () => {
 	describe("isRetryEdge", () => {
@@ -118,7 +117,13 @@ describe("connection-rules", () => {
 				roles: [],
 				config: {
 					url: "https://api.example.com",
-					failureHandling: { onFailure: "stop", maxRetries: 0, retryCount: 0, cacheStrategy: "always-execute", timeout: 5000 },
+					failureHandling: {
+						onFailure: "stop",
+						maxRetries: 0,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 5000,
+					},
 				},
 				position: { x: 0, y: 0 },
 				groupId: null,
@@ -135,7 +140,13 @@ describe("connection-rules", () => {
 				roles: [],
 				config: {
 					url: "https://api.example.com",
-					failureHandling: { onFailure: "continue", maxRetries: 0, retryCount: 0, cacheStrategy: "always-execute", timeout: 5000 },
+					failureHandling: {
+						onFailure: "continue",
+						maxRetries: 0,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 5000,
+					},
 				},
 				position: { x: 0, y: 0 },
 				groupId: null,
@@ -383,7 +394,13 @@ describe("connection-rules", () => {
 				groupId: null,
 			};
 			const edges: WorkflowEdge[] = [
-				{ id: "edge-1", from: "decision-1", to: "form-1", label: null, fromPort: "top" },
+				{
+					id: "edge-1",
+					from: "decision-1",
+					to: "form-1",
+					label: null,
+					fromPort: "top",
+				},
 			];
 
 			const result = canCreateConnection(sourceNode, targetNode, edges, "top");
@@ -423,10 +440,21 @@ describe("connection-rules", () => {
 				groupId: null,
 			};
 			const edges: WorkflowEdge[] = [
-				{ id: "edge-1", from: "decision-1", to: "form-1", label: null, fromPort: "top" },
+				{
+					id: "edge-1",
+					from: "decision-1",
+					to: "form-1",
+					label: null,
+					fromPort: "top",
+				},
 			];
 
-			const result = canCreateConnection(sourceNode, targetNode2, edges, "bottom");
+			const result = canCreateConnection(
+				sourceNode,
+				targetNode2,
+				edges,
+				"bottom",
+			);
 			expect(result.allowed).toBe(true);
 		});
 
@@ -452,7 +480,12 @@ describe("connection-rules", () => {
 				groupId: null,
 			};
 			const edges: WorkflowEdge[] = [
-				{ id: "edge-1", from: "reject-1", to: "checkpoint-1", label: "Reintento" },
+				{
+					id: "edge-1",
+					from: "reject-1",
+					to: "checkpoint-1",
+					label: "Reintento",
+				},
 			];
 
 			const result = canCreateConnection(sourceNode, targetNode, edges);

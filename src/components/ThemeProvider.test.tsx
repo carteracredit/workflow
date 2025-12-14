@@ -22,7 +22,9 @@ describe("ThemeProvider", () => {
 		);
 
 		await waitFor(() => {
-			expect(container.querySelector('[data-testid="child"]')).toBeInTheDocument();
+			expect(
+				container.querySelector('[data-testid="child"]'),
+			).toBeInTheDocument();
 		});
 	});
 

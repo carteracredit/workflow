@@ -56,7 +56,9 @@ describe("validateWorkflow", () => {
 
 			const errors = validateWorkflow(nodes, edges);
 			expect(
-				errors.some((e) => e.message.includes("solo puede tener un nodo de Inicio")),
+				errors.some((e) =>
+					e.message.includes("solo puede tener un nodo de Inicio"),
+				),
 			).toBe(true);
 		});
 	});
@@ -478,8 +480,7 @@ describe("validateWorkflow", () => {
 			const errors = validateWorkflow(nodes, edges);
 			expect(
 				errors.some(
-					(e) =>
-						e.nodeId === "api-1" && e.message.includes("URL configurada"),
+					(e) => e.nodeId === "api-1" && e.message.includes("URL configurada"),
 				),
 			).toBe(true);
 		});

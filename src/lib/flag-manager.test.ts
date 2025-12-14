@@ -9,9 +9,8 @@ import {
 	getRandomColor,
 	createDefaultFlag,
 	createDefaultFlagOption,
-	type Flag,
-	type FlagOption,
 } from "./flag-manager";
+import type { Flag, FlagOption } from "./workflow/types";
 
 describe("flag-manager", () => {
 	describe("generateFlagId", () => {
@@ -111,7 +110,9 @@ describe("flag-manager", () => {
 			};
 			const result = validateFlag(flag);
 			expect(result.valid).toBe(false);
-			expect(result.error).toBe("Todas las opciones deben tener un color válido");
+			expect(result.error).toBe(
+				"Todas las opciones deben tener un color válido",
+			);
 		});
 
 		it("should reject flag with duplicate option labels", () => {
