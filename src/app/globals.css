@@ -123,3 +123,184 @@
 		@apply bg-background text-foreground;
 	}
 }
+
+:root {
+	/* Workflow node colors - Cartera design system (icon colors in light theme) */
+	--node-start: #345151;
+	--node-decision: #885c00;
+	--node-manual: #7b227c;
+	--node-checkpoint: #844830;
+	--node-join: #165686;
+	--node-form: #8e98a8;
+	--node-transform: #60615e;
+	--node-api: #f09251;
+	--node-message: #001641;
+	--node-end: #2b5103;
+	--node-end-reject: #8c151e;
+	--node-reject-retry: #f39b8c;
+	--node-status: #5a4fcf;
+
+	/* Icon container backgrounds - light theme (lighter versions) */
+	--node-bg-start: #e8f0f0;
+	--node-bg-decision: #faf5e6;
+	--node-bg-manual: #f5e8f5;
+	--node-bg-checkpoint: #f5e8e5;
+	--node-bg-join: #e6f0f7;
+	--node-bg-form: #f0f2f5;
+	--node-bg-transform: #f0f2f5;
+	--node-bg-api: #fef3e8;
+	--node-bg-message: #f0f2f5;
+	--node-bg-end: #e8f5e0;
+	--node-bg-end-reject: #fce8e6;
+	--node-bg-challenge: #e8f0ff;
+	--node-bg-status: #f0eef8;
+
+	/* Icon colors - same as node colors in light theme */
+	--node-icon-start: #345151;
+	--node-icon-decision: #885c00;
+	--node-icon-manual: #7b227c;
+	--node-icon-checkpoint: #844830;
+	--node-icon-join: #165686;
+	--node-icon-form: #8e98a8;
+	--node-icon-transform: #60615e;
+	--node-icon-api: #f09251;
+	--node-icon-message: #001641;
+	--node-icon-end: #2b5103;
+	--node-icon-end-reject: #8c151e;
+	--node-icon-challenge: #1d4ed8;
+	--node-icon-status: #5a4fcf;
+
+	--node-safe-surface: #ecfdf5;
+	--node-safe-border: #059669;
+	--node-safe-glow: rgba(16, 185, 129, 0.25);
+	--node-safe-icon-bg: #d1fae5;
+	--node-safe-icon-color: #065f46;
+
+	--canvas-grid: oklch(0.92 0 0);
+	--canvas-bg: oklch(0.98 0 0);
+}
+
+.dark {
+	/* Dark mode - icon colors (solid colors for the icons themselves) */
+	--node-icon-start: #7cc2c1;
+	--node-icon-decision: #fad78a;
+	--node-icon-manual: #f2a9d0;
+	--node-icon-checkpoint: #f5c0bd;
+	--node-icon-join: #b7cdde;
+	--node-icon-form: #c1c5e4;
+	--node-icon-transform: #e6e9ef;
+	--node-icon-api: #f6c09b;
+	--node-icon-message: #b7cdde;
+	--node-icon-end: #b8dc62;
+	--node-icon-end-reject: #f3b0a0;
+	--node-icon-challenge: #93c5fd;
+	--node-icon-status: #a29bfe;
+
+	/* Icon container backgrounds - same colors as icons but with 12% opacity */
+	--node-bg-start: rgba(124, 194, 193, 0.12);
+	--node-bg-decision: rgba(250, 215, 138, 0.12);
+	--node-bg-manual: rgba(242, 169, 208, 0.12);
+	--node-bg-checkpoint: rgba(245, 192, 189, 0.12);
+	--node-bg-join: rgba(183, 205, 222, 0.12);
+	--node-bg-form: rgba(193, 197, 228, 0.12);
+	--node-bg-transform: rgba(230, 233, 239, 0.12);
+	--node-bg-api: rgba(246, 192, 155, 0.12);
+	--node-bg-message: rgba(183, 205, 222, 0.12);
+	--node-bg-end: rgba(184, 220, 98, 0.12);
+	--node-bg-end-reject: rgba(243, 176, 160, 0.12);
+	--node-bg-challenge: rgba(59, 130, 246, 0.12);
+	--node-bg-status: rgba(162, 155, 254, 0.12);
+
+	--node-safe-surface: rgba(4, 120, 87, 0.32);
+	--node-safe-border: #34d399;
+	--node-safe-glow: rgba(16, 185, 129, 0.35);
+	--node-safe-icon-bg: rgba(16, 185, 129, 0.25);
+	--node-safe-icon-color: #a7f3d0;
+
+	--canvas-grid: oklch(0.2 0 0);
+	--canvas-bg: oklch(0.14 0 0);
+}
+
+/* Canvas grid pattern */
+.canvas-grid {
+	background-color: var(--canvas-bg);
+	background-image:
+		linear-gradient(var(--canvas-grid) 1px, transparent 1px),
+		linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
+	background-size: 20px 20px;
+	user-select: none;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+}
+
+/* Node styles */
+.workflow-node {
+	transition: all 0.2s ease;
+	user-select: none;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+}
+
+.workflow-node:hover {
+	/* Removed translateY to prevent connector misalignment in vertical layout */
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.workflow-node.selected {
+	box-shadow: 0 0 0 2px var(--ring);
+}
+
+.node-badge {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	width: 24px;
+	height: 24px;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1;
+}
+
+/* Edge styles */
+.workflow-edge {
+	stroke-width: 2;
+	fill: none;
+	transition: stroke 0.2s ease;
+}
+
+.workflow-edge:hover {
+	stroke-width: 3;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--muted);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--muted-foreground);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--foreground);
+}
+
+/* Node icon colors - use CSS variables for theme-aware colors */
+.node-icon-container svg {
+	stroke: currentColor;
+	fill: none;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	color: inherit;
+}
