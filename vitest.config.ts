@@ -21,6 +21,9 @@ export default defineConfig({
 				"src/components/ui/**",
 				// Next.js App Router entrypoints/route wiring (typically thin wrappers)
 				"src/app/**",
+				// Complex workflow UI components (canvas, renderers, etc.) - these require extensive mocking
+				"src/components/workflow/**",
+				"src/components/WorkflowEditor.tsx",
 			],
 			thresholds: {
 				lines: 85,

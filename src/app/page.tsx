@@ -1,10 +1,7 @@
-import { listTasks } from "@/lib/api/tasks";
-import { HomeView } from "@/views/HomeView";
+"use client";
 
-export default async function Home() {
-	const initialTasks = await listTasks({ page: 1, per_page: 20 })
-		.then((r) => r.result)
-		.catch(() => []);
+import { WorkflowEditor } from "@/components/WorkflowEditor";
 
-	return <HomeView initialTasks={initialTasks} />;
+export default function Home() {
+	return <WorkflowEditor />;
 }
