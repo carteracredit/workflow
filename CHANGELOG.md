@@ -1,3 +1,11 @@
+# 1.0.0 (2025-12-14)
+
+
+### Features
+
+* Add CI and release workflows ([52f8559](https://github.com/carteracredit/workflow/commit/52f85592eafdb2b2ea047ac977774e8d7ecd6406))
+* Add tests for UI components and utility functions ([24b2b72](https://github.com/carteracredit/workflow/commit/24b2b72b1916f5297040a1cf5374d4152eee4b78))
+
 # 1.0.0-rc.1 (2025-12-14)
 
 
