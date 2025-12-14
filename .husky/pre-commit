@@ -1,0 +1,6 @@
+# Fast staged-file checks (format only)
+pnpm exec lint-staged
+
+# Project-wide gates (enforced)
+pnpm typecheck
+pnpm test

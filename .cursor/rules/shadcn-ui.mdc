@@ -1,0 +1,20 @@
+---
+description: Prefer shadcn/ui + configured registries for UI work in this repo
+globs:
+  - "src/**/*.{ts,tsx,mdx}"
+---
+
+## UI rule (this project)
+
+When implementing or modifying UI in this repository:
+
+- **Use shadcn/ui by default**: Prefer composing UI from shadcn/ui components (copied into the repo, typically under `src/components/ui/*`) instead of hand-rolling raw HTML + Tailwind for common primitives (buttons, inputs, dialogs, dropdowns, etc.).
+- **Use available registries**: Prefer pulling components/patterns from the registries configured in `components.json` (via the shadcn registry tooling / MCP server) before building bespoke UI.
+- **Registry intent (what to reach for)**: When you need something beyond the core primitives, prefer these registries (in roughly this order, depending on the need):
+  - **`@shadcnui-blocks`**: A collection of premium, production-ready shadcn/ui blocks, components and templates.
+  - **`@react-bits`**: A large collection of animated, interactive & fully customizable React components for building memorable websites.
+  - **`@svgl`**: A beautiful library with SVG logos (mostly brand logos like Apple, Google, GitHub, etc.).
+  - **`@ai-elements`**: Pre-built components like conversations, messages and more to help you build AI-native applications faster.
+  - **`@hooks`**: A comprehensive React Hooks Collection built with Shadcn.
+- **Only deviate intentionally**: If a shadcn component is not suitable (performance, accessibility, design constraint, bundle size, etc.) or the user explicitly requests no shadcn, explain why and then proceed with a custom implementation.
+

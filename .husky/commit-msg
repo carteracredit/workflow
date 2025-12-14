@@ -1,0 +1,2 @@
+# Enforce Conventional Commits + 100-char header limit
+pnpm exec commitlint --edit "$1"
