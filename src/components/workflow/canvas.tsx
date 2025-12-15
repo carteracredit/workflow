@@ -112,6 +112,8 @@ export function Canvas({
 		nodeId: string;
 		offsetX: number;
 		offsetY: number;
+		selectedNodeIds: string[]; // All selected nodes to move together
+		nodeOffsets: Map<string, { offsetX: number; offsetY: number }>; // Offsets for each node
 	} | null>(null);
 
 	// Box selection state
@@ -570,12 +572,26 @@ export function Canvas({
 				const cursorX = (e.clientX - rect.left - pan.x) / zoom;
 				const cursorY = (e.clientY - rect.top - pan.y) / zoom;
 
-				const newX = cursorX - dragRef.current.offsetX;
-				const newY = cursorY - dragRef.current.offsetY;
-
-				onUpdateNode(dragRef.current.nodeId, {
-					position: { x: newX, y: newY },
-				});
+				// Move all selected nodes together
+				if (dragRef.current.selectedNodeIds && dragRef.current.nodeOffsets) {
+					dragRef.current.selectedNodeIds.forEach((nodeId) => {
+						const offset = dragRef.current?.nodeOffsets?.get(nodeId);
+						if (offset) {
+							const newX = cursorX - offset.offsetX;
+							const newY = cursorY - offset.offsetY;
+							onUpdateNode(nodeId, {
+								position: { x: newX, y: newY },
+							});
+						}
+					});
+				} else {
+					// Fallback for single node drag (backward compatibility)
+					const newX = cursorX - dragRef.current.offsetX;
+					const newY = cursorY - dragRef.current.offsetY;
+					onUpdateNode(dragRef.current.nodeId, {
+						position: { x: newX, y: newY },
+					});
+				}
 			}
 
 			if (connectingFrom) {
@@ -711,19 +727,17 @@ export function Canvas({
 			const cursorX = (e.clientX - rect.left - pan.x) / zoom;
 			const cursorY = (e.clientY - rect.top - pan.y) / zoom;
 
-			dragRef.current = {
-				nodeId,
-				offsetX: cursorX - node.position.x,
-				offsetY: cursorY - node.position.y,
-			};
+			// Use e.shiftKey for more reliable shift detection
+			const shiftKeyPressed = e.shiftKey || isShiftPressed;
 
 			// Handle multi-selection with shift key
-			if (isShiftPressed) {
+			let nodesToSelect: string[];
+			if (shiftKeyPressed) {
 				// Toggle node in selection
 				if (selectedNodeIds.includes(nodeId)) {
-					onSelectNodes(selectedNodeIds.filter((id) => id !== nodeId));
+					nodesToSelect = selectedNodeIds.filter((id) => id !== nodeId);
 				} else {
-					onSelectNodes([...selectedNodeIds, nodeId]);
+					nodesToSelect = [...selectedNodeIds, nodeId];
 				}
 				// Clear edge selection when selecting nodes
 				if (selectedEdgeIds.length > 0) {
@@ -731,8 +745,40 @@ export function Canvas({
 				}
 			} else {
 				// Single selection - replace current selection
-				onSelectNodes([nodeId]);
+				nodesToSelect = [nodeId];
 				onSelectEdges([]);
+			}
+			onSelectNodes(nodesToSelect);
+
+			// Setup drag for all selected nodes (only if the clicked node is in the selection)
+			// If we removed the node from selection, don't drag anything
+			if (nodesToSelect.includes(nodeId)) {
+				const nodesToDrag = nodesToSelect;
+				const nodeOffsets = new Map<
+					string,
+					{ offsetX: number; offsetY: number }
+				>();
+
+				nodesToDrag.forEach((id) => {
+					const n = nodes.find((nd) => nd.id === id);
+					if (n) {
+						nodeOffsets.set(id, {
+							offsetX: cursorX - n.position.x,
+							offsetY: cursorY - n.position.y,
+						});
+					}
+				});
+
+				dragRef.current = {
+					nodeId,
+					offsetX: cursorX - node.position.x,
+					offsetY: cursorY - node.position.y,
+					selectedNodeIds: nodesToDrag,
+					nodeOffsets,
+				};
+			} else {
+				// Node was removed from selection, don't start dragging
+				dragRef.current = null;
 			}
 		},
 		[
@@ -1021,15 +1067,20 @@ export function Canvas({
 							onSelect={(e) => {
 								e.stopPropagation();
 								console.warn("[v0] Edge selected:", edge.id);
+								// Use e.shiftKey for more reliable shift detection
+								const shiftKeyPressed = e.shiftKey || isShiftPressed;
+
 								// Handle multi-selection with shift key
-								if (isShiftPressed) {
+								if (shiftKeyPressed) {
 									// Toggle edge in selection
 									if (selectedEdgeIds.includes(edge.id)) {
-										onSelectEdges(
-											selectedEdgeIds.filter((id) => id !== edge.id),
+										const newEdgeIds = selectedEdgeIds.filter(
+											(id) => id !== edge.id,
 										);
+										onSelectEdges(newEdgeIds);
 									} else {
-										onSelectEdges([...selectedEdgeIds, edge.id]);
+										const newEdgeIds = [...selectedEdgeIds, edge.id];
+										onSelectEdges(newEdgeIds);
 									}
 									// Clear node selection when selecting edges
 									if (selectedNodeIds.length > 0) {
