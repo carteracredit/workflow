@@ -458,19 +458,19 @@ export function WorkflowEditor() {
 				</div>
 
 				<PropertiesPanel
-					selectedNode={
+					selectedNodes={
 						workflowState.selectedNodeIds.length > 0
-							? workflowState.nodes.find(
-									(n) => n.id === workflowState.selectedNodeIds[0],
-								)
-							: undefined
+							? workflowState.selectedNodeIds
+									.map((id) => workflowState.nodes.find((n) => n.id === id))
+									.filter((n): n is WorkflowNode => n !== undefined)
+							: []
 					}
-					selectedEdge={
+					selectedEdges={
 						workflowState.selectedEdgeIds.length > 0
-							? workflowState.edges.find(
-									(e) => e.id === workflowState.selectedEdgeIds[0],
-								)
-							: undefined
+							? workflowState.selectedEdgeIds
+									.map((id) => workflowState.edges.find((e) => e.id === id))
+									.filter((e): e is WorkflowEdge => e !== undefined)
+							: []
 					}
 					workflowMetadata={workflowState.metadata}
 					nodes={workflowState.nodes}

@@ -54,6 +54,8 @@ const meta: Meta<typeof PropertiesPanel> = {
 		flags: [],
 		showWorkflowProperties: false,
 		onCloseWorkflowProperties: () => {},
+		selectedNodes: [],
+		selectedEdges: [],
 	},
 	decorators: [
 		(Story) => (
@@ -69,21 +71,21 @@ type Story = StoryObj<typeof PropertiesPanel>;
 
 export const NoSelection: Story = {
 	args: {
-		selectedNode: undefined,
-		selectedEdge: undefined,
+		selectedNodes: [],
+		selectedEdges: [],
 	},
 };
 
 export const NodeSelected: Story = {
 	args: {
-		selectedNode: mockNode,
-		selectedEdge: undefined,
+		selectedNodes: [mockNode],
+		selectedEdges: [],
 	},
 };
 
 export const EdgeSelected: Story = {
 	args: {
-		selectedNode: undefined,
-		selectedEdge: mockEdge,
+		selectedNodes: [],
+		selectedEdges: [mockEdge],
 	},
 };

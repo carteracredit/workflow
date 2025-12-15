@@ -520,8 +520,8 @@ export function Canvas({
 						currentX: startX,
 						currentY: startY,
 					});
-					// Clear selection if not holding shift
-					if (!isShiftPressed) {
+					// Clear selection if not holding shift (use e.shiftKey for reliable detection)
+					if (!e.shiftKey && !isShiftPressed) {
 						onSelectNodes([]);
 						onSelectEdges([]);
 					}
@@ -1088,15 +1088,16 @@ export function Canvas({
 								// Handle multi-selection with shift key
 								if (shiftKeyPressed) {
 									// Toggle edge in selection
+									let newEdgeIds: string[];
 									if (selectedEdgeIds.includes(edge.id)) {
-										const newEdgeIds = selectedEdgeIds.filter(
-											(id) => id !== edge.id,
-										);
-										onSelectEdges(newEdgeIds);
+										// Remove edge from selection
+										newEdgeIds = selectedEdgeIds.filter((id) => id !== edge.id);
 									} else {
-										const newEdgeIds = [...selectedEdgeIds, edge.id];
-										onSelectEdges(newEdgeIds);
+										// Add edge to selection
+										newEdgeIds = [...selectedEdgeIds, edge.id];
 									}
+									// Update edge selection
+									onSelectEdges(newEdgeIds);
 									// Clear node selection when selecting edges
 									if (selectedNodeIds.length > 0) {
 										onSelectNodes([]);

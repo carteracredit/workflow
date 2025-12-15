@@ -46,8 +46,8 @@ import {
 } from "@/lib/workflow/types";
 
 interface PropertiesPanelProps {
-	selectedNode: WorkflowNode | undefined;
-	selectedEdge: WorkflowEdge | undefined;
+	selectedNodes: WorkflowNode[];
+	selectedEdges: WorkflowEdge[];
 	workflowMetadata: WorkflowMetadata;
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
@@ -119,8 +119,8 @@ const CHALLENGE_TIMEOUT_UNITS = [
 ] as const;
 
 export function PropertiesPanel({
-	selectedNode,
-	selectedEdge,
+	selectedNodes,
+	selectedEdges,
 	workflowMetadata,
 	nodes,
 	edges,
@@ -133,6 +133,13 @@ export function PropertiesPanel({
 	showWorkflowProperties,
 	onCloseWorkflowProperties,
 }: PropertiesPanelProps) {
+	// For backward compatibility and single selection UI, use first selected item
+	const selectedNode =
+		selectedNodes.length === 1 ? selectedNodes[0] : undefined;
+	const selectedEdge =
+		selectedEdges.length === 1 ? selectedEdges[0] : undefined;
+	const hasMultipleNodes = selectedNodes.length > 1;
+	const hasMultipleEdges = selectedEdges.length > 1;
 	// Estado local para el input de maxRetries del nodo API
 	const [apiMaxRetriesInput, setApiMaxRetriesInput] = useState<string>("");
 
@@ -218,7 +225,11 @@ export function PropertiesPanel({
 
 	// Prioridad: Si showWorkflowProperties está activo, mostrar propiedades del flujo
 	// (incluso si hay un nodo o edge seleccionado)
-	if (showWorkflowProperties && !selectedNode && !selectedEdge) {
+	if (
+		showWorkflowProperties &&
+		selectedNodes.length === 0 &&
+		selectedEdges.length === 0
+	) {
 		return (
 			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
 				<div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
@@ -482,8 +493,63 @@ export function PropertiesPanel({
 		);
 	}
 
+	// Show multiple selection summary
+	if (hasMultipleNodes) {
+		return (
+			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
+				<div className="border-b border-border p-4 flex-shrink-0">
+					<h2 className="font-semibold">
+						{selectedNodes.length} Nodos Seleccionados
+					</h2>
+				</div>
+				<ScrollArea className="flex-1 overflow-y-auto overflow-x-hidden">
+					<div className="space-y-4 p-4">
+						<div className="text-sm text-muted-foreground">
+							<p>
+								Seleccionaste {selectedNodes.length} nodo
+								{selectedNodes.length > 1 ? "s" : ""}. Selecciona un solo nodo
+								para editar sus propiedades.
+							</p>
+						</div>
+						<div className="space-y-2">
+							<h3 className="text-sm font-medium">Nodos seleccionados:</h3>
+							<ul className="list-disc list-inside space-y-1 text-sm">
+								{selectedNodes.map((node) => (
+									<li key={node.id}>{node.title}</li>
+								))}
+							</ul>
+						</div>
+					</div>
+				</ScrollArea>
+			</div>
+		);
+	}
+
+	if (hasMultipleEdges) {
+		return (
+			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
+				<div className="border-b border-border p-4 flex-shrink-0">
+					<h2 className="font-semibold">
+						{selectedEdges.length} Flechas Seleccionadas
+					</h2>
+				</div>
+				<ScrollArea className="flex-1 overflow-y-auto overflow-x-hidden">
+					<div className="space-y-4 p-4">
+						<div className="text-sm text-muted-foreground">
+							<p>
+								Seleccionaste {selectedEdges.length} flecha
+								{selectedEdges.length > 1 ? "s" : ""}. Selecciona una sola
+								flecha para editar sus propiedades.
+							</p>
+						</div>
+					</div>
+				</ScrollArea>
+			</div>
+		);
+	}
+
 	// Si no hay nodo ni edge seleccionado, solo mostrar si showWorkflowProperties está activo
-	if (!selectedNode && !selectedEdge) {
+	if (selectedNodes.length === 0 && selectedEdges.length === 0) {
 		if (!showWorkflowProperties) {
 			return null;
 		}
