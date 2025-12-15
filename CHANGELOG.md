@@ -1,3 +1,12 @@
+# [1.0.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2025-12-15)
+
+
+### Features
+
+* add tests for Canvas selection behavior ([4df4d2f](https://github.com/carteracredit/workflow/commit/4df4d2f49349cc8015d96a8ee89a9ea41bd252ae))
+* Implement multi-node drag and selection ([451d5df](https://github.com/carteracredit/workflow/commit/451d5df0e22466096a0690fccf1cd2c209220881))
+* update PropertiesPanel to handle mixed selection of nodes and edges ([31c5871](https://github.com/carteracredit/workflow/commit/31c58712c30d5d4fc9b306d6508a0d29db3560f5))
+
 # 1.0.0-rc.1 (2025-12-14)
 
 
