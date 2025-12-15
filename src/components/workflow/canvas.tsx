@@ -573,7 +573,13 @@ export function Canvas({
 				const cursorY = (e.clientY - rect.top - pan.y) / zoom;
 
 				// Move all selected nodes together
-				if (dragRef.current.selectedNodeIds && dragRef.current.nodeOffsets) {
+				if (
+					dragRef.current.selectedNodeIds &&
+					dragRef.current.selectedNodeIds.length > 0 &&
+					dragRef.current.nodeOffsets &&
+					dragRef.current.nodeOffsets.size > 0
+				) {
+					// Multi-node drag: move all selected nodes
 					dragRef.current.selectedNodeIds.forEach((nodeId) => {
 						const offset = dragRef.current?.nodeOffsets?.get(nodeId);
 						if (offset) {
@@ -744,8 +750,16 @@ export function Canvas({
 					onSelectEdges([]);
 				}
 			} else {
-				// Single selection - replace current selection
-				nodesToSelect = [nodeId];
+				// If clicking on a node that's already selected, keep all selected nodes
+				// Otherwise, replace selection with just this node
+				if (selectedNodeIds.includes(nodeId)) {
+					// Keep all selected nodes - don't change selection
+					// This allows dragging all selected nodes together
+					nodesToSelect = selectedNodeIds;
+				} else {
+					// Replace selection with just this node
+					nodesToSelect = [nodeId];
+				}
 				onSelectEdges([]);
 			}
 			onSelectNodes(nodesToSelect);
@@ -753,6 +767,7 @@ export function Canvas({
 			// Setup drag for all selected nodes (only if the clicked node is in the selection)
 			// If we removed the node from selection, don't drag anything
 			if (nodesToSelect.includes(nodeId)) {
+				// Use the updated selection for dragging
 				const nodesToDrag = nodesToSelect;
 				const nodeOffsets = new Map<
 					string,
