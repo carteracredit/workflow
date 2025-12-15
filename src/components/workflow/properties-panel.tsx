@@ -46,8 +46,8 @@ import {
 } from "@/lib/workflow/types";
 
 interface PropertiesPanelProps {
-	selectedNode: WorkflowNode | undefined;
-	selectedEdge: WorkflowEdge | undefined;
+	selectedNodes: WorkflowNode[];
+	selectedEdges: WorkflowEdge[];
 	workflowMetadata: WorkflowMetadata;
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
@@ -119,8 +119,8 @@ const CHALLENGE_TIMEOUT_UNITS = [
 ] as const;
 
 export function PropertiesPanel({
-	selectedNode,
-	selectedEdge,
+	selectedNodes,
+	selectedEdges,
 	workflowMetadata,
 	nodes,
 	edges,
@@ -133,6 +133,17 @@ export function PropertiesPanel({
 	showWorkflowProperties,
 	onCloseWorkflowProperties,
 }: PropertiesPanelProps) {
+	// For backward compatibility and single selection UI, use first selected item
+	const selectedNode =
+		selectedNodes.length === 1 ? selectedNodes[0] : undefined;
+	const selectedEdge =
+		selectedEdges.length === 1 ? selectedEdges[0] : undefined;
+	const hasMultipleNodes = selectedNodes.length > 1;
+	const hasMultipleEdges = selectedEdges.length > 1;
+	// Check if there are multiple items selected (nodes + edges combined)
+	const hasMultipleItems =
+		selectedNodes.length + selectedEdges.length > 1 ||
+		(selectedNodes.length > 0 && selectedEdges.length > 0);
 	// Estado local para el input de maxRetries del nodo API
 	const [apiMaxRetriesInput, setApiMaxRetriesInput] = useState<string>("");
 
@@ -218,7 +229,11 @@ export function PropertiesPanel({
 
 	// Prioridad: Si showWorkflowProperties está activo, mostrar propiedades del flujo
 	// (incluso si hay un nodo o edge seleccionado)
-	if (showWorkflowProperties && !selectedNode && !selectedEdge) {
+	if (
+		showWorkflowProperties &&
+		selectedNodes.length === 0 &&
+		selectedEdges.length === 0
+	) {
 		return (
 			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
 				<div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
@@ -349,6 +364,11 @@ export function PropertiesPanel({
 				</ScrollArea>
 			</div>
 		);
+	}
+
+	// Don't show panel when multiple items are selected (including mixed selection)
+	if (hasMultipleItems) {
+		return null;
 	}
 
 	if (selectedEdge) {
@@ -483,7 +503,7 @@ export function PropertiesPanel({
 	}
 
 	// Si no hay nodo ni edge seleccionado, solo mostrar si showWorkflowProperties está activo
-	if (!selectedNode && !selectedEdge) {
+	if (selectedNodes.length === 0 && selectedEdges.length === 0) {
 		if (!showWorkflowProperties) {
 			return null;
 		}

@@ -363,11 +363,8 @@ export function EdgeRenderer({
 						"shift:",
 						e.shiftKey,
 					);
-					if (e.shiftKey) {
-						onDelete();
-					} else {
-						onSelect(e);
-					}
+					// Always call onSelect - let the canvas handle shift+click for selection toggling
+					onSelect(e);
 				}}
 				onMouseEnter={() => console.warn("[v0] Edge hover:", edge.id)}
 			/>

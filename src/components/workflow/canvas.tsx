@@ -54,8 +54,8 @@ const getPortDescriptor = (
 interface CanvasProps {
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
-	selectedNodeId: string | null;
-	selectedEdgeId: string | null;
+	selectedNodeIds: string[];
+	selectedEdgeIds: string[];
 	zoom: number;
 	pan: { x: number; y: number };
 	flags?: Flag[];
@@ -63,8 +63,8 @@ interface CanvasProps {
 	onDeleteNode: (nodeId: string) => void;
 	onAddEdge: (edge: WorkflowEdge) => void;
 	onDeleteEdge: (edgeId: string) => void;
-	onSelectNode: (nodeId: string | null) => void;
-	onSelectEdge: (edgeId: string | null) => void;
+	onSelectNodes: (nodeIds: string[]) => void;
+	onSelectEdges: (edgeIds: string[]) => void;
 	onUpdateZoom: (zoom: number) => void;
 	onUpdatePan: (pan: { x: number; y: number }) => void;
 	validationErrors: ValidationError[];
@@ -80,8 +80,8 @@ interface CanvasProps {
 export function Canvas({
 	nodes,
 	edges,
-	selectedNodeId,
-	selectedEdgeId,
+	selectedNodeIds,
+	selectedEdgeIds,
 	zoom,
 	pan,
 	flags = [],
@@ -89,8 +89,8 @@ export function Canvas({
 	onDeleteNode,
 	onAddEdge,
 	onDeleteEdge,
-	onSelectNode,
-	onSelectEdge,
+	onSelectNodes,
+	onSelectEdges,
 	onUpdateZoom,
 	onUpdatePan,
 	validationErrors,
@@ -104,13 +104,24 @@ export function Canvas({
 	const [isPanning, setIsPanning] = useState(false);
 	const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 	const [isSpacePressed, setIsSpacePressed] = useState(false);
-	const [isPanModeLocked, setIsPanModeLocked] = useState(true);
+	const [isPanModeLocked, setIsPanModeLocked] = useState(false);
+	const [isShiftPressed, setIsShiftPressed] = useState(false);
 	const lastAutoScrolledNodeId = useRef<string | null>(null);
 
 	const dragRef = useRef<{
 		nodeId: string;
 		offsetX: number;
 		offsetY: number;
+		selectedNodeIds: string[]; // All selected nodes to move together
+		nodeOffsets: Map<string, { offsetX: number; offsetY: number }>; // Offsets for each node
+	} | null>(null);
+
+	// Box selection state
+	const [boxSelection, setBoxSelection] = useState<{
+		startX: number;
+		startY: number;
+		currentX: number;
+		currentY: number;
 	} | null>(null);
 
 	const [connectingFrom, setConnectingFrom] = useState<{
@@ -233,19 +244,22 @@ export function Canvas({
 	// Auto-scroll al seleccionar un nodo si está fuera de la vista
 	useEffect(() => {
 		// Solo ejecutar si cambió el nodo seleccionado (no por cambios en pan/zoom)
+		// Use first selected node for auto-scroll
+		const firstSelectedNodeId =
+			selectedNodeIds.length > 0 ? selectedNodeIds[0] : null;
 		if (
-			!selectedNodeId ||
-			selectedNodeId === lastAutoScrolledNodeId.current ||
+			!firstSelectedNodeId ||
+			firstSelectedNodeId === lastAutoScrolledNodeId.current ||
 			!canvasRef.current
 		) {
 			return;
 		}
 
-		const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+		const selectedNode = nodes.find((n) => n.id === firstSelectedNodeId);
 		if (!selectedNode) return;
 
 		// Marcar que ya procesamos este nodo
-		lastAutoScrolledNodeId.current = selectedNodeId;
+		lastAutoScrolledNodeId.current = firstSelectedNodeId;
 
 		// Calcular tamaño dinámico del nodo usando la función auxiliar
 		const nodeSize = calculateNodeSize(selectedNode);
@@ -301,14 +315,14 @@ export function Canvas({
 		if (needsUpdate) {
 			onUpdatePan({ x: newPanX, y: newPanY });
 		}
-	}, [selectedNodeId, nodes, zoom, pan, onUpdatePan, calculateNodeSize]);
+	}, [selectedNodeIds, nodes, zoom, pan, onUpdatePan, calculateNodeSize]);
 
 	// Resetear el ref cuando se deselecciona
 	useEffect(() => {
-		if (!selectedNodeId) {
+		if (selectedNodeIds.length === 0) {
 			lastAutoScrolledNodeId.current = null;
 		}
-	}, [selectedNodeId]);
+	}, [selectedNodeIds]);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -360,12 +374,18 @@ export function Canvas({
 			if (e.code === "Space" && !isSpacePressed) {
 				setIsSpacePressed(true);
 			}
+			if (e.key === "Shift" && !isShiftPressed) {
+				setIsShiftPressed(true);
+			}
 		};
 
 		const handleKeyUp = (e: KeyboardEvent) => {
 			if (e.code === "Space") {
 				setIsSpacePressed(false);
 				setIsPanning(false);
+			}
+			if (e.key === "Shift") {
+				setIsShiftPressed(false);
 			}
 		};
 
@@ -376,20 +396,22 @@ export function Canvas({
 			window.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("keyup", handleKeyUp);
 		};
-	}, [isSpacePressed]);
+	}, [isSpacePressed, isShiftPressed]);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Delete" && selectedNodeId) {
-				const node = nodes.find((n) => n.id === selectedNodeId);
-				if (node?.type === "Start") {
-					console.warn("[v0] Cannot delete Start node - it is required");
-					return;
-				}
-				onDeleteNode(selectedNodeId);
-			}
-			if (e.key === "Delete" && selectedEdgeId) {
-				onDeleteEdge(selectedEdgeId);
+			if (e.key === "Delete") {
+				// Delete all selected nodes (except Start nodes)
+				selectedNodeIds.forEach((nodeId) => {
+					const node = nodes.find((n) => n.id === nodeId);
+					if (node && node.type !== "Start") {
+						onDeleteNode(nodeId);
+					}
+				});
+				// Delete all selected edges
+				selectedEdgeIds.forEach((edgeId) => {
+					onDeleteEdge(edgeId);
+				});
 			}
 			if (e.key === "1") {
 				onUpdateZoom(Math.max(0.1, zoom - 0.1));
@@ -412,8 +434,8 @@ export function Canvas({
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [
-		selectedNodeId,
-		selectedEdgeId,
+		selectedNodeIds,
+		selectedEdgeIds,
 		connectingFrom,
 		zoom,
 		onDeleteNode,
@@ -431,7 +453,7 @@ export function Canvas({
 		[pan.x, pan.y],
 	);
 
-	const deactivatePanMode = useCallback(() => {
+	const activateSelectionMode = useCallback(() => {
 		setIsPanModeLocked(false);
 		setIsPanning(false);
 	}, []);
@@ -461,19 +483,18 @@ export function Canvas({
 					(target.tagName === "g" &&
 						!target.classList.contains("workflow-edge"))); // Grupos SVG vacíos
 
-			if (isCanvasBackground) {
-				onSelectNode(null);
-				onSelectEdge(null);
-			}
-
 			// Activar panning si:
 			// 1. Botón del medio del mouse
-			// 2. Space + clic izquierdo
-			// 3. Clic izquierdo en el fondo del canvas (manita) - solo si no fue manejado por handlers hijos
+			// 2. Space + clic izquierdo (temporal, override del modo actual)
+			// 3. Clic izquierdo en el fondo del canvas solo si pan mode está bloqueado (manita activa)
 			const shouldPanWithLeftButton =
 				e.button === 0 && (isSpacePressed || isPanModeLocked);
 			const shouldPanByBackgroundClick =
-				e.button === 0 && isCanvasBackground && target === e.currentTarget;
+				e.button === 0 &&
+				isCanvasBackground &&
+				target === e.currentTarget &&
+				isPanModeLocked &&
+				!isSpacePressed; // No panear si space está presionado (se maneja arriba)
 
 			if (
 				e.button === 1 ||
@@ -482,9 +503,41 @@ export function Canvas({
 			) {
 				e.preventDefault();
 				startPanning(e.clientX, e.clientY);
+			} else if (
+				e.button === 0 &&
+				isCanvasBackground &&
+				!isPanModeLocked &&
+				!isSpacePressed
+			) {
+				// Start box selection on canvas background in selection mode
+				const rect = canvasRef.current?.getBoundingClientRect();
+				if (rect) {
+					const startX = (e.clientX - rect.left - pan.x) / zoom;
+					const startY = (e.clientY - rect.top - pan.y) / zoom;
+					setBoxSelection({
+						startX,
+						startY,
+						currentX: startX,
+						currentY: startY,
+					});
+					// Clear selection if not holding shift (use e.shiftKey for reliable detection)
+					if (!e.shiftKey && !isShiftPressed) {
+						onSelectNodes([]);
+						onSelectEdges([]);
+					}
+				}
 			}
 		},
-		[onSelectNode, onSelectEdge, isSpacePressed, isPanModeLocked, startPanning],
+		[
+			onSelectNodes,
+			onSelectEdges,
+			isSpacePressed,
+			isPanModeLocked,
+			isShiftPressed,
+			startPanning,
+			zoom,
+			pan,
+		],
 	);
 
 	const handleMouseMove = useCallback(
@@ -497,6 +550,21 @@ export function Canvas({
 				return;
 			}
 
+			// Update box selection visual only (don't update selection until mouse up)
+			if (boxSelection) {
+				const rect = canvasRef.current?.getBoundingClientRect();
+				if (rect) {
+					const currentX = (e.clientX - rect.left - pan.x) / zoom;
+					const currentY = (e.clientY - rect.top - pan.y) / zoom;
+					setBoxSelection({
+						...boxSelection,
+						currentX,
+						currentY,
+					});
+				}
+				return;
+			}
+
 			if (dragRef.current) {
 				const rect = canvasRef.current?.getBoundingClientRect();
 				if (!rect) return;
@@ -504,12 +572,32 @@ export function Canvas({
 				const cursorX = (e.clientX - rect.left - pan.x) / zoom;
 				const cursorY = (e.clientY - rect.top - pan.y) / zoom;
 
-				const newX = cursorX - dragRef.current.offsetX;
-				const newY = cursorY - dragRef.current.offsetY;
-
-				onUpdateNode(dragRef.current.nodeId, {
-					position: { x: newX, y: newY },
-				});
+				// Move all selected nodes together
+				if (
+					dragRef.current.selectedNodeIds &&
+					dragRef.current.selectedNodeIds.length > 0 &&
+					dragRef.current.nodeOffsets &&
+					dragRef.current.nodeOffsets.size > 0
+				) {
+					// Multi-node drag: move all selected nodes
+					dragRef.current.selectedNodeIds.forEach((nodeId) => {
+						const offset = dragRef.current?.nodeOffsets?.get(nodeId);
+						if (offset) {
+							const newX = cursorX - offset.offsetX;
+							const newY = cursorY - offset.offsetY;
+							onUpdateNode(nodeId, {
+								position: { x: newX, y: newY },
+							});
+						}
+					});
+				} else {
+					// Fallback for single node drag (backward compatibility)
+					const newX = cursorX - dragRef.current.offsetX;
+					const newY = cursorY - dragRef.current.offsetY;
+					onUpdateNode(dragRef.current.nodeId, {
+						position: { x: newX, y: newY },
+					});
+				}
 			}
 
 			if (connectingFrom) {
@@ -522,13 +610,110 @@ export function Canvas({
 				}
 			}
 		},
-		[isPanning, panStart, zoom, pan, connectingFrom, onUpdatePan, onUpdateNode],
+		[
+			isPanning,
+			panStart,
+			zoom,
+			pan,
+			connectingFrom,
+			boxSelection,
+			isShiftPressed,
+			selectedNodeIds,
+			selectedEdgeIds,
+			nodes,
+			edges,
+			onUpdatePan,
+			onUpdateNode,
+			onSelectNodes,
+			onSelectEdges,
+			calculateNodeSize,
+		],
 	);
 
 	const handleMouseUp = useCallback(() => {
+		// Finalize box selection if active
+		if (boxSelection) {
+			const minX = Math.min(boxSelection.startX, boxSelection.currentX);
+			const maxX = Math.max(boxSelection.startX, boxSelection.currentX);
+			const minY = Math.min(boxSelection.startY, boxSelection.currentY);
+			const maxY = Math.max(boxSelection.startY, boxSelection.currentY);
+
+			// Find nodes and edges within selection box
+			const selectedNodeIdsInBox: string[] = [];
+			const selectedEdgeIdsInBox: string[] = [];
+
+			nodes.forEach((node) => {
+				const nodeSize = calculateNodeSize(node);
+				const nodeLeft = node.position.x;
+				const nodeRight = node.position.x + nodeSize.width;
+				const nodeTop = node.position.y;
+				const nodeBottom = node.position.y + nodeSize.height;
+
+				// Check if node intersects with selection box
+				if (
+					nodeRight >= minX &&
+					nodeLeft <= maxX &&
+					nodeBottom >= minY &&
+					nodeTop <= maxY
+				) {
+					selectedNodeIdsInBox.push(node.id);
+				}
+			});
+
+			// For edges, check if both endpoints are in the box
+			edges.forEach((edge) => {
+				const fromNode = nodes.find((n) => n.id === edge.from);
+				const toNode = nodes.find((n) => n.id === edge.to);
+				if (fromNode && toNode) {
+					const fromNodeSize = calculateNodeSize(fromNode);
+					const toNodeSize = calculateNodeSize(toNode);
+					const fromInBox =
+						fromNode.position.x + fromNodeSize.width / 2 >= minX &&
+						fromNode.position.x + fromNodeSize.width / 2 <= maxX &&
+						fromNode.position.y + fromNodeSize.height / 2 >= minY &&
+						fromNode.position.y + fromNodeSize.height / 2 <= maxY;
+					const toInBox =
+						toNode.position.x + toNodeSize.width / 2 >= minX &&
+						toNode.position.x + toNodeSize.width / 2 <= maxX &&
+						toNode.position.y + toNodeSize.height / 2 >= minY &&
+						toNode.position.y + toNodeSize.height / 2 <= maxY;
+
+					if (fromInBox && toInBox) {
+						selectedEdgeIdsInBox.push(edge.id);
+					}
+				}
+			});
+
+			// Update selection (add to existing if shift pressed, replace otherwise)
+			if (isShiftPressed) {
+				const newNodeIds = [
+					...new Set([...selectedNodeIds, ...selectedNodeIdsInBox]),
+				];
+				const newEdgeIds = [
+					...new Set([...selectedEdgeIds, ...selectedEdgeIdsInBox]),
+				];
+				onSelectNodes(newNodeIds);
+				onSelectEdges(newEdgeIds);
+			} else {
+				onSelectNodes(selectedNodeIdsInBox);
+				onSelectEdges(selectedEdgeIdsInBox);
+			}
+		}
+
 		setIsPanning(false);
 		dragRef.current = null;
-	}, []);
+		setBoxSelection(null);
+	}, [
+		boxSelection,
+		isShiftPressed,
+		selectedNodeIds,
+		selectedEdgeIds,
+		nodes,
+		edges,
+		onSelectNodes,
+		onSelectEdges,
+		calculateNodeSize,
+	]);
 
 	const handleNodeMouseDown = useCallback(
 		(nodeId: string, e: React.MouseEvent) => {
@@ -548,21 +733,78 @@ export function Canvas({
 			const cursorX = (e.clientX - rect.left - pan.x) / zoom;
 			const cursorY = (e.clientY - rect.top - pan.y) / zoom;
 
-			dragRef.current = {
-				nodeId,
-				offsetX: cursorX - node.position.x,
-				offsetY: cursorY - node.position.y,
-			};
+			// Use e.shiftKey for more reliable shift detection
+			const shiftKeyPressed = e.shiftKey || isShiftPressed;
 
-			onSelectNode(nodeId);
+			// Handle multi-selection with shift key
+			let nodesToSelect: string[];
+			if (shiftKeyPressed) {
+				// Toggle node in selection
+				if (selectedNodeIds.includes(nodeId)) {
+					nodesToSelect = selectedNodeIds.filter((id) => id !== nodeId);
+				} else {
+					nodesToSelect = [...selectedNodeIds, nodeId];
+				}
+				// Don't clear edge selection when using shift - allow mixed selection
+			} else {
+				// If clicking on a node that's already selected, keep all selected nodes
+				// Otherwise, replace selection with just this node
+				if (selectedNodeIds.includes(nodeId)) {
+					// Keep all selected nodes - don't change selection
+					// This allows dragging all selected nodes together
+					nodesToSelect = selectedNodeIds;
+				} else {
+					// Replace selection with just this node
+					nodesToSelect = [nodeId];
+				}
+				// Clear edge selection only on single click (non-shift)
+				onSelectEdges([]);
+			}
+			onSelectNodes(nodesToSelect);
+
+			// Setup drag for all selected nodes (only if the clicked node is in the selection)
+			// If we removed the node from selection, don't drag anything
+			if (nodesToSelect.includes(nodeId)) {
+				// Use the updated selection for dragging
+				const nodesToDrag = nodesToSelect;
+				const nodeOffsets = new Map<
+					string,
+					{ offsetX: number; offsetY: number }
+				>();
+
+				nodesToDrag.forEach((id) => {
+					const n = nodes.find((nd) => nd.id === id);
+					if (n) {
+						nodeOffsets.set(id, {
+							offsetX: cursorX - n.position.x,
+							offsetY: cursorY - n.position.y,
+						});
+					}
+				});
+
+				dragRef.current = {
+					nodeId,
+					offsetX: cursorX - node.position.x,
+					offsetY: cursorY - node.position.y,
+					selectedNodeIds: nodesToDrag,
+					nodeOffsets,
+				};
+			} else {
+				// Node was removed from selection, don't start dragging
+				dragRef.current = null;
+			}
 		},
 		[
-			onSelectNode,
+			onSelectNodes,
+			onSelectEdges,
 			nodes,
 			zoom,
 			pan,
 			isSpacePressed,
 			isPanModeLocked,
+			isShiftPressed,
+			selectedNodeIds,
+			selectedEdgeIds,
 			startPanning,
 		],
 	);
@@ -808,7 +1050,11 @@ export function Canvas({
 				ref={canvasRef}
 				className="canvas-grid h-full w-full"
 				style={{
-					cursor: isPanning ? "grabbing" : isSpacePressed ? "grab" : "grab",
+					cursor: isPanning
+						? "grabbing"
+						: isSpacePressed || isPanModeLocked
+							? "grab"
+							: "default",
 				}}
 				onMouseDown={handleMouseDown}
 				onMouseMove={handleMouseMove}
@@ -830,12 +1076,33 @@ export function Canvas({
 							edge={edge}
 							nodes={nodes}
 							edges={edges}
-							selected={edge.id === selectedEdgeId}
+							selected={selectedEdgeIds.includes(edge.id)}
 							onSelect={(e) => {
 								e.stopPropagation();
 								console.warn("[v0] Edge selected:", edge.id);
-								onSelectNode(null);
-								onSelectEdge(edge.id);
+								// Use e.shiftKey for more reliable shift detection
+								const shiftKeyPressed = e.shiftKey || isShiftPressed;
+
+								// Handle multi-selection with shift key
+								if (shiftKeyPressed) {
+									// Toggle edge in selection
+									let newEdgeIds: string[];
+									if (selectedEdgeIds.includes(edge.id)) {
+										// Remove edge from selection
+										newEdgeIds = selectedEdgeIds.filter((id) => id !== edge.id);
+									} else {
+										// Add edge to selection
+										newEdgeIds = [...selectedEdgeIds, edge.id];
+									}
+									// Update edge selection
+									onSelectEdges(newEdgeIds);
+									// Don't clear node selection when using shift - allow mixed selection
+								} else {
+									// Single selection - replace current selection
+									onSelectEdges([edge.id]);
+									// Clear node selection only on single click (non-shift)
+									onSelectNodes([]);
+								}
 							}}
 							onDelete={() => {
 								console.warn("[v0] Edge deleted:", edge.id);
@@ -853,6 +1120,23 @@ export function Canvas({
 								fill="none"
 								strokeDasharray="5,5"
 								opacity={0.6}
+								className="pointer-events-none"
+							/>
+						</g>
+					)}
+
+					{/* Selection box */}
+					{boxSelection && (
+						<g className="selection-box">
+							<rect
+								x={Math.min(boxSelection.startX, boxSelection.currentX)}
+								y={Math.min(boxSelection.startY, boxSelection.currentY)}
+								width={Math.abs(boxSelection.currentX - boxSelection.startX)}
+								height={Math.abs(boxSelection.currentY - boxSelection.startY)}
+								fill="rgba(59, 130, 246, 0.1)"
+								stroke="rgba(59, 130, 246, 0.5)"
+								strokeWidth={1}
+								strokeDasharray="4,4"
 								className="pointer-events-none"
 							/>
 						</g>
@@ -875,10 +1159,10 @@ export function Canvas({
 						// Detectar si este checkpoint está siendo referenciado por un nodo API SELECCIONADO
 						const isReferencedCheckpoint =
 							node.type === "Checkpoint" &&
-							selectedNodeId !== null &&
+							selectedNodeIds.length > 0 &&
 							nodes.some(
 								(n) =>
-									n.id === selectedNodeId &&
+									selectedNodeIds.includes(n.id) &&
 									n.type === "API" &&
 									(
 										n.config.failureHandling as
@@ -896,7 +1180,7 @@ export function Canvas({
 							<NodeRenderer
 								key={node.id}
 								node={node}
-								selected={node.id === selectedNodeId}
+								selected={selectedNodeIds.includes(node.id)}
 								errors={nodeErrors}
 								connecting={connectingFrom?.nodeId === node.id}
 								highlightCheckpoint={isReferencedCheckpoint}
@@ -1002,13 +1286,20 @@ export function Canvas({
 					<Button
 						size="icon"
 						variant="ghost"
-						className="h-8 w-8"
+						className={cn(
+							"h-8 w-8 transition-colors",
+							!isHandToolActive &&
+								"border border-primary/30 bg-primary/10 text-primary shadow-inner ring-1 ring-primary/30",
+						)}
 						title="Herramienta de selección (puntero)"
 						aria-label="Herramienta de selección (puntero)"
 						aria-pressed={!isHandToolActive}
-						onClick={deactivatePanMode}
+						data-state={!isHandToolActive ? "active" : "inactive"}
+						onClick={activateSelectionMode}
 					>
-						<MousePointer2 className="h-4 w-4" />
+						<MousePointer2
+							className={cn("h-4 w-4", !isHandToolActive && "text-primary")}
+						/>
 					</Button>
 					<div className="mx-1 h-6 w-px bg-border" />
 					<Button
