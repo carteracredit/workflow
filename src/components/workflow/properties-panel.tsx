@@ -140,6 +140,10 @@ export function PropertiesPanel({
 		selectedEdges.length === 1 ? selectedEdges[0] : undefined;
 	const hasMultipleNodes = selectedNodes.length > 1;
 	const hasMultipleEdges = selectedEdges.length > 1;
+	// Check if there are multiple items selected (nodes + edges combined)
+	const hasMultipleItems =
+		selectedNodes.length + selectedEdges.length > 1 ||
+		(selectedNodes.length > 0 && selectedEdges.length > 0);
 	// Estado local para el input de maxRetries del nodo API
 	const [apiMaxRetriesInput, setApiMaxRetriesInput] = useState<string>("");
 
@@ -362,6 +366,11 @@ export function PropertiesPanel({
 		);
 	}
 
+	// Don't show panel when multiple items are selected (including mixed selection)
+	if (hasMultipleItems) {
+		return null;
+	}
+
 	if (selectedEdge) {
 		return (
 			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
@@ -491,11 +500,6 @@ export function PropertiesPanel({
 				</ScrollArea>
 			</div>
 		);
-	}
-
-	// Don't show panel when multiple nodes or edges are selected
-	if (hasMultipleNodes || hasMultipleEdges) {
-		return null;
 	}
 
 	// Si no hay nodo ni edge seleccionado, solo mostrar si showWorkflowProperties está activo
