@@ -281,37 +281,37 @@ export function NodeRenderer({
 	// Usar altura real medida o estimada
 	const realHeight = actualNodeHeight || NODE_HEIGHT;
 
-	// Conectores de salida en la parte inferior (vertical layout)
-	// Las posiciones deben ser el centro del círculo conector
-	const bottomConnectorPos = hasTwoOutputs
+	// Conectores de salida en el costado derecho (layout horizontal)
+	// Las posiciones representan el centro del círculo conector
+	const singleOutputCenterY = node.position.y + realHeight / 2;
+	const multiOutputPositiveRatio = hasChallengeOutputs ? 0.35 : 0.33;
+	const multiOutputNegativeRatio = hasChallengeOutputs ? 0.65 : 0.67;
+
+	const rightConnectorPos = hasTwoOutputs
 		? null
 		: {
-				x: node.position.x + NODE_WIDTH / 2,
-				y: node.position.y + realHeight + CONNECTOR_SIZE / 2, // Centro del círculo
+				x: node.position.x + NODE_WIDTH + CONNECTOR_SIZE / 2,
+				y: singleOutputCenterY,
 			};
 
-	const multiOutputLeftRatio = hasChallengeOutputs ? 0.35 : 0.33;
-	const multiOutputRightRatio = hasChallengeOutputs ? 0.65 : 0.67;
-
-	const bottomLeftConnectorPos = hasTwoOutputs
+	const rightTopConnectorPos = hasTwoOutputs
 		? {
-				x: node.position.x + NODE_WIDTH * multiOutputLeftRatio,
-				y: node.position.y + realHeight + CONNECTOR_SIZE / 2, // Centro del círculo
+				x: node.position.x + NODE_WIDTH + CONNECTOR_SIZE / 2,
+				y: node.position.y + realHeight * multiOutputPositiveRatio,
 			}
 		: null;
 
-	const bottomRightConnectorPos = hasTwoOutputs
+	const rightBottomConnectorPos = hasTwoOutputs
 		? {
-				x: node.position.x + NODE_WIDTH * multiOutputRightRatio,
-				y: node.position.y + realHeight + CONNECTOR_SIZE / 2, // Centro del círculo
+				x: node.position.x + NODE_WIDTH + CONNECTOR_SIZE / 2,
+				y: node.position.y + realHeight * multiOutputNegativeRatio,
 			}
 		: null;
 
-	// Conectores de entrada en la parte superior (vertical layout)
-	// La posición debe ser el centro del círculo conector
-	const topConnectorPos = {
-		x: node.position.x + NODE_WIDTH / 2,
-		y: node.position.y - CONNECTOR_SIZE / 2, // Centro del círculo
+	// Conectores de entrada en el costado izquierdo (layout horizontal)
+	const leftConnectorPos = {
+		x: node.position.x - CONNECTOR_SIZE / 2,
+		y: singleOutputCenterY,
 	};
 
 	const handleConnectorClick = (
@@ -604,21 +604,22 @@ export function NodeRenderer({
 											"scale-125 animate-pulse border-primary bg-primary",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputLeftRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-left"
+											hoveredConnector === "right-top"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
 									title="Salida positiva (Sí)"
 									onClick={(e) =>
-										handleConnectorClick(bottomLeftConnectorPos!, e, "top")
+										handleConnectorClick(rightTopConnectorPos!, e, "top")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-left")}
+									onMouseEnter={() => setHoveredConnector("right-top")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-positive"
 								/>
 								<div
 									className={cn(
@@ -627,21 +628,22 @@ export function NodeRenderer({
 											"scale-125 animate-pulse border-primary bg-primary",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputRightRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-right"
+											hoveredConnector === "right-bottom"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
 									title="Salida negativa (No / Rechazado)"
 									onClick={(e) =>
-										handleConnectorClick(bottomRightConnectorPos!, e, "bottom")
+										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-right")}
+									onMouseEnter={() => setHoveredConnector("right-bottom")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-negative"
 								/>
 							</>
 						) : hasChallengeOutputs ? (
@@ -653,21 +655,22 @@ export function NodeRenderer({
 											"scale-125 animate-pulse border-primary bg-primary",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputLeftRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-left"
+											hoveredConnector === "right-top"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
 									title="Salida positiva (Aceptado)"
 									onClick={(e) =>
-										handleConnectorClick(bottomLeftConnectorPos!, e, "top")
+										handleConnectorClick(rightTopConnectorPos!, e, "top")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-left")}
+									onMouseEnter={() => setHoveredConnector("right-top")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-positive"
 								/>
 								<div
 									className={cn(
@@ -676,21 +679,22 @@ export function NodeRenderer({
 											"scale-125 animate-pulse border-primary bg-primary",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputRightRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-right"
+											hoveredConnector === "right-bottom"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
 									title="Salida negativa (Rechazado)"
 									onClick={(e) =>
-										handleConnectorClick(bottomRightConnectorPos!, e, "bottom")
+										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-right")}
+									onMouseEnter={() => setHoveredConnector("right-bottom")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-negative"
 								/>
 							</>
 						) : (
@@ -702,17 +706,18 @@ export function NodeRenderer({
 										"scale-125 animate-pulse border-primary bg-primary",
 								)}
 								style={{
-									left: `${NODE_WIDTH / 2 - CONNECTOR_SIZE / 2}px`,
-									top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+									right: `${-CONNECTOR_SIZE / 2}px`,
+									top: `${realHeight / 2 - CONNECTOR_SIZE / 2}px`,
 									transform:
-										hoveredConnector === "bottom" ? "scale(1.25)" : "scale(1)",
+										hoveredConnector === "right" ? "scale(1.25)" : "scale(1)",
 									transformOrigin: "center center",
 								}}
 								title="Conectar a otro nodo"
-								onClick={(e) => handleConnectorClick(bottomConnectorPos!, e)}
+								onClick={(e) => handleConnectorClick(rightConnectorPos!, e)}
 								onMouseDown={(e) => e.stopPropagation()}
-								onMouseEnter={() => setHoveredConnector("bottom")}
+								onMouseEnter={() => setHoveredConnector("right")}
 								onMouseLeave={() => setHoveredConnector(null)}
+								data-testid="output-connector"
 							/>
 						)}
 					</>
@@ -726,17 +731,18 @@ export function NodeRenderer({
 							connecting && "scale-125 animate-pulse border-primary bg-primary",
 						)}
 						style={{
-							left: `${NODE_WIDTH / 2 - CONNECTOR_SIZE / 2}px`,
-							top: `${-CONNECTOR_SIZE / 2}px`,
+							left: `${-CONNECTOR_SIZE / 2}px`,
+							top: `${realHeight / 2 - CONNECTOR_SIZE / 2}px`,
 							transform:
-								hoveredConnector === "top" ? "scale(1.25)" : "scale(1)",
+								hoveredConnector === "left" ? "scale(1.25)" : "scale(1)",
 							transformOrigin: "center center",
 						}}
 						title="Punto de entrada"
-						onClick={(e) => handleConnectorClick(topConnectorPos, e)}
+						onClick={(e) => handleConnectorClick(leftConnectorPos, e, "middle")}
 						onMouseDown={(e) => e.stopPropagation()}
-						onMouseEnter={() => setHoveredConnector("top")}
+						onMouseEnter={() => setHoveredConnector("left")}
 						onMouseLeave={() => setHoveredConnector(null)}
+						data-testid="input-connector"
 					/>
 				)}
 			</div>

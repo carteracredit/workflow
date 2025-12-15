@@ -1175,19 +1175,34 @@ export function Canvas({
 						/>
 					))}
 
-					{connectingFrom && tempEdgeTo && (
-						<g className="workflow-edge">
-							<path
-								d={`M ${connectingFrom.x} ${connectingFrom.y} C ${connectingFrom.x} ${connectingFrom.y + 100}, ${tempEdgeTo.x} ${tempEdgeTo.y - 100}, ${tempEdgeTo.x} ${tempEdgeTo.y}`}
-								stroke="var(--primary)"
-								strokeWidth={2}
-								fill="none"
-								strokeDasharray="5,5"
-								opacity={0.6}
-								className="pointer-events-none"
-							/>
-						</g>
-					)}
+					{connectingFrom &&
+						tempEdgeTo &&
+						(() => {
+							const horizontalDistance = Math.abs(
+								tempEdgeTo.x - connectingFrom.x,
+							);
+							const direction = Math.sign(tempEdgeTo.x - connectingFrom.x) || 1;
+							const offset = Math.min(
+								Math.max(horizontalDistance * 0.4, 80),
+								200,
+							);
+							const controlPoint1X = connectingFrom.x + direction * offset;
+							const controlPoint2X = tempEdgeTo.x - direction * offset;
+
+							return (
+								<g className="workflow-edge">
+									<path
+										d={`M ${connectingFrom.x} ${connectingFrom.y} C ${controlPoint1X} ${connectingFrom.y}, ${controlPoint2X} ${tempEdgeTo.y}, ${tempEdgeTo.x} ${tempEdgeTo.y}`}
+										stroke="var(--primary)"
+										strokeWidth={2}
+										fill="none"
+										strokeDasharray="5,5"
+										opacity={0.6}
+										className="pointer-events-none"
+									/>
+								</g>
+							);
+						})()}
 
 					{/* Selection box */}
 					{boxSelection && (

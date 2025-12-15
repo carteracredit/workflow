@@ -244,7 +244,7 @@
 }
 
 .workflow-node:hover {
-	/* Removed translateY to prevent connector misalignment in vertical layout */
+	/* Removed translate transforms to keep handles aligned in horizontal layout */
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
