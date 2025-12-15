@@ -1,3 +1,10 @@
+# [1.0.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.2...v1.0.0-rc.3) (2025-12-15)
+
+
+### Features
+
+* implement copy and paste functionality in WorkflowEditor and Canvas ([e502d15](https://github.com/carteracredit/workflow/commit/e502d1531be4ca4dfcfb9d30d2fad501ea529f00))
+
 # [1.0.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2025-12-15)
 
 
