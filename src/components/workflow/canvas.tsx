@@ -745,10 +745,7 @@ export function Canvas({
 				} else {
 					nodesToSelect = [...selectedNodeIds, nodeId];
 				}
-				// Clear edge selection when selecting nodes
-				if (selectedEdgeIds.length > 0) {
-					onSelectEdges([]);
-				}
+				// Don't clear edge selection when using shift - allow mixed selection
 			} else {
 				// If clicking on a node that's already selected, keep all selected nodes
 				// Otherwise, replace selection with just this node
@@ -760,6 +757,7 @@ export function Canvas({
 					// Replace selection with just this node
 					nodesToSelect = [nodeId];
 				}
+				// Clear edge selection only on single click (non-shift)
 				onSelectEdges([]);
 			}
 			onSelectNodes(nodesToSelect);
@@ -1098,13 +1096,11 @@ export function Canvas({
 									}
 									// Update edge selection
 									onSelectEdges(newEdgeIds);
-									// Clear node selection when selecting edges
-									if (selectedNodeIds.length > 0) {
-										onSelectNodes([]);
-									}
+									// Don't clear node selection when using shift - allow mixed selection
 								} else {
 									// Single selection - replace current selection
 									onSelectEdges([edge.id]);
+									// Clear node selection only on single click (non-shift)
 									onSelectNodes([]);
 								}
 							}}

@@ -493,59 +493,9 @@ export function PropertiesPanel({
 		);
 	}
 
-	// Show multiple selection summary
-	if (hasMultipleNodes) {
-		return (
-			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
-				<div className="border-b border-border p-4 flex-shrink-0">
-					<h2 className="font-semibold">
-						{selectedNodes.length} Nodos Seleccionados
-					</h2>
-				</div>
-				<ScrollArea className="flex-1 overflow-y-auto overflow-x-hidden">
-					<div className="space-y-4 p-4">
-						<div className="text-sm text-muted-foreground">
-							<p>
-								Seleccionaste {selectedNodes.length} nodo
-								{selectedNodes.length > 1 ? "s" : ""}. Selecciona un solo nodo
-								para editar sus propiedades.
-							</p>
-						</div>
-						<div className="space-y-2">
-							<h3 className="text-sm font-medium">Nodos seleccionados:</h3>
-							<ul className="list-disc list-inside space-y-1 text-sm">
-								{selectedNodes.map((node) => (
-									<li key={node.id}>{node.title}</li>
-								))}
-							</ul>
-						</div>
-					</div>
-				</ScrollArea>
-			</div>
-		);
-	}
-
-	if (hasMultipleEdges) {
-		return (
-			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
-				<div className="border-b border-border p-4 flex-shrink-0">
-					<h2 className="font-semibold">
-						{selectedEdges.length} Flechas Seleccionadas
-					</h2>
-				</div>
-				<ScrollArea className="flex-1 overflow-y-auto overflow-x-hidden">
-					<div className="space-y-4 p-4">
-						<div className="text-sm text-muted-foreground">
-							<p>
-								Seleccionaste {selectedEdges.length} flecha
-								{selectedEdges.length > 1 ? "s" : ""}. Selecciona una sola
-								flecha para editar sus propiedades.
-							</p>
-						</div>
-					</div>
-				</ScrollArea>
-			</div>
-		);
+	// Don't show panel when multiple nodes or edges are selected
+	if (hasMultipleNodes || hasMultipleEdges) {
+		return null;
 	}
 
 	// Si no hay nodo ni edge seleccionado, solo mostrar si showWorkflowProperties está activo
