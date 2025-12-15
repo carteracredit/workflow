@@ -26,6 +26,9 @@ import {
 	MousePointer2,
 	Undo,
 	Redo,
+	Copy,
+	Clipboard,
+	Check,
 } from "lucide-react";
 import { findNearestPreviousCheckpoint } from "@/lib/workflow/graph-utils";
 import {
@@ -35,6 +38,11 @@ import {
 	isRetryEdge,
 } from "@/lib/workflow/connection-rules";
 import { cn } from "@/lib/utils";
+import {
+	serializeSelection,
+	deserializeSelection,
+	type CopiedSelection,
+} from "@/lib/workflow/copy-paste";
 
 const MULTI_OUTPUT_NODE_TYPES: WorkflowNode["type"][] = [
 	"Decision",
@@ -75,6 +83,8 @@ interface CanvasProps {
 	validationState?: {
 		status: "idle" | "valid" | "invalid";
 	};
+	onCopy?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
+	onPaste?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
 }
 
 export function Canvas({
@@ -99,6 +109,8 @@ export function Canvas({
 	onValidate,
 	onPreview,
 	validationState,
+	onCopy,
+	onPaste,
 }: CanvasProps) {
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const [isPanning, setIsPanning] = useState(false);
@@ -107,6 +119,9 @@ export function Canvas({
 	const [isPanModeLocked, setIsPanModeLocked] = useState(false);
 	const [isShiftPressed, setIsShiftPressed] = useState(false);
 	const lastAutoScrolledNodeId = useRef<string | null>(null);
+	const copiedDataRef = useRef<CopiedSelection | null>(null);
+	const [hasCopiedData, setHasCopiedData] = useState(false);
+	const [justCopied, setJustCopied] = useState(false);
 
 	const dragRef = useRef<{
 		nodeId: string;
@@ -400,6 +415,52 @@ export function Canvas({
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
+			// Check if user is typing in an input/textarea
+			const activeElement = document.activeElement;
+			const isInputActive =
+				activeElement &&
+				(activeElement.tagName === "INPUT" ||
+					activeElement.tagName === "TEXTAREA" ||
+					activeElement.getAttribute("contenteditable") === "true");
+
+			// Handle Copy (Ctrl/Cmd+C)
+			if ((e.ctrlKey || e.metaKey) && e.key === "c" && !isInputActive) {
+				e.preventDefault();
+				if (
+					onCopy &&
+					(selectedNodeIds.length > 0 || selectedEdgeIds.length > 0)
+				) {
+					const selection = serializeSelection(
+						selectedNodeIds,
+						selectedEdgeIds,
+						nodes,
+						edges,
+					);
+					if (selection) {
+						copiedDataRef.current = selection;
+						setHasCopiedData(true);
+						setJustCopied(true);
+						onCopy(selection.nodes, selection.edges);
+						// Reset visual feedback after 1.5 seconds
+						setTimeout(() => {
+							setJustCopied(false);
+						}, 1500);
+					}
+				}
+				return;
+			}
+
+			// Handle Paste (Ctrl/Cmd+V)
+			if ((e.ctrlKey || e.metaKey) && e.key === "v" && !isInputActive) {
+				e.preventDefault();
+				if (onPaste && copiedDataRef.current) {
+					const { nodes: pastedNodes, edges: pastedEdges } =
+						deserializeSelection(copiedDataRef.current, nodes);
+					onPaste(pastedNodes, pastedEdges);
+				}
+				return;
+			}
+
 			if (e.key === "Delete") {
 				// Delete all selected nodes (except Start nodes)
 				selectedNodeIds.forEach((nodeId) => {
@@ -443,6 +504,9 @@ export function Canvas({
 		onUpdateZoom,
 		handleFitToView,
 		nodes,
+		edges,
+		onCopy,
+		onPaste,
 	]);
 
 	const startPanning = useCallback(
@@ -1319,6 +1383,65 @@ export function Canvas({
 						disabled
 					>
 						<Redo className="h-4 w-4" />
+					</Button>
+					<div className="mx-1 h-6 w-px bg-border" />
+					<Button
+						size="icon"
+						variant="ghost"
+						className={cn(
+							"h-8 w-8 transition-colors",
+							justCopied &&
+								"border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400",
+						)}
+						title={justCopied ? "¡Copiado!" : "Copiar (Ctrl/Cmd+C)"}
+						disabled={
+							selectedNodeIds.length === 0 && selectedEdgeIds.length === 0
+						}
+						onClick={() => {
+							if (
+								onCopy &&
+								(selectedNodeIds.length > 0 || selectedEdgeIds.length > 0)
+							) {
+								const selection = serializeSelection(
+									selectedNodeIds,
+									selectedEdgeIds,
+									nodes,
+									edges,
+								);
+								if (selection) {
+									copiedDataRef.current = selection;
+									setHasCopiedData(true);
+									setJustCopied(true);
+									onCopy(selection.nodes, selection.edges);
+									// Reset visual feedback after 1.5 seconds
+									setTimeout(() => {
+										setJustCopied(false);
+									}, 1500);
+								}
+							}
+						}}
+					>
+						{justCopied ? (
+							<Check className="h-4 w-4" />
+						) : (
+							<Copy className="h-4 w-4" />
+						)}
+					</Button>
+					<Button
+						size="icon"
+						variant="ghost"
+						className="h-8 w-8"
+						title="Pegar (Ctrl/Cmd+V)"
+						disabled={!hasCopiedData || !copiedDataRef.current}
+						onClick={() => {
+							if (onPaste && copiedDataRef.current) {
+								const { nodes: pastedNodes, edges: pastedEdges } =
+									deserializeSelection(copiedDataRef.current, nodes);
+								onPaste(pastedNodes, pastedEdges);
+							}
+						}}
+					>
+						<Clipboard className="h-4 w-4" />
 					</Button>
 					<div className="mx-1 h-6 w-px bg-border" />
 					{/* Controles de zoom */}

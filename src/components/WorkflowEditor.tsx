@@ -267,6 +267,49 @@ export function WorkflowEditor() {
 		}));
 	}, []);
 
+	const handleCopy = useCallback(
+		(copiedNodes: WorkflowNode[], copiedEdges: WorkflowEdge[]) => {
+			// Copy operation is handled by Canvas, this callback is for future use if needed
+			// (e.g., showing a toast notification)
+			console.log(
+				"[v0] Copied",
+				copiedNodes.length,
+				"nodes and",
+				copiedEdges.length,
+				"edges",
+			);
+		},
+		[],
+	);
+
+	const handlePaste = useCallback(
+		(pastedNodes: WorkflowNode[], pastedEdges: WorkflowEdge[]) => {
+			setWorkflowState((prev) => {
+				// Add pasted nodes with default stale timeout
+				const newNodes = [
+					...prev.nodes,
+					...pastedNodes.map(withDefaultStaleTimeout),
+				];
+
+				// Add pasted edges
+				const newEdges = [...prev.edges, ...pastedEdges];
+
+				// Select the pasted elements
+				const pastedNodeIds = pastedNodes.map((n) => n.id);
+				const pastedEdgeIds = pastedEdges.map((e) => e.id);
+
+				return {
+					...prev,
+					nodes: newNodes,
+					edges: newEdges,
+					selectedNodeIds: pastedNodeIds,
+					selectedEdgeIds: pastedEdgeIds,
+				};
+			});
+		},
+		[],
+	);
+
 	const handleValidate = useCallback(() => {
 		const errors = validateWorkflow(workflowState.nodes, workflowState.edges);
 		setValidationErrors(errors);
@@ -444,6 +487,8 @@ export function WorkflowEditor() {
 						validationState={{
 							status: validationStatus,
 						}}
+						onCopy={handleCopy}
+						onPaste={handlePaste}
 					/>
 
 					{validationErrors.length > 0 && (
