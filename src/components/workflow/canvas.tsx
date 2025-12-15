@@ -104,7 +104,7 @@ export function Canvas({
 	const [isPanning, setIsPanning] = useState(false);
 	const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 	const [isSpacePressed, setIsSpacePressed] = useState(false);
-	const [isPanModeLocked, setIsPanModeLocked] = useState(true);
+	const [isPanModeLocked, setIsPanModeLocked] = useState(false);
 	const lastAutoScrolledNodeId = useRef<string | null>(null);
 
 	const dragRef = useRef<{
@@ -431,7 +431,7 @@ export function Canvas({
 		[pan.x, pan.y],
 	);
 
-	const deactivatePanMode = useCallback(() => {
+	const activateSelectionMode = useCallback(() => {
 		setIsPanModeLocked(false);
 		setIsPanning(false);
 	}, []);
@@ -468,12 +468,16 @@ export function Canvas({
 
 			// Activar panning si:
 			// 1. Botón del medio del mouse
-			// 2. Space + clic izquierdo
-			// 3. Clic izquierdo en el fondo del canvas (manita) - solo si no fue manejado por handlers hijos
+			// 2. Space + clic izquierdo (temporal, override del modo actual)
+			// 3. Clic izquierdo en el fondo del canvas solo si pan mode está bloqueado (manita activa)
 			const shouldPanWithLeftButton =
 				e.button === 0 && (isSpacePressed || isPanModeLocked);
 			const shouldPanByBackgroundClick =
-				e.button === 0 && isCanvasBackground && target === e.currentTarget;
+				e.button === 0 &&
+				isCanvasBackground &&
+				target === e.currentTarget &&
+				isPanModeLocked &&
+				!isSpacePressed; // No panear si space está presionado (se maneja arriba)
 
 			if (
 				e.button === 1 ||
@@ -808,7 +812,11 @@ export function Canvas({
 				ref={canvasRef}
 				className="canvas-grid h-full w-full"
 				style={{
-					cursor: isPanning ? "grabbing" : isSpacePressed ? "grab" : "grab",
+					cursor: isPanning
+						? "grabbing"
+						: isSpacePressed || isPanModeLocked
+							? "grab"
+							: "default",
 				}}
 				onMouseDown={handleMouseDown}
 				onMouseMove={handleMouseMove}
@@ -1002,13 +1010,20 @@ export function Canvas({
 					<Button
 						size="icon"
 						variant="ghost"
-						className="h-8 w-8"
+						className={cn(
+							"h-8 w-8 transition-colors",
+							!isHandToolActive &&
+								"border border-primary/30 bg-primary/10 text-primary shadow-inner ring-1 ring-primary/30",
+						)}
 						title="Herramienta de selección (puntero)"
 						aria-label="Herramienta de selección (puntero)"
 						aria-pressed={!isHandToolActive}
-						onClick={deactivatePanMode}
+						data-state={!isHandToolActive ? "active" : "inactive"}
+						onClick={activateSelectionMode}
 					>
-						<MousePointer2 className="h-4 w-4" />
+						<MousePointer2
+							className={cn("h-4 w-4", !isHandToolActive && "text-primary")}
+						/>
 					</Button>
 					<div className="mx-1 h-6 w-px bg-border" />
 					<Button
