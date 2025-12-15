@@ -116,13 +116,24 @@ export function WorkflowEditor() {
 					const parsed = JSON.parse(saved);
 					// Migrar nodos legacy (Status, Approve, ManualDecision)
 					const migratedNodes = migrateLegacyNodes(parsed.nodes || []);
+					// Migrate old single selection to new multi-selection arrays
+					const selectedNodeIds = parsed.selectedNodeIds
+						? parsed.selectedNodeIds
+						: parsed.selectedNodeId
+							? [parsed.selectedNodeId]
+							: [];
+					const selectedEdgeIds = parsed.selectedEdgeIds
+						? parsed.selectedEdgeIds
+						: parsed.selectedEdgeId
+							? [parsed.selectedEdgeId]
+							: [];
 					return {
 						...parsed,
 						metadata: parsed.metadata || createDefaultMetadata(),
 						nodes: migratedNodes.map(withDefaultStaleTimeout),
 						flags: parsed.flags || [],
-						selectedNodeId: null,
-						selectedEdgeId: null,
+						selectedNodeIds,
+						selectedEdgeIds,
 					};
 				} catch (e) {
 					console.error("[v0] Error loading from localStorage:", e);
@@ -134,8 +145,8 @@ export function WorkflowEditor() {
 			nodes: [createInitialStartNode()],
 			edges: [],
 			flags: [],
-			selectedNodeId: null,
-			selectedEdgeId: null,
+			selectedNodeIds: [],
+			selectedEdgeIds: [],
 			zoom: 1,
 			pan: { x: 200, y: 100 }, // Pan inicial para centrar el nodo Start
 			history: [],
@@ -225,8 +236,7 @@ export function WorkflowEditor() {
 			...prev,
 			nodes: prev.nodes.filter((n) => n.id !== nodeId),
 			edges: prev.edges.filter((e) => e.from !== nodeId && e.to !== nodeId),
-			selectedNodeId:
-				prev.selectedNodeId === nodeId ? null : prev.selectedNodeId,
+			selectedNodeIds: prev.selectedNodeIds.filter((id) => id !== nodeId),
 		}));
 	}, []);
 
@@ -253,8 +263,7 @@ export function WorkflowEditor() {
 		setWorkflowState((prev) => ({
 			...prev,
 			edges: prev.edges.filter((e) => e.id !== edgeId),
-			selectedEdgeId:
-				prev.selectedEdgeId === edgeId ? null : prev.selectedEdgeId,
+			selectedEdgeIds: prev.selectedEdgeIds.filter((id) => id !== edgeId),
 		}));
 	}, []);
 
@@ -283,8 +292,8 @@ export function WorkflowEditor() {
 				nodes: [createInitialStartNode()],
 				edges: [],
 				flags: [],
-				selectedNodeId: null,
-				selectedEdgeId: null,
+				selectedNodeIds: [],
+				selectedEdgeIds: [],
 				zoom: 1,
 				pan: { x: 200, y: 100 }, // Pan inicial para centrar el nodo Start
 				history: [],
@@ -307,8 +316,8 @@ export function WorkflowEditor() {
 				...prev,
 				nodes: example.nodes.map(withDefaultStaleTimeout),
 				edges: example.edges,
-				selectedNodeId: null,
-				selectedEdgeId: null,
+				selectedNodeIds: [],
+				selectedEdgeIds: [],
 			}));
 			setValidationErrors([]);
 			setValidationStatus("idle");
@@ -371,7 +380,7 @@ export function WorkflowEditor() {
 						const newValue = !prev;
 						// Si se está abriendo el panel de propiedades del flujo, deseleccionar nodo/edge
 						if (newValue) {
-							updateWorkflow({ selectedNodeId: null, selectedEdgeId: null });
+							updateWorkflow({ selectedNodeIds: [], selectedEdgeIds: [] });
 						}
 						return newValue;
 					});
@@ -398,8 +407,8 @@ export function WorkflowEditor() {
 					<Canvas
 						nodes={workflowState.nodes}
 						edges={workflowState.edges}
-						selectedNodeId={workflowState.selectedNodeId}
-						selectedEdgeId={workflowState.selectedEdgeId}
+						selectedNodeIds={workflowState.selectedNodeIds}
+						selectedEdgeIds={workflowState.selectedEdgeIds}
 						zoom={workflowState.zoom}
 						pan={workflowState.pan}
 						flags={workflowState.flags}
@@ -407,21 +416,21 @@ export function WorkflowEditor() {
 						onDeleteNode={deleteNode}
 						onAddEdge={addEdge}
 						onDeleteEdge={deleteEdge}
-						onSelectNode={(nodeId) => {
-							updateWorkflow({ selectedNodeId: nodeId });
-							if (nodeId) {
+						onSelectNodes={(nodeIds) => {
+							updateWorkflow({ selectedNodeIds: nodeIds });
+							if (nodeIds.length > 0) {
 								setShowWorkflowProperties(false);
 							} else {
-								// Si se deselecciona (nodeId es null), cerrar también el panel de propiedades del flujo
+								// Si se deselecciona todo, cerrar también el panel de propiedades del flujo
 								setShowWorkflowProperties(false);
 							}
 						}}
-						onSelectEdge={(edgeId) => {
-							updateWorkflow({ selectedEdgeId: edgeId });
-							if (edgeId) {
+						onSelectEdges={(edgeIds) => {
+							updateWorkflow({ selectedEdgeIds: edgeIds });
+							if (edgeIds.length > 0) {
 								setShowWorkflowProperties(false);
 							} else {
-								// Si se deselecciona (edgeId es null), cerrar también el panel de propiedades del flujo
+								// Si se deselecciona todo, cerrar también el panel de propiedades del flujo
 								setShowWorkflowProperties(false);
 							}
 						}}
@@ -442,19 +451,27 @@ export function WorkflowEditor() {
 							errors={validationErrors}
 							onClose={() => setValidationErrors([])}
 							onSelectNode={(nodeId) =>
-								updateWorkflow({ selectedNodeId: nodeId })
+								updateWorkflow({ selectedNodeIds: nodeId ? [nodeId] : [] })
 							}
 						/>
 					)}
 				</div>
 
 				<PropertiesPanel
-					selectedNode={workflowState.nodes.find(
-						(n) => n.id === workflowState.selectedNodeId,
-					)}
-					selectedEdge={workflowState.edges.find(
-						(e) => e.id === workflowState.selectedEdgeId,
-					)}
+					selectedNode={
+						workflowState.selectedNodeIds.length > 0
+							? workflowState.nodes.find(
+									(n) => n.id === workflowState.selectedNodeIds[0],
+								)
+							: undefined
+					}
+					selectedEdge={
+						workflowState.selectedEdgeIds.length > 0
+							? workflowState.edges.find(
+									(e) => e.id === workflowState.selectedEdgeIds[0],
+								)
+							: undefined
+					}
 					workflowMetadata={workflowState.metadata}
 					nodes={workflowState.nodes}
 					edges={workflowState.edges}
@@ -489,8 +506,8 @@ export function WorkflowEditor() {
 							...prev,
 							nodes: migratedNodes.map(withDefaultStaleTimeout),
 							edges: data.edges,
-							selectedNodeId: null,
-							selectedEdgeId: null,
+							selectedNodeIds: [],
+							selectedEdgeIds: [],
 						}));
 						setShowJSON(false);
 						setValidationErrors([]);
