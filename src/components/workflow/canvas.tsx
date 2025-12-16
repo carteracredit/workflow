@@ -49,6 +49,23 @@ const MULTI_OUTPUT_NODE_TYPES: WorkflowNode["type"][] = [
 	"Challenge",
 ];
 
+const GRID_BASE_SIZE = 20;
+
+export const getCanvasGridStyle = (
+	pan: { x: number; y: number },
+	zoom: number,
+): React.CSSProperties => {
+	const safeZoom = Math.max(zoom, 0.1);
+	const gridSize = GRID_BASE_SIZE * safeZoom;
+	const backgroundSize = `${gridSize}px ${gridSize}px`;
+	const backgroundPosition = `${pan.x}px ${pan.y}px`;
+
+	return {
+		backgroundSize: `${backgroundSize}, ${backgroundSize}`,
+		backgroundPosition: `${backgroundPosition}, ${backgroundPosition}`,
+	};
+};
+
 const getPortDescriptor = (
 	nodeType: WorkflowNode["type"],
 	port: "top" | "bottom",
@@ -1114,6 +1131,7 @@ export function Canvas({
 				ref={canvasRef}
 				className="canvas-grid h-full w-full"
 				style={{
+					...getCanvasGridStyle(pan, zoom),
 					cursor: isPanning
 						? "grabbing"
 						: isSpacePressed || isPanModeLocked
