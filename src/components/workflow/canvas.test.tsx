@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
+import { getCanvasGridStyle } from "./canvas";
 
 /**
  * Tests for Canvas selection behavior
@@ -100,5 +101,25 @@ describe("Canvas Selection Behavior", () => {
 			expect(newNodes).toEqual(["node-1"]);
 			expect(newEdges).toEqual(["edge-1", "edge-2"]);
 		});
+	});
+});
+
+describe("getCanvasGridStyle", () => {
+	it("syncs background position with pan offsets", () => {
+		const style = getCanvasGridStyle({ x: 150.5, y: -75 }, 1);
+
+		expect(style.backgroundPosition).toBe("150.5px -75px, 150.5px -75px");
+	});
+
+	it("scales background size with zoom level", () => {
+		const style = getCanvasGridStyle({ x: 0, y: 0 }, 1.5);
+
+		expect(style.backgroundSize).toBe("30px 30px, 30px 30px");
+	});
+
+	it("never uses a zoom smaller than the safe minimum", () => {
+		const style = getCanvasGridStyle({ x: 0, y: 0 }, 0);
+
+		expect(style.backgroundSize).toBe("2px 2px, 2px 2px");
 	});
 });
