@@ -203,7 +203,7 @@ export function Palette({
 		>
 			<div className="flex flex-col gap-3">
 				<div className="flex w-full items-center gap-4">
-					<div className="flex flex-1 flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1">
+					<div className="flex flex-1 flex-wrap items-center justify-center gap-2 pb-1">
 						{NODE_CATEGORIES.map((category, index) => (
 							<div key={category.id} className="flex items-center gap-2">
 								{category.nodes.map(
@@ -225,9 +225,15 @@ export function Palette({
 													{icon}
 												</div>
 											</button>
-											<span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-												{label}
-											</span>
+											<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+												<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
+													{label}
+												</span>
+												<span
+													className="mt-1 h-2 w-px rounded-full bg-border"
+													aria-hidden="true"
+												/>
+											</div>
 										</div>
 									),
 								)}
