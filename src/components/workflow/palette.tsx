@@ -202,95 +202,97 @@ export function Palette({
 			className="flex-shrink-0 border-b border-border bg-card px-4 py-3 shadow-sm"
 		>
 			<div className="flex flex-col gap-3">
-				<div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1">
-					{NODE_CATEGORIES.map((category, index) => (
-						<div key={category.id} className="flex items-center gap-2">
-							{category.nodes.map(
-								({ type, label, icon, bgColor, iconColorVar }) => {
-									const tooltipId = `tooltip-${type}`;
-									return (
-										<div key={type} className="group relative">
-											<button
-												type="button"
-												className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-												onClick={() => handleAddNode(type, label)}
-												aria-label={`Agregar ${label}`}
-												onMouseEnter={(e) => {
-													const tooltip = document.getElementById(tooltipId);
-													if (tooltip) {
-														const rect =
-															e.currentTarget.getBoundingClientRect();
-														tooltip.style.left = `${rect.right + 12}px`;
-														tooltip.style.top = `${rect.top + rect.height / 2}px`;
-														tooltip.style.transform = "translateY(-50%)";
-														tooltip.style.opacity = "1";
-														tooltip.style.pointerEvents = "none";
-													}
-												}}
-												onMouseLeave={() => {
-													const tooltip = document.getElementById(tooltipId);
-													if (tooltip) {
-														tooltip.style.opacity = "0";
-													}
-												}}
-											>
-												<div
-													className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
-													style={{
-														backgroundColor: bgColor,
-														color: `var(${iconColorVar})`,
+				<div className="flex w-full items-center gap-4">
+					<div className="flex flex-1 flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1">
+						{NODE_CATEGORIES.map((category, index) => (
+							<div key={category.id} className="flex items-center gap-2">
+								{category.nodes.map(
+									({ type, label, icon, bgColor, iconColorVar }) => {
+										const tooltipId = `tooltip-${type}`;
+										return (
+											<div key={type} className="group relative">
+												<button
+													type="button"
+													className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+													onClick={() => handleAddNode(type, label)}
+													aria-label={`Agregar ${label}`}
+													onMouseEnter={(e) => {
+														const tooltip = document.getElementById(tooltipId);
+														if (tooltip) {
+															const rect =
+																e.currentTarget.getBoundingClientRect();
+															tooltip.style.left = `${rect.right + 12}px`;
+															tooltip.style.top = `${rect.top + rect.height / 2}px`;
+															tooltip.style.transform = "translateY(-50%)";
+															tooltip.style.opacity = "1";
+															tooltip.style.pointerEvents = "none";
+														}
+													}}
+													onMouseLeave={() => {
+														const tooltip = document.getElementById(tooltipId);
+														if (tooltip) {
+															tooltip.style.opacity = "0";
+														}
 													}}
 												>
-													{icon}
-												</div>
-											</button>
-											<span
-												id={tooltipId}
-												className="pointer-events-none fixed z-[9999] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg transition-opacity duration-0"
-												style={{ opacity: 0 }}
-											>
-												{label}
-											</span>
-										</div>
-									);
-								},
-							)}
-							{index < NODE_CATEGORIES.length - 1 && (
-								<div
-									className="hidden h-8 w-px bg-border/40 last:hidden md:block"
-									aria-hidden="true"
-								/>
+													<div
+														className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
+														style={{
+															backgroundColor: bgColor,
+															color: `var(${iconColorVar})`,
+														}}
+													>
+														{icon}
+													</div>
+												</button>
+												<span
+													id={tooltipId}
+													className="pointer-events-none fixed z-[9999] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg transition-opacity duration-0"
+													style={{ opacity: 0 }}
+												>
+													{label}
+												</span>
+											</div>
+										);
+									},
+								)}
+								{index < NODE_CATEGORIES.length - 1 && (
+									<div
+										className="hidden h-8 w-px bg-border/40 last:hidden md.block"
+										aria-hidden="true"
+									/>
+								)}
+							</div>
+						))}
+					</div>
+
+					<div className="flex flex-nowrap items-center gap-3 text-[11px] text-muted-foreground">
+						<div className="flex items-center gap-1 font-semibold text-foreground">
+							<Circle className="h-3.5 w-3.5 text-muted-foreground" />
+							<span>{stats.nodes}</span>
+						</div>
+						<div className="flex items-center gap-1 font-semibold text-foreground">
+							<ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+							<span>{stats.edges}</span>
+						</div>
+						<div className="flex items-center gap-1 font-semibold">
+							{validationState.status === "valid" ? (
+								<>
+									<CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+									<span>Sin errores</span>
+								</>
+							) : validationState.status === "invalid" ? (
+								<>
+									<AlertCircle className="h-3.5 w-3.5 text-destructive" />
+									<span>{validationState.errorsCount} pendientes</span>
+								</>
+							) : (
+								<>
+									<AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+									<span>Pendiente</span>
+								</>
 							)}
 						</div>
-					))}
-				</div>
-
-				<div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-muted-foreground">
-					<div className="flex items-center gap-1 font-semibold text-foreground">
-						<Circle className="h-3.5 w-3.5 text-muted-foreground" />
-						<span>{stats.nodes}</span>
-					</div>
-					<div className="flex items-center gap-1 font-semibold text-foreground">
-						<ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-						<span>{stats.edges}</span>
-					</div>
-					<div className="flex items-center gap-1 font-semibold">
-						{validationState.status === "valid" ? (
-							<>
-								<CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-								<span>Sin errores</span>
-							</>
-						) : validationState.status === "invalid" ? (
-							<>
-								<AlertCircle className="h-3.5 w-3.5 text-destructive" />
-								<span>{validationState.errorsCount} pendientes</span>
-							</>
-						) : (
-							<>
-								<AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-								<span>Pendiente</span>
-							</>
-						)}
 					</div>
 				</div>
 			</div>
