@@ -426,6 +426,16 @@ export function WorkflowEditor() {
 		!hasMultipleSelections &&
 		(shouldShowWorkflowPanel || hasSingleNodeSelected || hasSingleEdgeSelected);
 
+	const workflowStats = {
+		nodes: workflowState.nodes.length,
+		edges: workflowState.edges.length,
+	};
+
+	const workflowValidationState = {
+		status: validationStatus,
+		errorsCount: lastValidationErrorCount,
+	};
+
 	return (
 		<div className="flex h-screen flex-col bg-background">
 			<TopBar
@@ -447,6 +457,8 @@ export function WorkflowEditor() {
 					});
 				}}
 				workflowMetadata={workflowState.metadata}
+				stats={workflowStats}
+				validationState={workflowValidationState}
 			/>
 
 			<div className="flex flex-1 flex-col overflow-hidden">
@@ -454,14 +466,6 @@ export function WorkflowEditor() {
 					onAddNode={addNode}
 					zoom={workflowState.zoom}
 					pan={workflowState.pan}
-					stats={{
-						nodes: workflowState.nodes.length,
-						edges: workflowState.edges.length,
-					}}
-					validationState={{
-						status: validationStatus,
-						errorsCount: lastValidationErrorCount,
-					}}
 				/>
 
 				<div className="flex flex-1 overflow-hidden">

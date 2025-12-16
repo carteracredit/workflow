@@ -5,18 +5,15 @@ import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
 import { createDefaultChallengeConfig } from "@/lib/workflow/types";
 import {
 	XCircle,
-	CheckCircle,
 	FileText,
 	GitBranch,
 	Code,
 	Globe,
 	Mail,
-	ArrowRight,
 	Flag,
 	Merge,
 	Tag,
 	Circle,
-	AlertCircle,
 	Play,
 	Shield,
 } from "lucide-react";
@@ -25,14 +22,6 @@ interface PaletteProps {
 	onAddNode: (node: WorkflowNode) => void;
 	zoom: number;
 	pan: { x: number; y: number };
-	stats: {
-		nodes: number;
-		edges: number;
-	};
-	validationState: {
-		status: "idle" | "valid" | "invalid";
-		errorsCount: number;
-	};
 }
 
 const NODE_CATEGORIES = [
@@ -153,13 +142,7 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	return {};
 };
 
-export function Palette({
-	onAddNode,
-	zoom,
-	pan,
-	stats,
-	validationState,
-}: PaletteProps) {
+export function Palette({ onAddNode, zoom, pan }: PaletteProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const handleAddNode = (type: NodeType, label: string) => {
@@ -201,81 +184,48 @@ export function Palette({
 			ref={containerRef}
 			className="flex-shrink-0 border-b border-border bg-card px-4 py-3 shadow-sm"
 		>
-			<div className="flex flex-col gap-3">
-				<div className="flex w-full items-center gap-4">
-					<div className="flex flex-1 flex-wrap items-center justify-center gap-2 pb-1">
-						{NODE_CATEGORIES.map((category, index) => (
-							<div key={category.id} className="flex items-center gap-2">
-								{category.nodes.map(
-									({ type, label, icon, bgColor, iconColorVar }) => (
-										<div key={type} className="group relative">
-											<button
-												type="button"
-												className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-												onClick={() => handleAddNode(type, label)}
-												aria-label={`Agregar ${label}`}
-											>
-												<div
-													className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
-													style={{
-														backgroundColor: bgColor,
-														color: `var(${iconColorVar})`,
-													}}
-												>
-													{icon}
-												</div>
-											</button>
-											<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-												<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
-													{label}
-												</span>
-												<span
-													className="mt-1 h-2 w-px rounded-full bg-border"
-													aria-hidden="true"
-												/>
-											</div>
+			<div className="flex flex-wrap items-center justify-center gap-2 pb-1">
+				{NODE_CATEGORIES.map((category, index) => (
+					<div key={category.id} className="flex items-center gap-2">
+						{category.nodes.map(
+							({ type, label, icon, bgColor, iconColorVar }) => (
+								<div key={type} className="group relative">
+									<button
+										type="button"
+										className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										onClick={() => handleAddNode(type, label)}
+										aria-label={`Agregar ${label}`}
+									>
+										<div
+											className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
+											style={{
+												backgroundColor: bgColor,
+												color: `var(${iconColorVar})`,
+											}}
+										>
+											{icon}
 										</div>
-									),
-								)}
-								{index < NODE_CATEGORIES.length - 1 && (
-									<div
-										className="hidden h-8 w-px bg-border/40 last:hidden md:block"
-										aria-hidden="true"
-									/>
-								)}
-							</div>
-						))}
+									</button>
+									<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+										<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
+											{label}
+										</span>
+										<span
+											className="mt-1 h-2 w-px rounded-full bg-border"
+											aria-hidden="true"
+										/>
+									</div>
+								</div>
+							),
+						)}
+						{index < NODE_CATEGORIES.length - 1 && (
+							<div
+								className="hidden h-8 w-px bg-border/40 last:hidden md:block"
+								aria-hidden="true"
+							/>
+						)}
 					</div>
-
-					<div className="flex flex-nowrap items-center gap-3 text-[11px] text-muted-foreground">
-						<div className="flex items-center gap-1 font-semibold text-foreground">
-							<Circle className="h-3.5 w-3.5 text-muted-foreground" />
-							<span>{stats.nodes}</span>
-						</div>
-						<div className="flex items-center gap-1 font-semibold text-foreground">
-							<ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-							<span>{stats.edges}</span>
-						</div>
-						<div className="flex items-center gap-1 font-semibold">
-							{validationState.status === "valid" ? (
-								<>
-									<CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-									<span>Sin errores</span>
-								</>
-							) : validationState.status === "invalid" ? (
-								<>
-									<AlertCircle className="h-3.5 w-3.5 text-destructive" />
-									<span>{validationState.errorsCount} pendientes</span>
-								</>
-							) : (
-								<>
-									<AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-									<span>Pendiente</span>
-								</>
-							)}
-						</div>
-					</div>
-				</div>
+				))}
 			</div>
 		</div>
 	);

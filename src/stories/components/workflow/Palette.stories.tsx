@@ -11,14 +11,6 @@ const meta: Meta<typeof Palette> = {
 		onAddNode: () => {},
 		zoom: 1,
 		pan: { x: 0, y: 0 },
-		stats: {
-			nodes: 5,
-			edges: 4,
-		},
-		validationState: {
-			status: "idle" as const,
-			errorsCount: 0,
-		},
 	},
 	decorators: [
 		(Story) => (
