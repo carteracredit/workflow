@@ -59,7 +59,7 @@ interface TopBarProps {
 	onManageFlags: () => void;
 	onToggleWorkflowProperties: () => void;
 	workflowMetadata: WorkflowMetadata;
-	paletteProps: {
+	paletteProps?: {
 		onAddNode: (node: WorkflowNode) => void;
 		zoom: number;
 		pan: { x: number; y: number };
@@ -207,14 +207,16 @@ export function TopBar({
 				</div>
 			</div>
 
-			<div className="-mx-1 mt-4 w-full overflow-x-auto">
-				<Palette
-					onAddNode={paletteProps.onAddNode}
-					zoom={paletteProps.zoom}
-					pan={paletteProps.pan}
-					className="min-w-max px-1"
-				/>
-			</div>
+			{paletteProps && (
+				<div className="-mx-1 mt-4 w-full overflow-x-auto overflow-y-visible pb-2">
+					<Palette
+						onAddNode={paletteProps.onAddNode}
+						zoom={paletteProps.zoom}
+						pan={paletteProps.pan}
+						className="min-w-max px-1"
+					/>
+				</div>
+			)}
 		</div>
 	);
 }
