@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { ElementType } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Menubar,
@@ -44,14 +43,11 @@ import {
 	Bell,
 	Pencil,
 	ChevronRight,
-	Circle,
-	ArrowRight,
-	CheckCircle,
-	AlertCircle,
 	User,
 	LogOut,
 } from "lucide-react";
-import type { WorkflowMetadata } from "@/lib/workflow/types";
+import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
+import { Palette } from "@/components/workflow/palette";
 
 interface TopBarProps {
 	onNew: () => void;
@@ -63,13 +59,10 @@ interface TopBarProps {
 	onManageFlags: () => void;
 	onToggleWorkflowProperties: () => void;
 	workflowMetadata: WorkflowMetadata;
-	stats: {
-		nodes: number;
-		edges: number;
-	};
-	validationState: {
-		status: "idle" | "valid" | "invalid";
-		errorsCount: number;
+	paletteProps: {
+		onAddNode: (node: WorkflowNode) => void;
+		zoom: number;
+		pan: { x: number; y: number };
 	};
 }
 
@@ -83,8 +76,7 @@ export function TopBar({
 	onManageFlags,
 	onToggleWorkflowProperties,
 	workflowMetadata,
-	stats,
-	validationState,
+	paletteProps,
 }: TopBarProps) {
 	const displayVersion = (() => {
 		const match = workflowMetadata.version.match(/(\d+)/);
@@ -125,8 +117,6 @@ export function TopBar({
 						)}
 					</div>
 				</div>
-
-				<TopBarStats stats={stats} validationState={validationState} />
 
 				<div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2">
 					<Button
@@ -216,63 +206,15 @@ export function TopBar({
 					<UserMenu />
 				</div>
 			</div>
-		</div>
-	);
-}
 
-interface TopBarStatsProps {
-	stats: {
-		nodes: number;
-		edges: number;
-	};
-	validationState: {
-		status: "idle" | "valid" | "invalid";
-		errorsCount: number;
-	};
-}
-
-function TopBarStats({ stats, validationState }: TopBarStatsProps) {
-	const statusLabel =
-		validationState.status === "valid"
-			? "Sin errores"
-			: validationState.status === "invalid"
-				? `${validationState.errorsCount} pendientes`
-				: "Pendiente";
-
-	const StatusIcon =
-		validationState.status === "valid"
-			? CheckCircle
-			: validationState.status === "invalid"
-				? AlertCircle
-				: AlertCircle;
-
-	return (
-		<div className="order-last w-full overflow-x-auto md:order-none md:flex-1">
-			<div
-				className="flex items-center justify-center gap-3 text-[11px] font-medium text-muted-foreground"
-				role="status"
-				aria-label="Resumen del flujo"
-			>
-				<StatChip icon={Circle} label="Nodos" value={stats.nodes} />
-				<StatChip icon={ArrowRight} label="Transiciones" value={stats.edges} />
-				<StatChip icon={StatusIcon} label="Validación" value={statusLabel} />
+			<div className="-mx-1 mt-4 w-full overflow-x-auto">
+				<Palette
+					onAddNode={paletteProps.onAddNode}
+					zoom={paletteProps.zoom}
+					pan={paletteProps.pan}
+					className="min-w-max px-1"
+				/>
 			</div>
-		</div>
-	);
-}
-
-interface StatChipProps {
-	icon: ElementType;
-	value: string | number;
-	label: string;
-}
-
-function StatChip({ icon: Icon, value, label }: StatChipProps) {
-	return (
-		<div className="flex items-center gap-1 rounded-full border border-border/60 px-3 py-1 text-xs text-foreground">
-			<Icon className="h-3.5 w-3.5 text-muted-foreground" />
-			<span className="font-semibold text-foreground">{value}</span>
-			<span className="text-muted-foreground">{label}</span>
 		</div>
 	);
 }

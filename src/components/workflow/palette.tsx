@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { cn } from "@/lib/utils";
 import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
 import { createDefaultChallengeConfig } from "@/lib/workflow/types";
 import {
@@ -22,6 +23,7 @@ interface PaletteProps {
 	onAddNode: (node: WorkflowNode) => void;
 	zoom: number;
 	pan: { x: number; y: number };
+	className?: string;
 }
 
 const NODE_CATEGORIES = [
@@ -142,7 +144,7 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	return {};
 };
 
-export function Palette({ onAddNode, zoom, pan }: PaletteProps) {
+export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const handleAddNode = (type: NodeType, label: string) => {
@@ -182,51 +184,52 @@ export function Palette({ onAddNode, zoom, pan }: PaletteProps) {
 	return (
 		<div
 			ref={containerRef}
-			className="flex-shrink-0 border-b border-border bg-card px-4 py-3 shadow-sm"
+			className={cn(
+				"flex flex-wrap items-center justify-center gap-2 pb-1",
+				className,
+			)}
 		>
-			<div className="flex flex-wrap items-center justify-center gap-2 pb-1">
-				{NODE_CATEGORIES.map((category, index) => (
-					<div key={category.id} className="flex items-center gap-2">
-						{category.nodes.map(
-							({ type, label, icon, bgColor, iconColorVar }) => (
-								<div key={type} className="group relative">
-									<button
-										type="button"
-										className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										onClick={() => handleAddNode(type, label)}
-										aria-label={`Agregar ${label}`}
+			{NODE_CATEGORIES.map((category, index) => (
+				<div key={category.id} className="flex items-center gap-2">
+					{category.nodes.map(
+						({ type, label, icon, bgColor, iconColorVar }) => (
+							<div key={type} className="group relative">
+								<button
+									type="button"
+									className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									onClick={() => handleAddNode(type, label)}
+									aria-label={`Agregar ${label}`}
+								>
+									<div
+										className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
+										style={{
+											backgroundColor: bgColor,
+											color: `var(${iconColorVar})`,
+										}}
 									>
-										<div
-											className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
-											style={{
-												backgroundColor: bgColor,
-												color: `var(${iconColorVar})`,
-											}}
-										>
-											{icon}
-										</div>
-									</button>
-									<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-										<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
-											{label}
-										</span>
-										<span
-											className="mt-1 h-2 w-px rounded-full bg-border"
-											aria-hidden="true"
-										/>
+										{icon}
 									</div>
+								</button>
+								<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+									<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
+										{label}
+									</span>
+									<span
+										className="mt-1 h-2 w-px rounded-full bg-border"
+										aria-hidden="true"
+									/>
 								</div>
-							),
-						)}
-						{index < NODE_CATEGORIES.length - 1 && (
-							<div
-								className="hidden h-8 w-px bg-border/40 last:hidden md:block"
-								aria-hidden="true"
-							/>
-						)}
-					</div>
-				))}
-			</div>
+							</div>
+						),
+					)}
+					{index < NODE_CATEGORIES.length - 1 && (
+						<div
+							className="hidden h-8 w-px bg-border/40 last:hidden md:block"
+							aria-hidden="true"
+						/>
+					)}
+				</div>
+			))}
 		</div>
 	);
 }

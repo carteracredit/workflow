@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { TopBar } from "./workflow/top-bar";
-import { Palette } from "./workflow/palette";
 import { Canvas, DEFAULT_START_NODE_PAN } from "./workflow/canvas";
 import { PropertiesPanel } from "./workflow/properties-panel";
 import { ValidationTray } from "./workflow/validation-tray";
@@ -426,16 +425,6 @@ export function WorkflowEditor() {
 		!hasMultipleSelections &&
 		(shouldShowWorkflowPanel || hasSingleNodeSelected || hasSingleEdgeSelected);
 
-	const workflowStats = {
-		nodes: workflowState.nodes.length,
-		edges: workflowState.edges.length,
-	};
-
-	const workflowValidationState = {
-		status: validationStatus,
-		errorsCount: lastValidationErrorCount,
-	};
-
 	return (
 		<div className="flex h-screen flex-col bg-background">
 			<TopBar
@@ -457,17 +446,14 @@ export function WorkflowEditor() {
 					});
 				}}
 				workflowMetadata={workflowState.metadata}
-				stats={workflowStats}
-				validationState={workflowValidationState}
+				paletteProps={{
+					onAddNode: addNode,
+					zoom: workflowState.zoom,
+					pan: workflowState.pan,
+				}}
 			/>
 
 			<div className="flex flex-1 flex-col overflow-hidden">
-				<Palette
-					onAddNode={addNode}
-					zoom={workflowState.zoom}
-					pan={workflowState.pan}
-				/>
-
 				<div className="flex flex-1 overflow-hidden">
 					<div className="relative flex-1">
 						<Canvas
