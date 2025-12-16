@@ -130,8 +130,7 @@ const DropdownMenuRadioItem = React.forwardRef<
 		{children}
 	</DropdownMenuPrimitive.RadioItem>
 ));
-DropdownMenuRadioItem.displayName =
-	DropdownMenuPrimitive.RadioItem.displayName;
+DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName;
 
 const DropdownMenuLabel = React.forwardRef<
 	React.ElementRef<typeof DropdownMenuPrimitive.Label>,
