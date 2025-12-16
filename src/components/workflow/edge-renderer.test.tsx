@@ -46,7 +46,7 @@ describe("EdgeRenderer horizontal layout", () => {
 		) as SVGPathElement | null;
 		expect(visiblePath).toBeTruthy();
 		expect(visiblePath?.getAttribute("d")).toBe(
-			"M 480 130 C 590 130, 590 180, 700 180",
+			"M 480 130 C 584 130, 584 180, 688 180",
 		);
 	});
 
@@ -91,10 +91,10 @@ describe("EdgeRenderer horizontal layout", () => {
 		);
 		expect(visiblePaths).toHaveLength(2);
 		expect(visiblePaths[0].getAttribute("d")).toBe(
-			"M 480 130 C 640 130, 640 206, 800 206",
+			"M 480 130 C 634 130, 634 206, 788 206",
 		);
 		expect(visiblePaths[1].getAttribute("d")).toBe(
-			"M 480 290 C 640 290, 640 254, 800 254",
+			"M 480 290 C 634 290, 634 254, 788 254",
 		);
 	});
 });

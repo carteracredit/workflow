@@ -5,6 +5,11 @@ import type React from "react";
 import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
 import { Trash2 } from "lucide-react";
 
+const ARROW_MARKER_WIDTH = 12;
+const ARROW_MARKER_HEIGHT = 8;
+const ARROW_MARKER_REF_Y = ARROW_MARKER_HEIGHT / 2;
+const LINE_END_PADDING = 12;
+
 interface EdgeRendererProps {
 	edge: WorkflowEdge;
 	nodes: WorkflowNode[];
@@ -218,7 +223,14 @@ export function EdgeRenderer({
 		endY = toNodeY + toNodeActualSize.height / 2;
 	}
 
-	const distance = Math.abs(endX - startX);
+	const rawDistance = Math.abs(endX - startX);
+	const direction = Math.sign(endX - startX) || 1;
+	const arrowPadding =
+		rawDistance <= LINE_END_PADDING
+			? rawDistance * 0.5
+			: Math.min(LINE_END_PADDING, rawDistance * 0.45);
+	const pathEndX = endX - direction * arrowPadding;
+	const distance = Math.abs(pathEndX - startX);
 
 	// Detectar si es un edge de reintento para calcular mejor routing
 	const isRetryEdge =
@@ -301,12 +313,14 @@ export function EdgeRenderer({
 		return `M ${sx} ${sy} C ${controlPoint1X} ${curveY}, ${controlPoint2X} ${curveY}, ${ex} ${ey}`;
 	};
 
+	const pathEndY = endY;
+
 	const path = isRetryEdge
 		? calculateSmartPath(
 				startX,
 				startY,
-				endX,
-				endY,
+				pathEndX,
+				pathEndY,
 				nodes,
 				fromNode.id,
 				toNode.id,
@@ -314,14 +328,13 @@ export function EdgeRenderer({
 		: (() => {
 				// Curva horizontal estándar
 				const curveStrength = Math.min(distance * 0.5, 160);
-				const direction = Math.sign(endX - startX) || 1;
 				const controlPoint1X = startX + direction * curveStrength;
-				const controlPoint2X = endX - direction * curveStrength;
-				return `M ${startX} ${startY} C ${controlPoint1X} ${startY}, ${controlPoint2X} ${endY}, ${endX} ${endY}`;
+				const controlPoint2X = pathEndX - direction * curveStrength;
+				return `M ${startX} ${startY} C ${controlPoint1X} ${startY}, ${controlPoint2X} ${pathEndY}, ${pathEndX} ${pathEndY}`;
 			})();
 
-	const midX = (startX + endX) / 2;
-	const midY = (startY + endY) / 2;
+	const midX = (startX + pathEndX) / 2;
+	const midY = (startY + pathEndY) / 2;
 
 	const defaultColor =
 		hasDualOutputs && edge.fromPort
@@ -453,15 +466,16 @@ export function EdgeRenderer({
 			<defs>
 				<marker
 					id={`arrowhead-${edge.id}`}
-					markerWidth="10"
-					markerHeight="10"
-					refX="9"
-					refY="3"
+					markerWidth={ARROW_MARKER_WIDTH}
+					markerHeight={ARROW_MARKER_HEIGHT}
+					refX={0}
+					refY={ARROW_MARKER_REF_Y}
 					orient="auto"
-					markerUnits="strokeWidth"
+					markerUnits="userSpaceOnUse"
+					viewBox={`0 0 ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_HEIGHT}`}
 				>
 					<polygon
-						points="0 0, 10 3, 0 6"
+						points={`0 0, ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_REF_Y}, 0 ${ARROW_MARKER_HEIGHT}`}
 						fill={edgeColor}
 						className="pointer-events-none"
 					/>
@@ -470,15 +484,16 @@ export function EdgeRenderer({
 				{isRetryEdge && (
 					<marker
 						id={`arrowhead-retry-${edge.id}`}
-						markerWidth="10"
-						markerHeight="10"
-						refX="9"
-						refY="3"
+						markerWidth={ARROW_MARKER_WIDTH}
+						markerHeight={ARROW_MARKER_HEIGHT}
+						refX={0}
+						refY={ARROW_MARKER_REF_Y}
 						orient="auto"
-						markerUnits="strokeWidth"
+						markerUnits="userSpaceOnUse"
+						viewBox={`0 0 ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_HEIGHT}`}
 					>
 						<polygon
-							points="0 0, 10 3, 0 6"
+							points={`0 0, ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_REF_Y}, 0 ${ARROW_MARKER_HEIGHT}`}
 							fill={retryColor}
 							fillOpacity="0.7"
 							className="pointer-events-none"
