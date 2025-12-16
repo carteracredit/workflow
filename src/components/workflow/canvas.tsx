@@ -50,6 +50,99 @@ const MULTI_OUTPUT_NODE_TYPES: WorkflowNode["type"][] = [
 ];
 
 const GRID_BASE_SIZE = 20;
+export const DEFAULT_START_NODE_PAN = { x: 200, y: 100 };
+const EMPTY_STATE_NODE_HORIZONTAL_RATIO = 0.32;
+const EMPTY_STATE_NODE_VERTICAL_RATIO = 0.62;
+
+export const estimateNodeDimensions = (node: WorkflowNode) => {
+	const MIN_NODE_WIDTH = 180;
+	const MAX_NODE_WIDTH = 320;
+	const MIN_NODE_HEIGHT = 60;
+	const PADDING_X = 16;
+	const ICON_CONTAINER_SIZE = 40;
+
+	const titleWidth = node.title.length * 9;
+	const descWidth = node.description ? node.description.length * 7.5 : 0;
+
+	let flagsMaxWidth = 0;
+	if (node.type === "FlagChange" && node.config.flagChanges) {
+		const flagChanges = node.config.flagChanges as Array<{
+			flagId: string;
+			optionId: string;
+		}>;
+		flagChanges.forEach(() => {
+			flagsMaxWidth = Math.max(flagsMaxWidth, 150);
+		});
+	}
+
+	const contentWidth =
+		Math.max(titleWidth, descWidth, flagsMaxWidth) +
+		ICON_CONTAINER_SIZE +
+		12 +
+		PADDING_X * 2;
+	const width = Math.max(
+		MIN_NODE_WIDTH,
+		Math.min(MAX_NODE_WIDTH, contentWidth),
+	);
+
+	const hasDescription = !!node.description;
+	const hasRoles = node.roles.length > 0;
+	const flagChangesCount =
+		node.type === "FlagChange" && node.config.flagChanges
+			? (
+					node.config.flagChanges as Array<{
+						flagId: string;
+						optionId: string;
+					}>
+				).length
+			: 0;
+	const hasSpecialBadges =
+		(node.type === "Reject" && (node.config.allowRetry as boolean) === true) ||
+		flagChangesCount > 0 ||
+		(node.type === "API" && node.config.failureHandling) ||
+		node.type === "Challenge";
+
+	let height = MIN_NODE_HEIGHT;
+	if (hasDescription) height += 22;
+	if (hasRoles) {
+		const rolesRows = Math.ceil(node.roles.length / 3);
+		height += rolesRows * 28;
+	}
+	if (hasSpecialBadges) {
+		if (flagChangesCount > 0) {
+			const flagRows = Math.ceil(flagChangesCount / 2);
+			height += flagRows * 28;
+		} else {
+			height += 28;
+		}
+	}
+
+	return { width, height };
+};
+
+type EmptyStatePanInput = {
+	canvasWidth: number;
+	canvasHeight: number;
+	node: WorkflowNode;
+	zoom: number;
+};
+
+export const getEmptyStatePanTarget = ({
+	canvasWidth,
+	canvasHeight,
+	node,
+	zoom,
+}: EmptyStatePanInput) => {
+	const nodeSize = estimateNodeDimensions(node);
+	const desiredLeft = canvasWidth * EMPTY_STATE_NODE_HORIZONTAL_RATIO;
+	const desiredCenterY = canvasHeight * EMPTY_STATE_NODE_VERTICAL_RATIO;
+	const desiredTop = desiredCenterY - (nodeSize.height * zoom) / 2;
+
+	return {
+		x: Math.round(desiredLeft - node.position.x * zoom),
+		y: Math.round(desiredTop - node.position.y * zoom),
+	};
+};
 
 export const getCanvasGridStyle = (
 	pan: { x: number; y: number },
@@ -137,6 +230,7 @@ export function Canvas({
 	const [isShiftPressed, setIsShiftPressed] = useState(false);
 	const lastAutoScrolledNodeId = useRef<string | null>(null);
 	const copiedDataRef = useRef<CopiedSelection | null>(null);
+	const hasAutoPositionedEmptyState = useRef(false);
 	const [hasCopiedData, setHasCopiedData] = useState(false);
 	const [justCopied, setJustCopied] = useState(false);
 
@@ -166,77 +260,10 @@ export function Canvas({
 		null,
 	);
 
+	const showEmptyState = nodes.length <= 1 && edges.length === 0;
+
 	// Función auxiliar para calcular tamaño de nodo (debe coincidir con node-renderer)
-	const calculateNodeSize = useCallback((node: WorkflowNode) => {
-		const MIN_NODE_WIDTH = 180; // Reducido para permitir nodos más estrechos
-		const MAX_NODE_WIDTH = 320;
-		const MIN_NODE_HEIGHT = 60;
-		const PADDING_X = 16; // Restaurado
-		const ICON_CONTAINER_SIZE = 40;
-
-		const titleWidth = node.title.length * 9;
-		const descWidth = node.description ? node.description.length * 7.5 : 0;
-
-		// Para el cálculo en canvas, usamos una aproximación más simple
-		// El cálculo real se hace en node-renderer con acceso a flags
-		let flagsMaxWidth = 0;
-		if (node.type === "FlagChange" && node.config.flagChanges) {
-			const flagChanges = node.config.flagChanges as Array<{
-				flagId: string;
-				optionId: string;
-			}>;
-			// Aproximación: calcular ancho basado en texto promedio
-			flagChanges.forEach(() => {
-				// Aproximación conservadora: ~150px por badge en promedio
-				flagsMaxWidth = Math.max(flagsMaxWidth, 150);
-			});
-		}
-
-		const contentWidth =
-			Math.max(titleWidth, descWidth, flagsMaxWidth) +
-			ICON_CONTAINER_SIZE +
-			12 +
-			PADDING_X * 2;
-		const NODE_WIDTH = Math.max(
-			MIN_NODE_WIDTH,
-			Math.min(MAX_NODE_WIDTH, contentWidth),
-		);
-
-		const hasDescription = !!node.description;
-		const hasRoles = node.roles.length > 0;
-		const flagChangesCount =
-			node.type === "FlagChange" && node.config.flagChanges
-				? (
-						node.config.flagChanges as Array<{
-							flagId: string;
-							optionId: string;
-						}>
-					).length
-				: 0;
-		const hasSpecialBadges =
-			(node.type === "Reject" &&
-				(node.config.allowRetry as boolean) === true) ||
-			flagChangesCount > 0 ||
-			(node.type === "API" && node.config.failureHandling) ||
-			node.type === "Challenge";
-
-		let estimatedHeight = MIN_NODE_HEIGHT;
-		if (hasDescription) estimatedHeight += 22;
-		if (hasRoles) {
-			const rolesRows = Math.ceil(node.roles.length / 3); // Aproximación: 3 roles por fila
-			estimatedHeight += rolesRows * 28;
-		}
-		if (hasSpecialBadges) {
-			if (flagChangesCount > 0) {
-				const flagRows = Math.ceil(flagChangesCount / 2); // Aproximación: 2 flags por fila
-				estimatedHeight += flagRows * 28;
-			} else {
-				estimatedHeight += 28;
-			}
-		}
-
-		return { width: NODE_WIDTH, height: estimatedHeight };
-	}, []);
+	const calculateNodeSize = useCallback(estimateNodeDimensions, []);
 
 	const handleFitToView = useCallback(() => {
 		if (nodes.length === 0) return;
@@ -355,6 +382,51 @@ export function Canvas({
 			lastAutoScrolledNodeId.current = null;
 		}
 	}, [selectedNodeIds]);
+
+	useEffect(() => {
+		if (!showEmptyState) {
+			hasAutoPositionedEmptyState.current = false;
+			return;
+		}
+
+		if (hasAutoPositionedEmptyState.current || !canvasRef.current) {
+			return;
+		}
+
+		const approxDefaultPan =
+			Math.abs(pan.x - DEFAULT_START_NODE_PAN.x) < 1 &&
+			Math.abs(pan.y - DEFAULT_START_NODE_PAN.y) < 1;
+
+		if (!approxDefaultPan) {
+			return;
+		}
+
+		const startNode = nodes.find((node) => node.type === "Start") ?? nodes[0];
+		if (!startNode) {
+			return;
+		}
+
+		const rect = canvasRef.current.getBoundingClientRect();
+		if (!rect.width || !rect.height) {
+			return;
+		}
+
+		const targetPan = getEmptyStatePanTarget({
+			canvasWidth: rect.width,
+			canvasHeight: rect.height,
+			node: startNode,
+			zoom,
+		});
+
+		const needsUpdate =
+			Math.abs(targetPan.x - pan.x) > 1 || Math.abs(targetPan.y - pan.y) > 1;
+
+		if (needsUpdate) {
+			onUpdatePan(targetPan);
+		}
+
+		hasAutoPositionedEmptyState.current = true;
+	}, [showEmptyState, nodes, pan.x, pan.y, zoom, onUpdatePan]);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -1080,8 +1152,6 @@ export function Canvas({
 
 	const isHandToolActive = isPanning || isSpacePressed || isPanModeLocked;
 
-	const showEmptyState = nodes.length <= 1 && edges.length === 0;
-
 	return (
 		<div className="relative h-full w-full select-none overflow-hidden">
 			{/* Toolbar superior */}
@@ -1292,9 +1362,9 @@ export function Canvas({
 				</div>
 
 				{showEmptyState && (
-					<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-						<div className="pointer-events-auto max-w-md rounded-2xl border border-dashed border-border/70 bg-background/95 p-6 text-center shadow-2xl">
-							<p className="text-sm font-semibold text-foreground">
+					<div className="pointer-events-none absolute inset-0 flex items-start justify-start px-4 pt-6 sm:px-8 sm:pt-8 lg:px-14 lg:pt-10">
+						<div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-dashed border-border/70 bg-background/95 p-6 text-left shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:max-w-md">
+							<p className="text-sm font-semibold uppercase tracking-wide text-primary">
 								Construye tu primer flujo
 							</p>
 							<p className="mt-2 text-sm text-muted-foreground">
@@ -1302,28 +1372,30 @@ export function Canvas({
 								el lienzo para comenzar. Puedes arrastrar elementos para
 								reorganizarlos libremente.
 							</p>
-							<div className="mt-4 grid grid-cols-2 gap-3 text-left text-xs text-muted-foreground">
-								<div className="rounded-md bg-muted/60 p-2">
+							<div className="mt-4 grid grid-cols-1 gap-3 text-left text-xs text-muted-foreground sm:grid-cols-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">
 										Arrastrar lienzo
 									</p>
-									<p className="mt-1">
+									<p className="mt-1 text-[11px] sm:text-xs">
 										Mantén presionada la barra espaciadora y arrastra.
 									</p>
 								</div>
-								<div className="rounded-md bg-muted/60 p-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">Zoom preciso</p>
-									<p className="mt-1">Ctrl/⌘ + scroll para acercar o alejar.</p>
+									<p className="mt-1 text-[11px] sm:text-xs">
+										Ctrl/⌘ + scroll para acercar o alejar.
+									</p>
 								</div>
-								<div className="rounded-md bg-muted/60 p-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">Atajos útiles</p>
-									<p className="mt-1">
+									<p className="mt-1 text-[11px] sm:text-xs">
 										1 / 2 ajustan zoom · F centra el flujo.
 									</p>
 								</div>
-								<div className="rounded-md bg-muted/60 p-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">Conexiones</p>
-									<p className="mt-1">
+									<p className="mt-1 text-[11px] sm:text-xs">
 										Haz clic en los conectores para unir nodos.
 									</p>
 								</div>
