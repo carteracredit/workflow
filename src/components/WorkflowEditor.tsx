@@ -408,6 +408,24 @@ export function WorkflowEditor() {
 		}));
 	}, []);
 
+	const hasMultipleSelections =
+		workflowState.selectedNodeIds.length +
+			workflowState.selectedEdgeIds.length >
+			1 ||
+		(workflowState.selectedNodeIds.length > 0 &&
+			workflowState.selectedEdgeIds.length > 0);
+
+	const hasSingleNodeSelected = workflowState.selectedNodeIds.length === 1;
+	const hasSingleEdgeSelected = workflowState.selectedEdgeIds.length === 1;
+	const shouldShowWorkflowPanel =
+		showWorkflowProperties &&
+		workflowState.selectedNodeIds.length === 0 &&
+		workflowState.selectedEdgeIds.length === 0;
+
+	const shouldShowPropertiesOverlay =
+		!hasMultipleSelections &&
+		(shouldShowWorkflowPanel || hasSingleNodeSelected || hasSingleEdgeSelected);
+
 	return (
 		<div className="flex h-screen flex-col bg-background">
 			<TopBar
@@ -447,35 +465,6 @@ export function WorkflowEditor() {
 				/>
 
 				<div className="flex flex-1 overflow-hidden">
-					<PropertiesPanel
-						selectedNodes={
-							workflowState.selectedNodeIds.length > 0
-								? workflowState.selectedNodeIds
-										.map((id) => workflowState.nodes.find((n) => n.id === id))
-										.filter((n): n is WorkflowNode => n !== undefined)
-								: []
-						}
-						selectedEdges={
-							workflowState.selectedEdgeIds.length > 0
-								? workflowState.selectedEdgeIds
-										.map((id) => workflowState.edges.find((e) => e.id === id))
-										.filter((e): e is WorkflowEdge => e !== undefined)
-								: []
-						}
-						workflowMetadata={workflowState.metadata}
-						nodes={workflowState.nodes}
-						edges={workflowState.edges}
-						flags={workflowState.flags}
-						onUpdateNode={updateNode}
-						onUpdateEdge={updateEdge}
-						onUpdateMetadata={updateMetadata}
-						onAddEdge={addEdge}
-						onDeleteEdge={deleteEdge}
-						showWorkflowProperties={showWorkflowProperties}
-						onCloseWorkflowProperties={() => setShowWorkflowProperties(false)}
-						position="left"
-					/>
-
 					<div className="relative flex-1">
 						<Canvas
 							nodes={workflowState.nodes}
@@ -530,6 +519,49 @@ export function WorkflowEditor() {
 								}
 							/>
 						)}
+
+						<div
+							className={`absolute inset-y-0 left-0 z-30 flex w-80 transition-opacity duration-200 ${
+								shouldShowPropertiesOverlay
+									? "pointer-events-auto opacity-100"
+									: "pointer-events-none opacity-0"
+							}`}
+						>
+							<PropertiesPanel
+								selectedNodes={
+									workflowState.selectedNodeIds.length > 0
+										? workflowState.selectedNodeIds
+												.map((id) =>
+													workflowState.nodes.find((n) => n.id === id),
+												)
+												.filter((n): n is WorkflowNode => n !== undefined)
+										: []
+								}
+								selectedEdges={
+									workflowState.selectedEdgeIds.length > 0
+										? workflowState.selectedEdgeIds
+												.map((id) =>
+													workflowState.edges.find((e) => e.id === id),
+												)
+												.filter((e): e is WorkflowEdge => e !== undefined)
+										: []
+								}
+								workflowMetadata={workflowState.metadata}
+								nodes={workflowState.nodes}
+								edges={workflowState.edges}
+								flags={workflowState.flags}
+								onUpdateNode={updateNode}
+								onUpdateEdge={updateEdge}
+								onUpdateMetadata={updateMetadata}
+								onAddEdge={addEdge}
+								onDeleteEdge={deleteEdge}
+								showWorkflowProperties={showWorkflowProperties}
+								onCloseWorkflowProperties={() =>
+									setShowWorkflowProperties(false)
+								}
+								position="left"
+							/>
+						</div>
 					</div>
 				</div>
 			</div>
