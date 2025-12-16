@@ -189,7 +189,7 @@ export function Palette({
 		const viewportWidth = window.innerWidth - 256 - 320;
 		const viewportHeight = window.innerHeight - 56;
 
-		// Para layout vertical: centrar horizontalmente, posicionar verticalmente según el último nodo o viewport
+		// Para layout horizontal: centrar verticalmente y dejar espacio para conectar de izquierda a derecha
 		// Usar ancho promedio de nodo (aproximadamente 200-320px, usar 240px como promedio)
 		const centerX = (viewportWidth / 2 - pan.x) / zoom - 120; // 120 = NODE_WIDTH promedio / 2
 		const centerY = (viewportHeight / 2 - pan.y) / zoom;

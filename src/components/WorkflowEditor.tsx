@@ -93,7 +93,7 @@ const createInitialStartNode = (): WorkflowNode =>
 		description: "Punto de inicio del flujo",
 		roles: [],
 		config: {},
-		position: { x: 200, y: 50 }, // Posición inicial para layout vertical
+		position: { x: 200, y: 200 }, // Posición inicial pensada para layout horizontal
 		groupId: null,
 	});
 
