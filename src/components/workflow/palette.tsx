@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
 import { createDefaultChallengeConfig } from "@/lib/workflow/types";
 import {
@@ -17,6 +15,7 @@ import {
 	Mail,
 	ChevronDown,
 	ChevronRight,
+	ChevronUp,
 	Flag,
 	Merge,
 	Tag,
@@ -172,6 +171,7 @@ export function Palette({
 	);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [isCollapsed, setIsCollapsed] = useState(false);
+	const containerRef = useRef<HTMLDivElement>(null);
 
 	const toggleSection = (section: string) => {
 		setExpandedSections((prev) => {
@@ -186,13 +186,23 @@ export function Palette({
 	};
 
 	const handleAddNode = (type: NodeType, label: string) => {
-		const viewportWidth = window.innerWidth - 256 - 320;
-		const viewportHeight = window.innerHeight - 56;
+		const propertiesPanel = document.querySelector<HTMLElement>(
+			'[data-workflow-panel="properties"]',
+		);
+		const propertiesWidth = propertiesPanel?.offsetWidth ?? 0;
+		const paletteHeight = containerRef.current?.offsetHeight ?? 0;
+		const HEADER_HEIGHT = 64; // Aproximación del alto de la TopBar
+
+		const availableWidth = Math.max(window.innerWidth - propertiesWidth, 320);
+		const availableHeight = Math.max(
+			window.innerHeight - HEADER_HEIGHT - paletteHeight,
+			240,
+		);
 
 		// Para layout horizontal: centrar verticalmente y dejar espacio para conectar de izquierda a derecha
 		// Usar ancho promedio de nodo (aproximadamente 200-320px, usar 240px como promedio)
-		const centerX = (viewportWidth / 2 - pan.x) / zoom - 120; // 120 = NODE_WIDTH promedio / 2
-		const centerY = (viewportHeight / 2 - pan.y) / zoom;
+		const centerX = (availableWidth / 2 - pan.x) / zoom - 120; // 120 = NODE_WIDTH promedio / 2
+		const centerY = (availableHeight / 2 - pan.y) / zoom;
 
 		const newNode: WorkflowNode = {
 			id: `node-${Date.now()}`,
@@ -234,47 +244,90 @@ export function Palette({
 	const hasResults = visibleNodes > 0;
 	return (
 		<div
+			ref={containerRef}
 			className={cn(
-				"relative flex flex-col border-r border-border bg-card transition-[width] duration-200 ease-in-out",
-				isCollapsed ? "w-16" : "w-64",
+				"flex-shrink-0 border-b border-border bg-card transition-[max-height] duration-200 ease-in-out shadow-sm",
+				isCollapsed ? "max-h-[120px]" : "max-h-[360px]",
 			)}
 		>
-			<div className="border-b border-border p-3">
-				{!isCollapsed && (
-					<div>
-						<p className="text-sm font-semibold text-foreground">Componentes</p>
+			<div className="flex flex-wrap items-center gap-3 px-4 py-3">
+				<div className="min-w-[150px]">
+					<p className="text-sm font-semibold text-foreground">Componentes</p>
+					{!isCollapsed && (
 						<p className="text-xs text-muted-foreground">
 							Haz clic para agregarlos al lienzo
 						</p>
-					</div>
-				)}
+					)}
+				</div>
+
 				{!isCollapsed && (
-					<div className="mt-3 flex flex-col gap-3">
+					<>
 						<Input
 							value={searchTerm}
 							onChange={(e) => setSearchTerm(e.target.value)}
 							placeholder="Buscar por nombre o tipo..."
 							aria-label="Buscar nodos"
-							className="h-9"
+							className="h-9 min-w-[200px] flex-1 sm:max-w-sm md:max-w-md"
 						/>
-						<div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-							<span>
-								{visibleNodes} de {totalNodes} nodos visibles
-							</span>
+						<div className="text-xs text-muted-foreground">
+							{visibleNodes} de {totalNodes} nodos visibles
 						</div>
-					</div>
+					</>
 				)}
+
+				<div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+					<div className="flex items-center gap-1 font-semibold text-foreground">
+						<Circle className="h-3.5 w-3.5 text-muted-foreground" />
+						<span>{stats.nodes}</span>
+					</div>
+					<div className="flex items-center gap-1 font-semibold text-foreground">
+						<ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+						<span>{stats.edges}</span>
+					</div>
+					<div
+						className={cn(
+							"flex items-center gap-1 font-semibold",
+							validationState.status === "valid" &&
+								"text-emerald-600 dark:text-emerald-400",
+							validationState.status === "invalid" && "text-destructive",
+							validationState.status === "idle" && "text-muted-foreground",
+						)}
+					>
+						{validationState.status === "valid" ? (
+							<CheckCircle className="h-3.5 w-3.5" />
+						) : (
+							<AlertCircle className="h-3.5 w-3.5" />
+						)}
+						<span>
+							{validationState.status === "valid"
+								? "Sin errores"
+								: validationState.status === "invalid"
+									? `${validationState.errorsCount} pendientes`
+									: "Pendiente"}
+						</span>
+					</div>
+					<button
+						type="button"
+						className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						onClick={() => setIsCollapsed((prev) => !prev)}
+						title={isCollapsed ? "Expandir panel" : "Colapsar panel"}
+						aria-label={isCollapsed ? "Expandir panel" : "Colapsar panel"}
+					>
+						<span>{isCollapsed ? "Mostrar" : "Ocultar"}</span>
+						{isCollapsed ? (
+							<ChevronDown className="h-4 w-4" />
+						) : (
+							<ChevronUp className="h-4 w-4" />
+						)}
+					</button>
+				</div>
 			</div>
 
 			{isCollapsed ? (
-				<div className="flex-1 overflow-y-auto min-h-0">
-					<div className="flex flex-col gap-4 px-2 py-4">
-						{NODE_CATEGORIES.map((category) => (
-							<div
-								key={category.id}
-								className="flex flex-col items-center gap-2"
-							>
-								<Separator className="w-8 opacity-30" />
+				<div className="border-t border-border/60 bg-muted/40">
+					<div className="flex items-center gap-2 overflow-x-auto px-4 py-3">
+						{NODE_CATEGORIES.map((category, index) => (
+							<div key={category.id} className="flex items-center gap-2">
 								{category.nodes.map(
 									({ type, label, icon, bgColor, iconColorVar }) => {
 										const tooltipId = `tooltip-${type}`;
@@ -327,203 +380,143 @@ export function Palette({
 										);
 									},
 								)}
+								{index < NODE_CATEGORIES.length - 1 && (
+									<div
+										className="hidden h-8 w-px bg-border/50 last:hidden md:block"
+										aria-hidden="true"
+									/>
+								)}
 							</div>
 						))}
 					</div>
 				</div>
 			) : (
-				<ScrollArea className="flex-1 min-h-0">
-					<div className="p-2">
-						{!hasResults && (
-							<div className="rounded-md border border-dashed border-border/60 p-4 text-center text-sm text-muted-foreground">
-								No encontramos nodos que coincidan con “{searchTerm}”.
-								<div className="mt-2 text-xs">
-									Intenta con otro término o limpia el filtro.
-								</div>
+				<div className="border-t border-border/60 bg-card/80">
+					{!hasResults && (
+						<div className="mx-4 mt-4 rounded-md border border-dashed border-border/60 p-4 text-center text-sm text-muted-foreground">
+							No encontramos nodos que coincidan con “{searchTerm}”.
+							<div className="mt-2 text-xs">
+								Intenta con otro término o limpia el filtro.
 							</div>
-						)}
+						</div>
+					)}
 
-						{categoriesToRender.map((category) => (
-							<div key={category.id} className="mb-2">
-								<Button
-									variant="ghost"
-									size="sm"
-									className="w-full justify-start text-muted-foreground dark:text-muted-foreground font-medium text-xs uppercase"
-									onClick={() => toggleSection(category.id)}
+					<div className="overflow-x-auto px-4 py-4">
+						<div className="flex min-w-max gap-4">
+							{categoriesToRender.map((category) => (
+								<div
+									key={category.id}
+									className="min-w-[220px] flex-1 rounded-lg border border-border/60 bg-background/60 p-3 shadow-sm"
 								>
+									<button
+										type="button"
+										className="flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+										onClick={() => toggleSection(category.id)}
+									>
+										{category.label}
+										{expandedSections.has(category.id) ? (
+											<ChevronDown className="h-4 w-4" />
+										) : (
+											<ChevronRight className="h-4 w-4" />
+										)}
+									</button>
+
 									{expandedSections.has(category.id) ? (
-										<ChevronDown className="mr-2 h-4 w-4" />
-									) : (
-										<ChevronRight className="mr-2 h-4 w-4" />
-									)}
-									{category.label}
-								</Button>
-
-								{expandedSections.has(category.id) ? (
-									<div className="mt-2 space-y-1 pl-2">
-										{category.nodes.map(
-											({ type, label, icon, bgColor, iconColorVar }) => (
-												<Button
-													key={type}
-													variant="ghost"
-													size="sm"
-													className="w-full justify-start text-sm"
-													onClick={() => handleAddNode(type, label)}
-													title={label}
-												>
-													<div className="flex items-center gap-2">
-														<div
-															className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md"
-															style={{
-																backgroundColor: bgColor,
-																color: `var(${iconColorVar})`,
-															}}
-														>
-															{icon}
-														</div>
-														<span className="text-sm font-medium text-blue-900 dark:text-white">
-															{label}
-														</span>
-													</div>
-												</Button>
-											),
-										)}
-									</div>
-								) : (
-									<div className="mt-3 flex flex-wrap gap-2 pl-2">
-										{category.nodes.map(
-											({ type, label, icon, bgColor, iconColorVar }) => (
-												<button
-													key={type}
-													type="button"
-													className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-													onClick={() => handleAddNode(type, label)}
-													title={label}
-													aria-label={`Agregar ${label}`}
-												>
-													<div
-														className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md"
-														style={{
-															backgroundColor: bgColor,
-															color: `var(${iconColorVar})`,
-														}}
+										<div className="mt-3 space-y-1">
+											{category.nodes.map(
+												({ type, label, icon, bgColor, iconColorVar }) => (
+													<Button
+														key={type}
+														variant="ghost"
+														size="sm"
+														className="w-full justify-start text-sm"
+														onClick={() => handleAddNode(type, label)}
+														title={label}
 													>
-														{icon}
-													</div>
-												</button>
-											),
-										)}
-									</div>
-								)}
-							</div>
-						))}
-					</div>
-				</ScrollArea>
-			)}
-
-			<div className="border-t border-border/80 bg-muted/40">
-				{isCollapsed ? (
-					<div className="flex flex-col items-center gap-2.5 p-3">
-						<div className="flex flex-col items-center gap-1 group relative">
-							<Circle className="h-3.5 w-3.5 text-muted-foreground" />
-							<span className="text-[10px] font-semibold text-foreground leading-none">
-								{stats.nodes}
-							</span>
-							<span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 z-[9999] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-lg opacity-0 transition-opacity duration-75 group-hover:opacity-100">
-								Nodos
-							</span>
-						</div>
-						<div className="flex flex-col items-center gap-1 group relative">
-							<ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-							<span className="text-[10px] font-semibold text-foreground leading-none">
-								{stats.edges}
-							</span>
-							<span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 z-[9999] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-lg opacity-0 transition-opacity duration-75 group-hover:opacity-100">
-								Transiciones
-							</span>
-						</div>
-						<div className="flex flex-col items-center gap-1 group relative">
-							{validationState.status === "valid" ? (
-								<CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-							) : validationState.status === "invalid" ? (
-								<AlertCircle className="h-3.5 w-3.5 text-destructive" />
-							) : (
-								<AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-							)}
-							<span
-								className={cn(
-									"text-[10px] font-semibold leading-none",
-									validationState.status === "valid" &&
-										"text-emerald-600 dark:text-emerald-400",
-									validationState.status === "invalid" && "text-destructive",
-									validationState.status === "idle" && "text-muted-foreground",
-								)}
-							>
-								{validationState.status === "valid"
-									? "✓"
-									: validationState.status === "invalid"
-										? validationState.errorsCount
-										: "—"}
-							</span>
-							<span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 z-[9999] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-lg opacity-0 transition-opacity duration-75 group-hover:opacity-100">
-								{validationState.status === "valid"
-									? "Sin errores"
-									: validationState.status === "invalid"
-										? `${validationState.errorsCount} pendientes`
-										: "Pendiente"}
-							</span>
-						</div>
-					</div>
-				) : (
-					<div className="p-4">
-						<div className="space-y-3 text-xs">
-							<div className="flex items-center justify-between">
-								<span className="text-muted-foreground">Nodos</span>
-								<span className="font-semibold text-foreground">
-									{stats.nodes}
-								</span>
-							</div>
-							<div className="flex items-center justify-between">
-								<span className="text-muted-foreground">Transiciones</span>
-								<span className="font-semibold text-foreground">
-									{stats.edges}
-								</span>
-							</div>
-							<div className="flex items-center justify-between">
-								<span className="text-muted-foreground">Validación</span>
-								<span
-									className={cn(
-										"font-semibold",
-										validationState.status === "valid" &&
-											"text-emerald-600 dark:text-emerald-400",
-										validationState.status === "invalid" && "text-destructive",
+														<div className="flex items-center gap-2">
+															<div
+																className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md"
+																style={{
+																	backgroundColor: bgColor,
+																	color: `var(${iconColorVar})`,
+																}}
+															>
+																{icon}
+															</div>
+															<span className="text-sm font-medium">
+																{label}
+															</span>
+														</div>
+													</Button>
+												),
+											)}
+										</div>
+									) : (
+										<div className="mt-3 flex flex-wrap gap-2">
+											{category.nodes.map(
+												({ type, label, icon, bgColor, iconColorVar }) => {
+													const tooltipId = `tooltip-${type}`;
+													return (
+														<div key={type} className="group relative">
+															<button
+																type="button"
+																className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+																onClick={() => handleAddNode(type, label)}
+																title={label}
+																aria-label={`Agregar ${label}`}
+																onMouseEnter={(e) => {
+																	const tooltip =
+																		document.getElementById(tooltipId);
+																	if (tooltip) {
+																		const rect =
+																			e.currentTarget.getBoundingClientRect();
+																		tooltip.style.left = `${rect.left + rect.width / 2}px`;
+																		tooltip.style.top = `${rect.top - 8}px`;
+																		tooltip.style.transform =
+																			"translate(-50%, -100%)";
+																		tooltip.style.opacity = "1";
+																		tooltip.style.pointerEvents = "none";
+																	}
+																}}
+																onMouseLeave={() => {
+																	const tooltip =
+																		document.getElementById(tooltipId);
+																	if (tooltip) {
+																		tooltip.style.opacity = "0";
+																	}
+																}}
+															>
+																<div
+																	className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md"
+																	style={{
+																		backgroundColor: bgColor,
+																		color: `var(${iconColorVar})`,
+																	}}
+																>
+																	{icon}
+																</div>
+															</button>
+															<span
+																id={tooltipId}
+																className="pointer-events-none fixed z-[9999] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg transition-opacity duration-0"
+																style={{
+																	opacity: 0,
+																}}
+															>
+																{label}
+															</span>
+														</div>
+													);
+												},
+											)}
+										</div>
 									)}
-								>
-									{validationState.status === "valid"
-										? "Sin errores"
-										: validationState.status === "invalid"
-											? `${validationState.errorsCount} pendientes`
-											: "Pendiente"}
-								</span>
-							</div>
+								</div>
+							))}
 						</div>
 					</div>
-				)}
-			</div>
-
-			<div className="border-t border-border/60 p-2.5">
-				<div className="flex items-center justify-center w-full">
-					<button
-						type="button"
-						className="flex h-8 w-8 items-center justify-center rounded-md text-base text-muted-foreground transition-all hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-						onClick={() => setIsCollapsed((prev) => !prev)}
-						title={isCollapsed ? "Expandir panel" : "Colapsar panel"}
-						aria-label={isCollapsed ? "Expandir panel" : "Colapsar panel"}
-					>
-						<span className="leading-none">{isCollapsed ? "▶" : "◀"}</span>
-					</button>
 				</div>
-			</div>
+			)}
 		</div>
 	);
 }
