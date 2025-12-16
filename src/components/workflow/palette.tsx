@@ -5,15 +5,18 @@ import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
 import { createDefaultChallengeConfig } from "@/lib/workflow/types";
 import {
 	XCircle,
+	CheckCircle,
 	FileText,
 	GitBranch,
 	Code,
 	Globe,
 	Mail,
+	ArrowRight,
 	Flag,
 	Merge,
 	Tag,
 	Circle,
+	AlertCircle,
 	Play,
 	Shield,
 } from "lucide-react";
@@ -22,6 +25,14 @@ interface PaletteProps {
 	onAddNode: (node: WorkflowNode) => void;
 	zoom: number;
 	pan: { x: number; y: number };
+	stats: {
+		nodes: number;
+		edges: number;
+	};
+	validationState: {
+		status: "idle" | "valid" | "invalid";
+		errorsCount: number;
+	};
 }
 
 const NODE_CATEGORIES = [
@@ -142,7 +153,13 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	return {};
 };
 
-export function Palette({ onAddNode, zoom, pan }: PaletteProps) {
+export function Palette({
+	onAddNode,
+	zoom,
+	pan,
+	stats,
+	validationState,
+}: PaletteProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const handleAddNode = (type: NodeType, label: string) => {
@@ -185,7 +202,7 @@ export function Palette({ onAddNode, zoom, pan }: PaletteProps) {
 			className="flex-shrink-0 border-b border-border bg-card px-4 py-3 shadow-sm"
 		>
 			<div className="flex flex-col gap-3">
-				<div className="flex items-center gap-2 overflow-x-auto pb-1">
+				<div className="flex flex-wrap items-center justify-center gap-2 overflow-x-auto pb-1">
 					{NODE_CATEGORIES.map((category, index) => (
 						<div key={category.id} className="flex items-center gap-2">
 							{category.nodes.map(
@@ -246,6 +263,35 @@ export function Palette({ onAddNode, zoom, pan }: PaletteProps) {
 							)}
 						</div>
 					))}
+				</div>
+
+				<div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-muted-foreground">
+					<div className="flex items-center gap-1 font-semibold text-foreground">
+						<Circle className="h-3.5 w-3.5 text-muted-foreground" />
+						<span>{stats.nodes}</span>
+					</div>
+					<div className="flex items-center gap-1 font-semibold text-foreground">
+						<ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+						<span>{stats.edges}</span>
+					</div>
+					<div className="flex items-center gap-1 font-semibold">
+						{validationState.status === "valid" ? (
+							<>
+								<CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+								<span>Sin errores</span>
+							</>
+						) : validationState.status === "invalid" ? (
+							<>
+								<AlertCircle className="h-3.5 w-3.5 text-destructive" />
+								<span>{validationState.errorsCount} pendientes</span>
+							</>
+						) : (
+							<>
+								<AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+								<span>Pendiente</span>
+							</>
+						)}
+					</div>
 				</div>
 			</div>
 		</div>
