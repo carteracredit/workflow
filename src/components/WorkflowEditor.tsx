@@ -436,14 +436,6 @@ export function WorkflowEditor() {
 					onAddNode={addNode}
 					zoom={workflowState.zoom}
 					pan={workflowState.pan}
-					stats={{
-						nodes: workflowState.nodes.length,
-						edges: workflowState.edges.length,
-					}}
-					validationState={{
-						status: validationStatus,
-						errorsCount: lastValidationErrorCount,
-					}}
 				/>
 
 				<div className="flex flex-1 overflow-hidden">
