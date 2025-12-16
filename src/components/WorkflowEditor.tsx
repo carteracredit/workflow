@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { TopBar } from "./workflow/top-bar";
 import { Palette } from "./workflow/palette";
-import { Canvas } from "./workflow/canvas";
+import { Canvas, DEFAULT_START_NODE_PAN } from "./workflow/canvas";
 import { PropertiesPanel } from "./workflow/properties-panel";
 import { ValidationTray } from "./workflow/validation-tray";
 import { PreviewModal } from "./workflow/preview-modal";
@@ -148,7 +148,7 @@ export function WorkflowEditor() {
 			selectedNodeIds: [],
 			selectedEdgeIds: [],
 			zoom: 1,
-			pan: { x: 200, y: 100 }, // Pan inicial para centrar el nodo Start
+			pan: { ...DEFAULT_START_NODE_PAN }, // Pan base, Canvas ajusta posición inicial
 			history: [],
 			historyIndex: -1,
 		};
@@ -338,7 +338,7 @@ export function WorkflowEditor() {
 				selectedNodeIds: [],
 				selectedEdgeIds: [],
 				zoom: 1,
-				pan: { x: 200, y: 100 }, // Pan inicial para centrar el nodo Start
+				pan: { ...DEFAULT_START_NODE_PAN }, // Pan base, Canvas ajusta posición inicial
 				history: [],
 				historyIndex: -1,
 			};

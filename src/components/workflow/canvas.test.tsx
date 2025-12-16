@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { getCanvasGridStyle } from "./canvas";
+import {
+	getCanvasGridStyle,
+	getEmptyStatePanTarget,
+	estimateNodeDimensions,
+} from "./canvas";
+import type { WorkflowNode } from "@/lib/workflow/types";
 
 /**
  * Tests for Canvas selection behavior
@@ -121,5 +126,61 @@ describe("getCanvasGridStyle", () => {
 		const style = getCanvasGridStyle({ x: 0, y: 0 }, 0);
 
 		expect(style.backgroundSize).toBe("2px 2px, 2px 2px");
+	});
+});
+
+describe("getEmptyStatePanTarget", () => {
+	const baseNode: WorkflowNode = {
+		id: "node-start",
+		type: "Start",
+		title: "Inicio",
+		description: "Arranca el flujo",
+		roles: [],
+		config: {},
+		position: { x: 200, y: 200 },
+		groupId: null,
+		staleTimeout: null,
+	};
+
+	it("centers the start node using viewport-aware ratios", () => {
+		const canvasWidth = 1200;
+		const canvasHeight = 800;
+		const zoom = 1;
+
+		const targetPan = getEmptyStatePanTarget({
+			canvasWidth,
+			canvasHeight,
+			node: baseNode,
+			zoom,
+		});
+
+		const nodeSize = estimateNodeDimensions(baseNode);
+		const screenLeft = baseNode.position.x * zoom + targetPan.x;
+		const screenCenterY =
+			baseNode.position.y * zoom + targetPan.y + (nodeSize.height * zoom) / 2;
+
+		expect(screenLeft).toBeCloseTo(canvasWidth * 0.32, 0);
+		expect(screenCenterY).toBeCloseTo(canvasHeight * 0.62, 0);
+	});
+
+	it("keeps spacing consistent when zoom changes", () => {
+		const canvasWidth = 960;
+		const canvasHeight = 640;
+		const zoom = 1.5;
+
+		const targetPan = getEmptyStatePanTarget({
+			canvasWidth,
+			canvasHeight,
+			node: baseNode,
+			zoom,
+		});
+
+		const nodeSize = estimateNodeDimensions(baseNode);
+		const screenLeft = baseNode.position.x * zoom + targetPan.x;
+		const screenCenterY =
+			baseNode.position.y * zoom + targetPan.y + (nodeSize.height * zoom) / 2;
+
+		expect(screenLeft).toBeCloseTo(canvasWidth * 0.32, 0);
+		expect(screenCenterY).toBeCloseTo(canvasHeight * 0.62, 0);
 	});
 });
