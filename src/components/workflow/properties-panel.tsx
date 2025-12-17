@@ -52,7 +52,11 @@ interface PropertiesPanelProps {
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
 	flags: Flag[];
-	onUpdateNode: (nodeId: string, updates: Partial<WorkflowNode>) => void;
+	onUpdateNode: (
+		nodeId: string,
+		updates: Partial<WorkflowNode>,
+		options?: { recordHistory?: boolean },
+	) => void;
 	onUpdateEdge: (edgeId: string, updates: Partial<WorkflowEdge>) => void;
 	onUpdateMetadata: (updates: Partial<WorkflowMetadata>) => void;
 	onAddEdge: (edge: WorkflowEdge) => void;

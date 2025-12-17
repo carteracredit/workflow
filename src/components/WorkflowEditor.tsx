@@ -139,6 +139,12 @@ const createEmptyWorkflowState = (): WorkflowState => {
 	});
 };
 
+type HistoryChange = Partial<WorkflowState> & {
+	nodes: WorkflowNode[];
+	edges: WorkflowEdge[];
+	recordHistory?: boolean;
+};
+
 export function WorkflowEditor() {
 	const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
 		if (typeof window !== "undefined") {
@@ -234,20 +240,17 @@ export function WorkflowEditor() {
 	}, []);
 
 	const applyHistoryChange = useCallback(
-		(
-			getUpdates: (prev: WorkflowState) => Partial<WorkflowState> & {
-				nodes: WorkflowNode[];
-				edges: WorkflowEdge[];
-			},
-		) => {
+		(getUpdates: (prev: WorkflowState) => HistoryChange) => {
 			setWorkflowState((prev) => {
-				const updates = getUpdates(prev);
-				const historyPayload = pushHistoryState({
-					history: prev.history,
-					historyIndex: prev.historyIndex,
-					nodes: updates.nodes,
-					edges: updates.edges,
-				});
+				const { recordHistory = true, ...updates } = getUpdates(prev);
+				const historyPayload = recordHistory
+					? pushHistoryState({
+							history: prev.history,
+							historyIndex: prev.historyIndex,
+							nodes: updates.nodes,
+							edges: updates.edges,
+						})
+					: {};
 
 				return {
 					...prev,
@@ -258,6 +261,22 @@ export function WorkflowEditor() {
 		},
 		[setWorkflowState],
 	);
+
+	const commitHistorySnapshot = useCallback(() => {
+		setWorkflowState((prev) => {
+			const historyPayload = pushHistoryState({
+				history: prev.history,
+				historyIndex: prev.historyIndex,
+				nodes: prev.nodes,
+				edges: prev.edges,
+			});
+
+			return {
+				...prev,
+				...historyPayload,
+			};
+		});
+	}, []);
 
 	const addNode = useCallback(
 		(node: WorkflowNode) => {
@@ -270,7 +289,11 @@ export function WorkflowEditor() {
 	);
 
 	const updateNode = useCallback(
-		(nodeId: string, updates: Partial<WorkflowNode>) => {
+		(
+			nodeId: string,
+			updates: Partial<WorkflowNode>,
+			options?: { recordHistory?: boolean },
+		) => {
 			applyHistoryChange((prev) => ({
 				nodes: prev.nodes.map((n) => {
 					if (n.id !== nodeId) return n;
@@ -278,6 +301,7 @@ export function WorkflowEditor() {
 					return withDefaultStaleTimeout(nextNode);
 				}),
 				edges: prev.edges,
+				recordHistory: options?.recordHistory ?? true,
 			}));
 		},
 		[applyHistoryChange],
@@ -572,6 +596,7 @@ export function WorkflowEditor() {
 							onPaste={handlePaste}
 							onUndo={handleUndo}
 							canUndo={canUndo}
+							onCommitHistory={commitHistorySnapshot}
 						/>
 
 						{validationErrors.length > 0 && (

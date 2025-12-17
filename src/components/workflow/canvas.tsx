@@ -177,7 +177,11 @@ interface CanvasProps {
 	zoom: number;
 	pan: { x: number; y: number };
 	flags?: Flag[];
-	onUpdateNode: (nodeId: string, updates: Partial<WorkflowNode>) => void;
+	onUpdateNode: (
+		nodeId: string,
+		updates: Partial<WorkflowNode>,
+		options?: { recordHistory?: boolean },
+	) => void;
 	onDeleteNode: (nodeId: string) => void;
 	onAddEdge: (edge: WorkflowEdge) => void;
 	onDeleteEdge: (edgeId: string) => void;
@@ -197,6 +201,7 @@ interface CanvasProps {
 	onPaste?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
 	onUndo?: () => void;
 	canUndo?: boolean;
+	onCommitHistory?: () => void;
 }
 
 export function Canvas({
@@ -225,6 +230,7 @@ export function Canvas({
 	onPaste,
 	onUndo,
 	canUndo = false,
+	onCommitHistory,
 }: CanvasProps) {
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const [isPanning, setIsPanning] = useState(false);
@@ -244,6 +250,7 @@ export function Canvas({
 		offsetY: number;
 		selectedNodeIds: string[]; // All selected nodes to move together
 		nodeOffsets: Map<string, { offsetX: number; offsetY: number }>; // Offsets for each node
+		hasMoved: boolean;
 	} | null>(null);
 
 	// Box selection state
@@ -754,18 +761,30 @@ export function Canvas({
 						if (offset) {
 							const newX = cursorX - offset.offsetX;
 							const newY = cursorY - offset.offsetY;
-							onUpdateNode(nodeId, {
-								position: { x: newX, y: newY },
-							});
+							onUpdateNode(
+								nodeId,
+								{
+									position: { x: newX, y: newY },
+								},
+								{ recordHistory: false },
+							);
 						}
 					});
+					if (dragRef.current) {
+						dragRef.current.hasMoved = true;
+					}
 				} else {
 					// Fallback for single node drag (backward compatibility)
 					const newX = cursorX - dragRef.current.offsetX;
 					const newY = cursorY - dragRef.current.offsetY;
-					onUpdateNode(dragRef.current.nodeId, {
-						position: { x: newX, y: newY },
-					});
+					onUpdateNode(
+						dragRef.current.nodeId,
+						{
+							position: { x: newX, y: newY },
+						},
+						{ recordHistory: false },
+					);
+					dragRef.current.hasMoved = true;
 				}
 			}
 
@@ -800,6 +819,7 @@ export function Canvas({
 	);
 
 	const handleMouseUp = useCallback(() => {
+		const dragSession = dragRef.current;
 		// Finalize box selection if active
 		if (boxSelection) {
 			const minX = Math.min(boxSelection.startX, boxSelection.currentX);
@@ -870,6 +890,9 @@ export function Canvas({
 		}
 
 		setIsPanning(false);
+		if (dragSession?.hasMoved) {
+			onCommitHistory?.();
+		}
 		dragRef.current = null;
 		setBoxSelection(null);
 	}, [
@@ -882,6 +905,7 @@ export function Canvas({
 		onSelectNodes,
 		onSelectEdges,
 		calculateNodeSize,
+		onCommitHistory,
 	]);
 
 	const handleNodeMouseDown = useCallback(
@@ -957,6 +981,7 @@ export function Canvas({
 					offsetY: cursorY - node.position.y,
 					selectedNodeIds: nodesToDrag,
 					nodeOffsets,
+					hasMoved: false,
 				};
 			} else {
 				// Node was removed from selection, don't start dragging
