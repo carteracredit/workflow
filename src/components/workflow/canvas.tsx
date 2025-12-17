@@ -195,6 +195,8 @@ interface CanvasProps {
 	};
 	onCopy?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
 	onPaste?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
+	onUndo?: () => void;
+	canUndo?: boolean;
 }
 
 export function Canvas({
@@ -221,6 +223,8 @@ export function Canvas({
 	validationState,
 	onCopy,
 	onPaste,
+	onUndo,
+	canUndo = false,
 }: CanvasProps) {
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const [isPanning, setIsPanning] = useState(false);
@@ -512,6 +516,17 @@ export function Canvas({
 					activeElement.tagName === "TEXTAREA" ||
 					activeElement.getAttribute("contenteditable") === "true");
 
+			// Handle Undo (Ctrl/Cmd+Z)
+			if (
+				(e.ctrlKey || e.metaKey) &&
+				e.key.toLowerCase() === "z" &&
+				!isInputActive
+			) {
+				e.preventDefault();
+				onUndo?.();
+				return;
+			}
+
 			// Handle Copy (Ctrl/Cmd+C)
 			if ((e.ctrlKey || e.metaKey) && e.key === "c" && !isInputActive) {
 				e.preventDefault();
@@ -596,6 +611,7 @@ export function Canvas({
 		edges,
 		onCopy,
 		onPaste,
+		onUndo,
 	]);
 
 	const startPanning = useCallback(
@@ -1476,7 +1492,9 @@ export function Canvas({
 						variant="ghost"
 						className="h-8 w-8"
 						title="Deshacer (Ctrl+Z)"
-						disabled
+						disabled={!canUndo}
+						aria-disabled={!canUndo}
+						onClick={onUndo}
 					>
 						<Undo className="h-4 w-4" />
 					</Button>
