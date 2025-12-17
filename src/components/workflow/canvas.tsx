@@ -50,7 +50,7 @@ const MULTI_OUTPUT_NODE_TYPES: WorkflowNode["type"][] = [
 	"Challenge",
 ];
 
-const GRID_BASE_SIZE = 20;
+const GRID_BASE_SIZE = 24;
 export const DEFAULT_START_NODE_PAN = { x: 200, y: 100 };
 const EMPTY_STATE_NODE_HORIZONTAL_RATIO = 0.32;
 const EMPTY_STATE_NODE_VERTICAL_RATIO = 0.62;
@@ -91,8 +91,8 @@ export const getCanvasGridStyle = (
 	const backgroundPosition = `${pan.x}px ${pan.y}px`;
 
 	return {
-		backgroundSize: `${backgroundSize}, ${backgroundSize}`,
-		backgroundPosition: `${backgroundPosition}, ${backgroundPosition}`,
+		backgroundSize,
+		backgroundPosition,
 	};
 };
 

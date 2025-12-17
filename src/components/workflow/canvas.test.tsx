@@ -113,19 +113,27 @@ describe("getCanvasGridStyle", () => {
 	it("syncs background position with pan offsets", () => {
 		const style = getCanvasGridStyle({ x: 150.5, y: -75 }, 1);
 
-		expect(style.backgroundPosition).toBe("150.5px -75px, 150.5px -75px");
+		expect(style.backgroundPosition).toBe("150.5px -75px");
 	});
 
 	it("scales background size with zoom level", () => {
 		const style = getCanvasGridStyle({ x: 0, y: 0 }, 1.5);
 
-		expect(style.backgroundSize).toBe("30px 30px, 30px 30px");
+		expect(style.backgroundSize).toBe("36px 36px");
 	});
 
 	it("never uses a zoom smaller than the safe minimum", () => {
 		const style = getCanvasGridStyle({ x: 0, y: 0 }, 0);
+		expect(typeof style.backgroundSize).toBe("string");
 
-		expect(style.backgroundSize).toBe("2px 2px, 2px 2px");
+		if (typeof style.backgroundSize !== "string") {
+			throw new Error("backgroundSize should be string");
+		}
+
+		const [width, height] = style.backgroundSize.split(" ");
+
+		expect(parseFloat(width)).toBeCloseTo(2.4);
+		expect(parseFloat(height)).toBeCloseTo(2.4);
 	});
 });
 
