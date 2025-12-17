@@ -1,3 +1,10 @@
+# [1.0.0-rc.8](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.7...v1.0.0-rc.8) (2025-12-17)
+
+
+### Features
+
+* Add Storybook stories for UI components and workflow ([18883b4](https://github.com/carteracredit/workflow/commit/18883b440b514741ffa43dbfd2b9c7aca129bc28))
+
 # [1.0.0-rc.7](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.6...v1.0.0-rc.7) (2025-12-17)
 
 
