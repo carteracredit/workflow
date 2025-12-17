@@ -1,15 +1,36 @@
 import type { Preview } from "@storybook/react";
-import { useEffect } from "react";
+import { ReactNode, useEffect } from "react";
+import { useTheme } from "next-themes";
 
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "../src/app/globals.css";
+
+type ThemeOption = "light" | "dark" | "system";
+
+const ThemeSync = ({
+	theme,
+	children,
+}: {
+	theme: ThemeOption;
+	children: ReactNode;
+}) => {
+	const { setTheme } = useTheme();
+
+	useEffect(() => {
+		setTheme(theme);
+	}, [theme, setTheme]);
+
+	return <>{children}</>;
+};
 
 export const globalTypes = {
 	theme: {
 		description: "Global theme for components (light/dark)",
-		defaultValue: "light",
+		defaultValue: "system",
 		toolbar: {
 			icon: "mirror",
 			items: [
+				{ value: "system", title: "System" },
 				{ value: "light", title: "Light" },
 				{ value: "dark", title: "Dark" },
 			],
@@ -34,17 +55,17 @@ const preview: Preview = {
 	},
 	decorators: [
 		(Story, context) => {
-			const theme = context.globals.theme as string | undefined;
-
-			useEffect(() => {
-				const root = document.documentElement;
-				root.classList.toggle("dark", theme === "dark");
-			}, [theme]);
+			const theme =
+				(context.globals.theme as ThemeOption | undefined) ?? "system";
 
 			return (
-				<div className="min-h-screen bg-background text-foreground p-6">
-					<Story />
-				</div>
+				<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+					<ThemeSync theme={theme}>
+						<div className="min-h-screen bg-background text-foreground p-6">
+							<Story />
+						</div>
+					</ThemeSync>
+				</ThemeProvider>
 			);
 		},
 	],
