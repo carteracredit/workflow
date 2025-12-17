@@ -201,6 +201,8 @@ interface CanvasProps {
 	onPaste?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
 	onUndo?: () => void;
 	canUndo?: boolean;
+	onRedo?: () => void;
+	canRedo?: boolean;
 	onCommitHistory?: () => void;
 }
 
@@ -230,6 +232,8 @@ export function Canvas({
 	onPaste,
 	onUndo,
 	canUndo = false,
+	onRedo,
+	canRedo = false,
 	onCommitHistory,
 }: CanvasProps) {
 	const canvasRef = useRef<HTMLDivElement>(null);
@@ -523,19 +527,30 @@ export function Canvas({
 					activeElement.tagName === "TEXTAREA" ||
 					activeElement.getAttribute("contenteditable") === "true");
 
-			// Handle Undo (Ctrl/Cmd+Z)
-			if (
-				(e.ctrlKey || e.metaKey) &&
-				e.key.toLowerCase() === "z" &&
-				!isInputActive
-			) {
-				e.preventDefault();
-				onUndo?.();
-				return;
+			const isCtrlLikePressed = e.ctrlKey || e.metaKey;
+			const key = e.key.toLowerCase();
+
+			// Handle Undo/Redo shortcuts
+			if (isCtrlLikePressed && !isInputActive) {
+				if (key === "z") {
+					e.preventDefault();
+					if (e.shiftKey) {
+						onRedo?.();
+					} else {
+						onUndo?.();
+					}
+					return;
+				}
+
+				if (key === "y") {
+					e.preventDefault();
+					onRedo?.();
+					return;
+				}
 			}
 
 			// Handle Copy (Ctrl/Cmd+C)
-			if ((e.ctrlKey || e.metaKey) && e.key === "c" && !isInputActive) {
+			if (isCtrlLikePressed && e.key === "c" && !isInputActive) {
 				e.preventDefault();
 				if (
 					onCopy &&
@@ -562,7 +577,7 @@ export function Canvas({
 			}
 
 			// Handle Paste (Ctrl/Cmd+V)
-			if ((e.ctrlKey || e.metaKey) && e.key === "v" && !isInputActive) {
+			if (isCtrlLikePressed && e.key === "v" && !isInputActive) {
 				e.preventDefault();
 				if (onPaste && copiedDataRef.current) {
 					const { nodes: pastedNodes, edges: pastedEdges } =
@@ -594,7 +609,7 @@ export function Canvas({
 			if (e.key === "f" || e.key === "F") {
 				handleFitToView();
 			}
-			if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+			if (isCtrlLikePressed && e.key === "s") {
 				e.preventDefault();
 			}
 			if (e.key === "Escape" && connectingFrom) {
@@ -619,6 +634,7 @@ export function Canvas({
 		onCopy,
 		onPaste,
 		onUndo,
+		onRedo,
 	]);
 
 	const startPanning = useCallback(
@@ -1527,8 +1543,10 @@ export function Canvas({
 						size="icon"
 						variant="ghost"
 						className="h-8 w-8"
-						title="Rehacer (Ctrl+Y)"
-						disabled
+						title="Rehacer (Ctrl+Y / Ctrl+Shift+Z)"
+						disabled={!canRedo}
+						aria-disabled={!canRedo}
+						onClick={onRedo}
 					>
 						<Redo className="h-4 w-4" />
 					</Button>

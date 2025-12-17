@@ -54,6 +54,11 @@ const pushHistoryState = ({
 
 const canUndoHistory = (historyIndex: number) => historyIndex > 0;
 
+const canRedoHistory = (
+	history: HistoryState["history"],
+	historyIndex: number,
+) => historyIndex < history.length - 1;
+
 const undoHistory = ({ history, historyIndex }: HistoryState) => {
 	if (!canUndoHistory(historyIndex)) {
 		return null;
@@ -72,11 +77,31 @@ const undoHistory = ({ history, historyIndex }: HistoryState) => {
 	};
 };
 
+const redoHistory = ({ history, historyIndex }: HistoryState) => {
+	if (!canRedoHistory(history, historyIndex)) {
+		return null;
+	}
+
+	const nextIndex = historyIndex + 1;
+	const snapshot = history[nextIndex];
+	if (!snapshot) {
+		return null;
+	}
+
+	return {
+		nodes: cloneDeep(snapshot.nodes),
+		edges: cloneDeep(snapshot.edges),
+		historyIndex: nextIndex,
+	};
+};
+
 export {
 	MAX_HISTORY_LENGTH,
 	canUndoHistory,
+	canRedoHistory,
 	createHistorySnapshot,
 	initializeHistory,
 	pushHistoryState,
 	undoHistory,
+	redoHistory,
 };

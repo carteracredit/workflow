@@ -20,9 +20,11 @@ import { STALE_SUPPORTED_NODE_TYPES } from "@/lib/workflow/types";
 import { validateWorkflow } from "@/lib/workflow/validation";
 import { EXAMPLE_WORKFLOWS } from "@/lib/example-workflows";
 import {
+	canRedoHistory,
 	canUndoHistory,
 	initializeHistory,
 	pushHistoryState,
+	redoHistory,
 	undoHistory,
 } from "@/lib/workflow/history";
 
@@ -428,6 +430,28 @@ export function WorkflowEditor() {
 		});
 	}, [setWorkflowState]);
 
+	const handleRedo = useCallback(() => {
+		setWorkflowState((prev) => {
+			const redoResult = redoHistory({
+				history: prev.history,
+				historyIndex: prev.historyIndex,
+			});
+
+			if (!redoResult) {
+				return prev;
+			}
+
+			return {
+				...prev,
+				nodes: redoResult.nodes,
+				edges: redoResult.edges,
+				selectedNodeIds: [],
+				selectedEdgeIds: [],
+				historyIndex: redoResult.historyIndex,
+			};
+		});
+	}, [setWorkflowState]);
+
 	const handleValidate = useCallback(() => {
 		const errors = validateWorkflow(workflowState.nodes, workflowState.edges);
 		setValidationErrors(errors);
@@ -524,6 +548,10 @@ export function WorkflowEditor() {
 	const hasSingleNodeSelected = workflowState.selectedNodeIds.length === 1;
 	const hasSingleEdgeSelected = workflowState.selectedEdgeIds.length === 1;
 	const canUndo = canUndoHistory(workflowState.historyIndex);
+	const canRedo = canRedoHistory(
+		workflowState.history,
+		workflowState.historyIndex,
+	);
 	const shouldShowWorkflowPanel =
 		showWorkflowProperties &&
 		workflowState.selectedNodeIds.length === 0 &&
@@ -608,6 +636,8 @@ export function WorkflowEditor() {
 							onPaste={handlePaste}
 							onUndo={handleUndo}
 							canUndo={canUndo}
+							onRedo={handleRedo}
+							canRedo={canRedo}
 							onCommitHistory={commitHistorySnapshot}
 						/>
 
