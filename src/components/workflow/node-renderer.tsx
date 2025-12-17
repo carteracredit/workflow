@@ -60,7 +60,7 @@ const NODE_ICONS = {
 	FlagChange: Tag,
 };
 
-const NODE_BG_COLORS = {
+export const NODE_BG_COLORS = {
 	Start: "var(--node-bg-start)",
 	Reject: "var(--node-bg-end-reject)",
 	End: "var(--node-bg-end)",
@@ -75,7 +75,7 @@ const NODE_BG_COLORS = {
 	FlagChange: "var(--node-bg-status)",
 };
 
-const NODE_ICON_COLORS = {
+export const NODE_ICON_COLORS = {
 	Start: "var(--node-icon-start)",
 	Reject: "var(--node-icon-end-reject)",
 	End: "var(--node-icon-end)",

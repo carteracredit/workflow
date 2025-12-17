@@ -2,11 +2,26 @@ import type React from "react";
 import { useMemo, useRef, useCallback } from "react";
 import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
 import { estimateNodeDimensions } from "./node-metrics";
+import { NODE_ICON_COLORS } from "./node-renderer";
 
 const MINIMAP_WIDTH = 220;
 const MINIMAP_HEIGHT = 160;
 const INNER_PADDING = 8;
 const WORLD_PADDING = 120;
+type ScaledNode = {
+	id: string;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	color?: string;
+};
+
+type ScaledEdge = {
+	id: string;
+	from: { x: number; y: number };
+	to: { x: number; y: number };
+};
 
 export type WorldRect = {
 	x: number;
@@ -122,7 +137,7 @@ interface MinimapProps {
 
 export function Minimap({
 	nodes,
-	edges: _edges,
+	edges,
 	zoom,
 	pan,
 	viewportSize,
@@ -159,7 +174,7 @@ export function Minimap({
 		[bounds],
 	);
 
-	const scaledNodes = useMemo(
+	const scaledNodes = useMemo<ScaledNode[]>(
 		() =>
 			nodes.map((node) => {
 				const size = estimateNodeDimensions(node);
@@ -169,10 +184,40 @@ export function Minimap({
 					y: node.position.y * scale + offsetY,
 					width: Math.max(size.width * scale, 4),
 					height: Math.max(size.height * scale, 4),
+					color:
+						node.type === "Checkpoint" && node.checkpointType === "safe"
+							? "var(--node-safe-icon-color)"
+							: NODE_ICON_COLORS[node.type],
 				};
 			}),
 		[nodes, scale, offsetX, offsetY],
 	);
+
+	const scaledNodeCenters = useMemo(() => {
+		const map = new Map<string, { x: number; y: number }>();
+		scaledNodes.forEach((node) => {
+			map.set(node.id, {
+				x: node.x + node.width / 2,
+				y: node.y + node.height / 2,
+			});
+		});
+		return map;
+	}, [scaledNodes]);
+
+	const scaledEdges = useMemo<ScaledEdge[]>(() => {
+		return edges
+			.map((edge) => {
+				const from = scaledNodeCenters.get(edge.from);
+				const to = scaledNodeCenters.get(edge.to);
+				if (!from || !to) return null;
+				return {
+					id: edge.id,
+					from,
+					to,
+				};
+			})
+			.filter((edge): edge is ScaledEdge => Boolean(edge));
+	}, [edges, scaledNodeCenters]);
 
 	const viewportIndicator = useMemo(() => {
 		if (!viewportWorld) return null;
@@ -250,7 +295,7 @@ export function Minimap({
 	const isInteractive = viewportWorld !== null;
 
 	return (
-		<div className="rounded border border-border bg-card p-2 shadow-lg">
+		<div className="rounded border border-border/60 bg-card/80 p-2 shadow-lg backdrop-blur">
 			<div
 				ref={containerRef}
 				className="relative overflow-hidden rounded"
@@ -271,6 +316,19 @@ export function Minimap({
 						fill="var(--canvas-bg, hsl(var(--background)))"
 					/>
 
+					{scaledEdges.map((edge) => (
+						<line
+							key={edge.id}
+							x1={edge.from.x}
+							y1={edge.from.y}
+							x2={edge.to.x}
+							y2={edge.to.y}
+							stroke="var(--border)"
+							strokeWidth={1}
+							opacity={0.35}
+						/>
+					))}
+
 					{scaledNodes.map((node) => (
 						<rect
 							key={node.id}
@@ -278,8 +336,8 @@ export function Minimap({
 							y={node.y}
 							width={node.width}
 							height={node.height}
-							fill="var(--primary)"
-							opacity={0.35}
+							fill={node.color || "var(--primary)"}
+							opacity={0.45}
 							rx={2}
 						/>
 					))}

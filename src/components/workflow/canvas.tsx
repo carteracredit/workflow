@@ -1425,8 +1425,8 @@ export function Canvas({
 				)}
 			</div>
 
-			{/* Minimap - esquina inferior izquierda */}
-			<div className="absolute bottom-4 left-4">
+			{/* Minimap - esquina inferior derecha */}
+			<div className="absolute bottom-4 right-4 flex flex-col items-end gap-2">
 				<Minimap
 					nodes={nodes}
 					edges={edges}
