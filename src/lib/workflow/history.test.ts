@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { WorkflowEdge, WorkflowNode } from "./types";
 import {
 	MAX_HISTORY_LENGTH,
+	canRedoHistory,
 	canUndoHistory,
 	initializeHistory,
 	pushHistoryState,
+	redoHistory,
 	undoHistory,
 } from "./history";
 
@@ -66,6 +68,7 @@ describe("workflow history helpers", () => {
 			"node-1",
 			"node-3",
 		]);
+		expect(canRedoHistory(branched.history, branched.historyIndex)).toBe(false);
 	});
 
 	it("limits the number of stored snapshots", () => {
@@ -109,5 +112,54 @@ describe("workflow history helpers", () => {
 		expect(result?.historyIndex).toBe(initial.historyIndex);
 		expect(result?.nodes.map((n) => n.id)).toEqual(["node-1"]);
 		expect(result?.edges).toEqual([]);
+	});
+
+	it("detects when redo is available", () => {
+		const initial = initializeHistory([makeNode("1")], []);
+		const afterChange = pushHistoryState({
+			...initial,
+			nodes: [makeNode("1"), makeNode("2")],
+			edges: [],
+		});
+
+		const undone = undoHistory(afterChange);
+		expect(undone).not.toBeNull();
+		if (!undone) return;
+
+		expect(canRedoHistory(afterChange.history, undone.historyIndex)).toBe(true);
+	});
+
+	it("returns null when redo is not available", () => {
+		const initial = initializeHistory([makeNode("solo")], []);
+
+		expect(canRedoHistory(initial.history, initial.historyIndex)).toBe(false);
+		expect(
+			redoHistory({
+				history: initial.history,
+				historyIndex: initial.historyIndex,
+			}),
+		).toBeNull();
+	});
+
+	it("restores the next snapshot on redo", () => {
+		const initial = initializeHistory([makeNode("1")], []);
+		const afterChange = pushHistoryState({
+			...initial,
+			nodes: [makeNode("1"), makeNode("2")],
+			edges: [],
+		});
+		const undone = undoHistory(afterChange);
+		expect(undone).not.toBeNull();
+		if (!undone) return;
+
+		const redone = redoHistory({
+			history: afterChange.history,
+			historyIndex: undone.historyIndex,
+		});
+		expect(redone).not.toBeNull();
+		expect(redone?.historyIndex).toBe(afterChange.historyIndex);
+		expect(redone?.nodes.map((n) => n.id)).toEqual(
+			afterChange.history[afterChange.historyIndex].nodes.map((n) => n.id),
+		);
 	});
 });
