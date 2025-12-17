@@ -185,7 +185,7 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 		<div
 			ref={containerRef}
 			className={cn(
-				"flex flex-wrap items-center justify-center gap-2 pb-1",
+				"flex flex-nowrap items-center justify-center gap-2",
 				className,
 			)}
 		>

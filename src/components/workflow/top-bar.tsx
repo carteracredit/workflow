@@ -19,6 +19,8 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -45,6 +47,7 @@ import {
 	ChevronRight,
 	User,
 	LogOut,
+	Check,
 } from "lucide-react";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
@@ -89,8 +92,8 @@ export function TopBar({
 
 	return (
 		<div className="relative z-50 border-b border-border bg-card/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/70">
-			<div className="flex flex-wrap items-center gap-3">
-				<div className="min-w-0 flex-1">
+			<div className="flex items-center gap-3">
+				<div className="min-w-0 flex-shrink-0">
 					<div className="flex flex-wrap items-center gap-2">
 						<span className="text-base font-semibold text-foreground">
 							Cartera
@@ -118,7 +121,18 @@ export function TopBar({
 					</div>
 				</div>
 
-				<div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2">
+				{paletteProps && (
+					<div className="flex flex-1 items-center justify-center">
+						<Palette
+							onAddNode={paletteProps.onAddNode}
+							zoom={paletteProps.zoom}
+							pan={paletteProps.pan}
+							className="flex-nowrap"
+						/>
+					</div>
+				)}
+
+				<div className="flex flex-shrink-0 items-center justify-end gap-1 sm:gap-2">
 					<Button
 						variant="ghost"
 						size="sm"
@@ -206,17 +220,6 @@ export function TopBar({
 					<UserMenu />
 				</div>
 			</div>
-
-			{paletteProps && (
-				<div className="-mx-1 mt-4 w-full overflow-x-auto overflow-y-visible pb-2">
-					<Palette
-						onAddNode={paletteProps.onAddNode}
-						zoom={paletteProps.zoom}
-						pan={paletteProps.pan}
-						className="min-w-max px-1"
-					/>
-				</div>
-			)}
 		</div>
 	);
 }
@@ -225,18 +228,36 @@ function LanguageSelect() {
 	const [language, setLanguage] = useState<"es" | "en">("es");
 
 	return (
-		<Select
-			value={language}
-			onValueChange={(value) => setLanguage(value as "es" | "en")}
-		>
-			<SelectTrigger className="h-9 w-[90px] rounded-md border-border bg-muted/50 text-xs font-medium">
-				<SelectValue placeholder="Idioma" />
-			</SelectTrigger>
-			<SelectContent align="end">
-				<SelectItem value="es">ES</SelectItem>
-				<SelectItem value="en">EN</SelectItem>
-			</SelectContent>
-		</Select>
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button
+					variant="outline"
+					size="sm"
+					className="h-9 w-auto min-w-[40px] rounded-md border-purple-400/50 bg-background px-2 text-xs font-medium text-foreground hover:bg-accent hover:border-purple-400/70"
+				>
+					{language.toUpperCase()}
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="w-auto min-w-[44px] p-0.5">
+				<DropdownMenuRadioGroup
+					value={language}
+					onValueChange={(value) => setLanguage(value as "es" | "en")}
+				>
+					<DropdownMenuRadioItem
+						value="en"
+						className="cursor-pointer justify-center px-3 py-1.5 text-xs rounded-sm pl-3 pr-3 [&>span:first-child]:hidden data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
+					>
+						EN
+					</DropdownMenuRadioItem>
+					<DropdownMenuRadioItem
+						value="es"
+						className="cursor-pointer justify-center px-3 py-1.5 text-xs rounded-sm pl-3 pr-3 [&>span:first-child]:hidden data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
+					>
+						ES
+					</DropdownMenuRadioItem>
+				</DropdownMenuRadioGroup>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
 
