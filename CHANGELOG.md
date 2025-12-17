@@ -1,3 +1,10 @@
+# [1.0.0-rc.9](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.8...v1.0.0-rc.9) (2025-12-17)
+
+
+### Features
+
+* Add minimap edges and improve node styling ([3fb605e](https://github.com/carteracredit/workflow/commit/3fb605e498d6395fec80fcc3b9e126147ec0a1ff))
+
 # [1.0.0-rc.8](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.7...v1.0.0-rc.8) (2025-12-17)
 
 
