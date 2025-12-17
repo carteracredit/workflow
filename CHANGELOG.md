@@ -1,3 +1,10 @@
+# [1.0.0-rc.7](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.6...v1.0.0-rc.7) (2025-12-17)
+
+
+### Features
+
+* Add redo functionality to workflow editor ([3ab4101](https://github.com/carteracredit/workflow/commit/3ab4101b5adac4121a0a4c88cd73746e2870ac74))
+
 # [1.0.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.5...v1.0.0-rc.6) (2025-12-17)
 
 
