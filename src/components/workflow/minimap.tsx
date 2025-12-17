@@ -1,5 +1,5 @@
 import type React from "react";
-import { useMemo, useRef, useCallback } from "react";
+import { useMemo, useRef, useCallback, useId } from "react";
 import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
 import { estimateNodeDimensions } from "./node-metrics";
 import { NODE_ICON_COLORS } from "./node-renderer";
@@ -8,6 +8,8 @@ const MINIMAP_WIDTH = 220;
 const MINIMAP_HEIGHT = 160;
 const INNER_PADDING = 8;
 const WORLD_PADDING = 120;
+const MINIMAP_DOT_SPACING = 18;
+const MINIMAP_DOT_RADIUS = 0.7;
 type ScaledNode = {
 	id: string;
 	x: number;
@@ -148,6 +150,8 @@ export function Minimap({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const isPointerDownRef = useRef(false);
 	const safeZoom = Math.max(zoom, 0.0001);
+	const reactId = useId();
+	const patternId = useMemo(() => reactId.replace(/:/g, "-"), [reactId]);
 
 	const viewportWorld = useMemo(
 		() =>
@@ -310,10 +314,32 @@ export function Minimap({
 				onPointerLeave={isInteractive ? stopPointerInteraction : undefined}
 			>
 				<svg width={MINIMAP_WIDTH} height={MINIMAP_HEIGHT} className="block">
+					<defs>
+						<pattern
+							id={patternId}
+							width={MINIMAP_DOT_SPACING}
+							height={MINIMAP_DOT_SPACING}
+							patternUnits="userSpaceOnUse"
+						>
+							<rect
+								width={MINIMAP_DOT_SPACING}
+								height={MINIMAP_DOT_SPACING}
+								fill="var(--canvas-bg, hsl(var(--background)))"
+							/>
+							<circle
+								cx={MINIMAP_DOT_RADIUS * 2}
+								cy={MINIMAP_DOT_RADIUS * 2}
+								r={MINIMAP_DOT_RADIUS}
+								fill="var(--canvas-grid, hsl(var(--foreground)))"
+								opacity={0.45}
+							/>
+						</pattern>
+					</defs>
+
 					<rect
 						width={MINIMAP_WIDTH}
 						height={MINIMAP_HEIGHT}
-						fill="var(--canvas-bg, hsl(var(--background)))"
+						fill={`url(#${patternId})`}
 					/>
 
 					{scaledEdges.map((edge) => (

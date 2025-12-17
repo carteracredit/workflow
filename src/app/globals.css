@@ -223,11 +223,14 @@
 
 /* Canvas grid pattern */
 .canvas-grid {
+	--canvas-dot-size: 1.25px;
 	background-color: var(--canvas-bg);
-	background-image:
-		linear-gradient(var(--canvas-grid) 1px, transparent 1px),
-		linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
-	background-size: 20px 20px;
+	background-image: radial-gradient(
+		circle at 1px 1px,
+		var(--canvas-grid) var(--canvas-dot-size),
+		transparent calc(var(--canvas-dot-size) + 0.25px)
+	);
+	background-size: 24px 24px;
 	user-select: none;
 	-webkit-user-select: none;
 	-moz-user-select: none;
