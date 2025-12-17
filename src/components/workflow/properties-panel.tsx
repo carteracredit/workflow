@@ -59,6 +59,7 @@ interface PropertiesPanelProps {
 	onDeleteEdge: (edgeId: string) => void;
 	showWorkflowProperties: boolean;
 	onCloseWorkflowProperties: () => void;
+	position?: "left" | "right";
 }
 
 const NODES_WITH_ROLES = ["Form", "Challenge"];
@@ -132,6 +133,7 @@ export function PropertiesPanel({
 	onDeleteEdge,
 	showWorkflowProperties,
 	onCloseWorkflowProperties,
+	position = "right",
 }: PropertiesPanelProps) {
 	// For backward compatibility and single selection UI, use first selected item
 	const selectedNode =
@@ -227,6 +229,16 @@ export function PropertiesPanel({
 		onUpdateNode,
 	]);
 
+	const panelSideClass = position === "left" ? "border-r" : "border-l";
+	const panelContainerClass = cn(
+		"w-80 border-border bg-card overflow-hidden flex flex-col",
+		panelSideClass,
+	);
+	const panelContainerProps = {
+		className: panelContainerClass,
+		"data-workflow-panel": "properties",
+	} as const;
+
 	// Prioridad: Si showWorkflowProperties está activo, mostrar propiedades del flujo
 	// (incluso si hay un nodo o edge seleccionado)
 	if (
@@ -235,7 +247,7 @@ export function PropertiesPanel({
 		selectedEdges.length === 0
 	) {
 		return (
-			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
+			<div {...panelContainerProps}>
 				<div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
 					<h2 className="font-semibold">Propiedades del Flujo</h2>
 					<Button
@@ -373,7 +385,7 @@ export function PropertiesPanel({
 
 	if (selectedEdge) {
 		return (
-			<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
+			<div {...panelContainerProps}>
 				<div className="border-b border-border p-4 flex-shrink-0">
 					<h2 className="font-semibold">Propiedades de Flecha</h2>
 				</div>
@@ -668,7 +680,7 @@ export function PropertiesPanel({
 	};
 
 	return (
-		<div className="w-80 border-l border-border bg-card overflow-hidden flex flex-col">
+		<div {...panelContainerProps}>
 			<div className="border-b border-border p-4 flex-shrink-0">
 				<h2 className="font-semibold">Propiedades de Nodo</h2>
 			</div>

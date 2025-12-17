@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { TopBar } from "./workflow/top-bar";
-import { Palette } from "./workflow/palette";
 import { Canvas, DEFAULT_START_NODE_PAN } from "./workflow/canvas";
 import { PropertiesPanel } from "./workflow/properties-panel";
 import { ValidationTray } from "./workflow/validation-tray";
@@ -408,6 +407,24 @@ export function WorkflowEditor() {
 		}));
 	}, []);
 
+	const hasMultipleSelections =
+		workflowState.selectedNodeIds.length +
+			workflowState.selectedEdgeIds.length >
+			1 ||
+		(workflowState.selectedNodeIds.length > 0 &&
+			workflowState.selectedEdgeIds.length > 0);
+
+	const hasSingleNodeSelected = workflowState.selectedNodeIds.length === 1;
+	const hasSingleEdgeSelected = workflowState.selectedEdgeIds.length === 1;
+	const shouldShowWorkflowPanel =
+		showWorkflowProperties &&
+		workflowState.selectedNodeIds.length === 0 &&
+		workflowState.selectedEdgeIds.length === 0;
+
+	const shouldShowPropertiesOverlay =
+		!hasMultipleSelections &&
+		(shouldShowWorkflowPanel || hasSingleNodeSelected || hasSingleEdgeSelected);
+
 	return (
 		<div className="flex h-screen flex-col bg-background">
 			<TopBar
@@ -429,106 +446,114 @@ export function WorkflowEditor() {
 					});
 				}}
 				workflowMetadata={workflowState.metadata}
+				paletteProps={{
+					onAddNode: addNode,
+					zoom: workflowState.zoom,
+					pan: workflowState.pan,
+				}}
 			/>
 
-			<div className="flex flex-1 overflow-hidden">
-				<Palette
-					onAddNode={addNode}
-					zoom={workflowState.zoom}
-					pan={workflowState.pan}
-					stats={{
-						nodes: workflowState.nodes.length,
-						edges: workflowState.edges.length,
-					}}
-					validationState={{
-						status: validationStatus,
-						errorsCount: lastValidationErrorCount,
-					}}
-				/>
-
-				<div className="relative flex-1">
-					<Canvas
-						nodes={workflowState.nodes}
-						edges={workflowState.edges}
-						selectedNodeIds={workflowState.selectedNodeIds}
-						selectedEdgeIds={workflowState.selectedEdgeIds}
-						zoom={workflowState.zoom}
-						pan={workflowState.pan}
-						flags={workflowState.flags}
-						onUpdateNode={updateNode}
-						onDeleteNode={deleteNode}
-						onAddEdge={addEdge}
-						onDeleteEdge={deleteEdge}
-						onSelectNodes={(nodeIds) => {
-							updateWorkflow({ selectedNodeIds: nodeIds });
-							if (nodeIds.length > 0) {
-								setShowWorkflowProperties(false);
-							} else {
-								// Si se deselecciona todo, cerrar también el panel de propiedades del flujo
-								setShowWorkflowProperties(false);
-							}
-						}}
-						onSelectEdges={(edgeIds) => {
-							updateWorkflow({ selectedEdgeIds: edgeIds });
-							if (edgeIds.length > 0) {
-								setShowWorkflowProperties(false);
-							} else {
-								// Si se deselecciona todo, cerrar también el panel de propiedades del flujo
-								setShowWorkflowProperties(false);
-							}
-						}}
-						onUpdateZoom={(zoom) => updateWorkflow({ zoom })}
-						onUpdatePan={(pan) => updateWorkflow({ pan })}
-						validationErrors={validationErrors}
-						onSave={handleSave}
-						onReset={handleReset}
-						onValidate={handleValidate}
-						onPreview={() => setShowPreview(true)}
-						validationState={{
-							status: validationStatus,
-						}}
-						onCopy={handleCopy}
-						onPaste={handlePaste}
-					/>
-
-					{validationErrors.length > 0 && (
-						<ValidationTray
-							errors={validationErrors}
-							onClose={() => setValidationErrors([])}
-							onSelectNode={(nodeId) =>
-								updateWorkflow({ selectedNodeIds: nodeId ? [nodeId] : [] })
-							}
+			<div className="flex flex-1 flex-col overflow-hidden">
+				<div className="flex flex-1 overflow-hidden">
+					<div className="relative flex-1">
+						<Canvas
+							nodes={workflowState.nodes}
+							edges={workflowState.edges}
+							selectedNodeIds={workflowState.selectedNodeIds}
+							selectedEdgeIds={workflowState.selectedEdgeIds}
+							zoom={workflowState.zoom}
+							pan={workflowState.pan}
+							flags={workflowState.flags}
+							onUpdateNode={updateNode}
+							onDeleteNode={deleteNode}
+							onAddEdge={addEdge}
+							onDeleteEdge={deleteEdge}
+							onSelectNodes={(nodeIds) => {
+								updateWorkflow({ selectedNodeIds: nodeIds });
+								if (nodeIds.length > 0) {
+									setShowWorkflowProperties(false);
+								} else {
+									// Si se deselecciona todo, cerrar también el panel de propiedades del flujo
+									setShowWorkflowProperties(false);
+								}
+							}}
+							onSelectEdges={(edgeIds) => {
+								updateWorkflow({ selectedEdgeIds: edgeIds });
+								if (edgeIds.length > 0) {
+									setShowWorkflowProperties(false);
+								} else {
+									// Si se deselecciona todo, cerrar también el panel de propiedades del flujo
+									setShowWorkflowProperties(false);
+								}
+							}}
+							onUpdateZoom={(zoom) => updateWorkflow({ zoom })}
+							onUpdatePan={(pan) => updateWorkflow({ pan })}
+							validationErrors={validationErrors}
+							onSave={handleSave}
+							onReset={handleReset}
+							onValidate={handleValidate}
+							onPreview={() => setShowPreview(true)}
+							validationState={{
+								status: validationStatus,
+							}}
+							onCopy={handleCopy}
+							onPaste={handlePaste}
 						/>
-					)}
-				</div>
 
-				<PropertiesPanel
-					selectedNodes={
-						workflowState.selectedNodeIds.length > 0
-							? workflowState.selectedNodeIds
-									.map((id) => workflowState.nodes.find((n) => n.id === id))
-									.filter((n): n is WorkflowNode => n !== undefined)
-							: []
-					}
-					selectedEdges={
-						workflowState.selectedEdgeIds.length > 0
-							? workflowState.selectedEdgeIds
-									.map((id) => workflowState.edges.find((e) => e.id === id))
-									.filter((e): e is WorkflowEdge => e !== undefined)
-							: []
-					}
-					workflowMetadata={workflowState.metadata}
-					nodes={workflowState.nodes}
-					edges={workflowState.edges}
-					flags={workflowState.flags}
-					onUpdateNode={updateNode}
-					onUpdateEdge={updateEdge}
-					onUpdateMetadata={updateMetadata}
-					onAddEdge={addEdge}
-					onDeleteEdge={deleteEdge}
-					showWorkflowProperties={showWorkflowProperties}
-					onCloseWorkflowProperties={() => setShowWorkflowProperties(false)}
-				/>
+						{validationErrors.length > 0 && (
+							<ValidationTray
+								errors={validationErrors}
+								onClose={() => setValidationErrors([])}
+								onSelectNode={(nodeId) =>
+									updateWorkflow({ selectedNodeIds: nodeId ? [nodeId] : [] })
+								}
+							/>
+						)}
+
+						<div
+							className={`absolute inset-y-0 left-0 z-30 flex w-80 transition-opacity duration-200 ${
+								shouldShowPropertiesOverlay
+									? "pointer-events-auto opacity-100"
+									: "pointer-events-none opacity-0"
+							}`}
+						>
+							<PropertiesPanel
+								selectedNodes={
+									workflowState.selectedNodeIds.length > 0
+										? workflowState.selectedNodeIds
+												.map((id) =>
+													workflowState.nodes.find((n) => n.id === id),
+												)
+												.filter((n): n is WorkflowNode => n !== undefined)
+										: []
+								}
+								selectedEdges={
+									workflowState.selectedEdgeIds.length > 0
+										? workflowState.selectedEdgeIds
+												.map((id) =>
+													workflowState.edges.find((e) => e.id === id),
+												)
+												.filter((e): e is WorkflowEdge => e !== undefined)
+										: []
+								}
+								workflowMetadata={workflowState.metadata}
+								nodes={workflowState.nodes}
+								edges={workflowState.edges}
+								flags={workflowState.flags}
+								onUpdateNode={updateNode}
+								onUpdateEdge={updateEdge}
+								onUpdateMetadata={updateMetadata}
+								onAddEdge={addEdge}
+								onDeleteEdge={deleteEdge}
+								showWorkflowProperties={showWorkflowProperties}
+								onCloseWorkflowProperties={() =>
+									setShowWorkflowProperties(false)
+								}
+								position="left"
+							/>
+						</div>
+					</div>
+				</div>
 			</div>
 
 			{showPreview && (
