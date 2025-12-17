@@ -1,3 +1,11 @@
+# [1.0.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.4...v1.0.0-rc.5) (2025-12-17)
+
+
+### Features
+
+* enhance ThemeSwitcher with dropdown menu for theme selection ([631150c](https://github.com/carteracredit/workflow/commit/631150c1624ecfdd23bf4be332c24c49cdc2ac2d))
+* Make paletteProps optional and conditionally render ([14e08d4](https://github.com/carteracredit/workflow/commit/14e08d421f8f7bb531ee3da5341fbf8d48e85b13))
+
 # [1.0.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.3...v1.0.0-rc.4) (2025-12-16)
 
 
