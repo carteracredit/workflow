@@ -294,6 +294,18 @@ export function WorkflowEditor() {
 			updates: Partial<WorkflowNode>,
 			options?: { recordHistory?: boolean },
 		) => {
+			if (options?.recordHistory === false) {
+				setWorkflowState((prev) => ({
+					...prev,
+					nodes: prev.nodes.map((n) => {
+						if (n.id !== nodeId) return n;
+						const nextNode = { ...n, ...updates };
+						return withDefaultStaleTimeout(nextNode);
+					}),
+				}));
+				return;
+			}
+
 			applyHistoryChange((prev) => ({
 				nodes: prev.nodes.map((n) => {
 					if (n.id !== nodeId) return n;
@@ -301,7 +313,7 @@ export function WorkflowEditor() {
 					return withDefaultStaleTimeout(nextNode);
 				}),
 				edges: prev.edges,
-				recordHistory: options?.recordHistory ?? true,
+				recordHistory: true,
 			}));
 		},
 		[applyHistoryChange],
