@@ -1,3 +1,11 @@
+# [1.0.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.5...v1.0.0-rc.6) (2025-12-17)
+
+
+### Features
+
+* Allow disabling history recording for node updates ([f818142](https://github.com/carteracredit/workflow/commit/f81814215f023325f46ae03ca0d9c3183e8c2b13))
+* Implement undo/redo functionality for workflow editor ([493c3e9](https://github.com/carteracredit/workflow/commit/493c3e92d7977e52e4afbdac3a0f2e8d1abb354b))
+
 # [1.0.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.4...v1.0.0-rc.5) (2025-12-17)
 
 
