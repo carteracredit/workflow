@@ -19,6 +19,12 @@ import type {
 import { STALE_SUPPORTED_NODE_TYPES } from "@/lib/workflow/types";
 import { validateWorkflow } from "@/lib/workflow/validation";
 import { EXAMPLE_WORKFLOWS } from "@/lib/example-workflows";
+import {
+	canUndoHistory,
+	initializeHistory,
+	pushHistoryState,
+	undoHistory,
+} from "@/lib/workflow/history";
 
 const STORAGE_KEY = "cartera-workflow-state";
 
@@ -106,6 +112,39 @@ const createDefaultMetadata = (): WorkflowMetadata => ({
 	updatedAt: new Date().toISOString(),
 });
 
+const createHistoryEnabledState = (
+	state: Omit<WorkflowState, "history" | "historyIndex">,
+): WorkflowState => {
+	const { history, historyIndex } = initializeHistory(state.nodes, state.edges);
+	return {
+		...state,
+		history,
+		historyIndex,
+	};
+};
+
+const createEmptyWorkflowState = (): WorkflowState => {
+	const nodes = [createInitialStartNode()];
+	const edges: WorkflowEdge[] = [];
+
+	return createHistoryEnabledState({
+		metadata: createDefaultMetadata(),
+		nodes,
+		edges,
+		flags: [],
+		selectedNodeIds: [],
+		selectedEdgeIds: [],
+		zoom: 1,
+		pan: { ...DEFAULT_START_NODE_PAN },
+	});
+};
+
+type HistoryChange = Partial<WorkflowState> & {
+	nodes: WorkflowNode[];
+	edges: WorkflowEdge[];
+	recordHistory?: boolean;
+};
+
 export function WorkflowEditor() {
 	const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
 		if (typeof window !== "undefined") {
@@ -126,31 +165,22 @@ export function WorkflowEditor() {
 						: parsed.selectedEdgeId
 							? [parsed.selectedEdgeId]
 							: [];
-					return {
-						...parsed,
+					return createHistoryEnabledState({
 						metadata: parsed.metadata || createDefaultMetadata(),
 						nodes: migratedNodes.map(withDefaultStaleTimeout),
+						edges: parsed.edges || [],
 						flags: parsed.flags || [],
 						selectedNodeIds,
 						selectedEdgeIds,
-					};
+						zoom: parsed.zoom ?? 1,
+						pan: parsed.pan || { ...DEFAULT_START_NODE_PAN },
+					});
 				} catch (e) {
 					console.error("[v0] Error loading from localStorage:", e);
 				}
 			}
 		}
-		return {
-			metadata: createDefaultMetadata(),
-			nodes: [createInitialStartNode()],
-			edges: [],
-			flags: [],
-			selectedNodeIds: [],
-			selectedEdgeIds: [],
-			zoom: 1,
-			pan: { ...DEFAULT_START_NODE_PAN }, // Pan base, Canvas ajusta posición inicial
-			history: [],
-			historyIndex: -1,
-		};
+		return createEmptyWorkflowState();
 	});
 
 	const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
@@ -209,62 +239,138 @@ export function WorkflowEditor() {
 		setWorkflowState((prev) => ({ ...prev, ...updates }));
 	}, []);
 
-	const addNode = useCallback((node: WorkflowNode) => {
-		setWorkflowState((prev) => ({
-			...prev,
-			nodes: [...prev.nodes, withDefaultStaleTimeout(node)],
-		}));
+	const applyHistoryChange = useCallback(
+		(getUpdates: (prev: WorkflowState) => HistoryChange) => {
+			setWorkflowState((prev) => {
+				const { recordHistory = true, ...updates } = getUpdates(prev);
+				const historyPayload = recordHistory
+					? pushHistoryState({
+							history: prev.history,
+							historyIndex: prev.historyIndex,
+							nodes: updates.nodes,
+							edges: updates.edges,
+						})
+					: {};
+
+				return {
+					...prev,
+					...updates,
+					...historyPayload,
+				};
+			});
+		},
+		[setWorkflowState],
+	);
+
+	const commitHistorySnapshot = useCallback(() => {
+		setWorkflowState((prev) => {
+			const historyPayload = pushHistoryState({
+				history: prev.history,
+				historyIndex: prev.historyIndex,
+				nodes: prev.nodes,
+				edges: prev.edges,
+			});
+
+			return {
+				...prev,
+				...historyPayload,
+			};
+		});
 	}, []);
 
+	const addNode = useCallback(
+		(node: WorkflowNode) => {
+			applyHistoryChange((prev) => ({
+				nodes: [...prev.nodes, withDefaultStaleTimeout(node)],
+				edges: prev.edges,
+			}));
+		},
+		[applyHistoryChange],
+	);
+
 	const updateNode = useCallback(
-		(nodeId: string, updates: Partial<WorkflowNode>) => {
-			setWorkflowState((prev) => ({
-				...prev,
+		(
+			nodeId: string,
+			updates: Partial<WorkflowNode>,
+			options?: { recordHistory?: boolean },
+		) => {
+			if (options?.recordHistory === false) {
+				setWorkflowState((prev) => ({
+					...prev,
+					nodes: prev.nodes.map((n) => {
+						if (n.id !== nodeId) return n;
+						const nextNode = { ...n, ...updates };
+						return withDefaultStaleTimeout(nextNode);
+					}),
+				}));
+				return;
+			}
+
+			applyHistoryChange((prev) => ({
 				nodes: prev.nodes.map((n) => {
 					if (n.id !== nodeId) return n;
 					const nextNode = { ...n, ...updates };
 					return withDefaultStaleTimeout(nextNode);
 				}),
+				edges: prev.edges,
+				recordHistory: true,
 			}));
 		},
-		[],
+		[applyHistoryChange],
 	);
 
-	const deleteNode = useCallback((nodeId: string) => {
-		setWorkflowState((prev) => ({
-			...prev,
-			nodes: prev.nodes.filter((n) => n.id !== nodeId),
-			edges: prev.edges.filter((e) => e.from !== nodeId && e.to !== nodeId),
-			selectedNodeIds: prev.selectedNodeIds.filter((id) => id !== nodeId),
-		}));
-	}, []);
+	const deleteNode = useCallback(
+		(nodeId: string) => {
+			applyHistoryChange((prev) => {
+				const nextEdges = prev.edges.filter(
+					(e) => e.from !== nodeId && e.to !== nodeId,
+				);
+				const nextEdgeIds = new Set(nextEdges.map((edge) => edge.id));
+				return {
+					nodes: prev.nodes.filter((n) => n.id !== nodeId),
+					edges: nextEdges,
+					selectedNodeIds: prev.selectedNodeIds.filter((id) => id !== nodeId),
+					selectedEdgeIds: prev.selectedEdgeIds.filter((id) =>
+						nextEdgeIds.has(id),
+					),
+				};
+			});
+		},
+		[applyHistoryChange],
+	);
 
-	const addEdge = useCallback((edge: WorkflowEdge) => {
-		setWorkflowState((prev) => ({
-			...prev,
-			edges: [...prev.edges, edge],
-		}));
-	}, []);
+	const addEdge = useCallback(
+		(edge: WorkflowEdge) => {
+			applyHistoryChange((prev) => ({
+				nodes: prev.nodes,
+				edges: [...prev.edges, edge],
+			}));
+		},
+		[applyHistoryChange],
+	);
 
 	const updateEdge = useCallback(
 		(edgeId: string, updates: Partial<WorkflowEdge>) => {
-			setWorkflowState((prev) => ({
-				...prev,
+			applyHistoryChange((prev) => ({
+				nodes: prev.nodes,
 				edges: prev.edges.map((e) =>
 					e.id === edgeId ? { ...e, ...updates } : e,
 				),
 			}));
 		},
-		[],
+		[applyHistoryChange],
 	);
 
-	const deleteEdge = useCallback((edgeId: string) => {
-		setWorkflowState((prev) => ({
-			...prev,
-			edges: prev.edges.filter((e) => e.id !== edgeId),
-			selectedEdgeIds: prev.selectedEdgeIds.filter((id) => id !== edgeId),
-		}));
-	}, []);
+	const deleteEdge = useCallback(
+		(edgeId: string) => {
+			applyHistoryChange((prev) => ({
+				nodes: prev.nodes,
+				edges: prev.edges.filter((e) => e.id !== edgeId),
+				selectedEdgeIds: prev.selectedEdgeIds.filter((id) => id !== edgeId),
+			}));
+		},
+		[applyHistoryChange],
+	);
 
 	const handleCopy = useCallback(
 		(copiedNodes: WorkflowNode[], copiedEdges: WorkflowEdge[]) => {
@@ -283,31 +389,44 @@ export function WorkflowEditor() {
 
 	const handlePaste = useCallback(
 		(pastedNodes: WorkflowNode[], pastedEdges: WorkflowEdge[]) => {
-			setWorkflowState((prev) => {
-				// Add pasted nodes with default stale timeout
+			applyHistoryChange((prev) => {
 				const newNodes = [
 					...prev.nodes,
 					...pastedNodes.map(withDefaultStaleTimeout),
 				];
-
-				// Add pasted edges
 				const newEdges = [...prev.edges, ...pastedEdges];
-
-				// Select the pasted elements
-				const pastedNodeIds = pastedNodes.map((n) => n.id);
-				const pastedEdgeIds = pastedEdges.map((e) => e.id);
-
 				return {
-					...prev,
 					nodes: newNodes,
 					edges: newEdges,
-					selectedNodeIds: pastedNodeIds,
-					selectedEdgeIds: pastedEdgeIds,
+					selectedNodeIds: pastedNodes.map((n) => n.id),
+					selectedEdgeIds: pastedEdges.map((e) => e.id),
 				};
 			});
 		},
-		[],
+		[applyHistoryChange],
 	);
+
+	const handleUndo = useCallback(() => {
+		setWorkflowState((prev) => {
+			const undoResult = undoHistory({
+				history: prev.history,
+				historyIndex: prev.historyIndex,
+			});
+
+			if (!undoResult) {
+				return prev;
+			}
+
+			return {
+				...prev,
+				nodes: undoResult.nodes,
+				edges: undoResult.edges,
+				selectedNodeIds: [],
+				selectedEdgeIds: [],
+				historyIndex: undoResult.historyIndex,
+			};
+		});
+	}, [setWorkflowState]);
 
 	const handleValidate = useCallback(() => {
 		const errors = validateWorkflow(workflowState.nodes, workflowState.edges);
@@ -329,19 +448,7 @@ export function WorkflowEditor() {
 			"¿Estás seguro de que deseas eliminar el flujo actual? Esta acción no se puede deshacer.",
 		);
 		if (confirmed) {
-			const emptyState: WorkflowState = {
-				metadata: createDefaultMetadata(),
-				nodes: [createInitialStartNode()],
-				edges: [],
-				flags: [],
-				selectedNodeIds: [],
-				selectedEdgeIds: [],
-				zoom: 1,
-				pan: { ...DEFAULT_START_NODE_PAN }, // Pan base, Canvas ajusta posición inicial
-				history: [],
-				historyIndex: -1,
-			};
-			setWorkflowState(emptyState);
+			setWorkflowState(createEmptyWorkflowState());
 			setValidationErrors([]);
 			setValidationStatus("idle");
 			setLastValidationErrorCount(0);
@@ -354,9 +461,9 @@ export function WorkflowEditor() {
 	const handleLoadExample = useCallback(
 		(exampleKey: "basic" | "api" | "manual") => {
 			const example = EXAMPLE_WORKFLOWS[exampleKey];
-			setWorkflowState((prev) => ({
-				...prev,
-				nodes: example.nodes.map(withDefaultStaleTimeout),
+			const nextNodes = example.nodes.map(withDefaultStaleTimeout);
+			applyHistoryChange((prev) => ({
+				nodes: nextNodes,
 				edges: example.edges,
 				selectedNodeIds: [],
 				selectedEdgeIds: [],
@@ -365,7 +472,7 @@ export function WorkflowEditor() {
 			setValidationStatus("idle");
 			setLastValidationErrorCount(0);
 		},
-		[],
+		[applyHistoryChange],
 	);
 
 	const handleExportJSON = useCallback(() => {
@@ -416,6 +523,7 @@ export function WorkflowEditor() {
 
 	const hasSingleNodeSelected = workflowState.selectedNodeIds.length === 1;
 	const hasSingleEdgeSelected = workflowState.selectedEdgeIds.length === 1;
+	const canUndo = canUndoHistory(workflowState.historyIndex);
 	const shouldShowWorkflowPanel =
 		showWorkflowProperties &&
 		workflowState.selectedNodeIds.length === 0 &&
@@ -498,6 +606,9 @@ export function WorkflowEditor() {
 							}}
 							onCopy={handleCopy}
 							onPaste={handlePaste}
+							onUndo={handleUndo}
+							canUndo={canUndo}
+							onCommitHistory={commitHistorySnapshot}
 						/>
 
 						{validationErrors.length > 0 && (
@@ -572,8 +683,7 @@ export function WorkflowEditor() {
 					onImport={(data) => {
 						// Migrar nodos legacy antes de importar
 						const migratedNodes = migrateLegacyNodes(data.nodes);
-						setWorkflowState((prev) => ({
-							...prev,
+						applyHistoryChange((prev) => ({
 							nodes: migratedNodes.map(withDefaultStaleTimeout),
 							edges: data.edges,
 							selectedNodeIds: [],
