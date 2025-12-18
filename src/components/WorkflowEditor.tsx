@@ -2,7 +2,11 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { TopBar } from "./workflow/top-bar";
-import { Canvas, DEFAULT_START_NODE_PAN } from "./workflow/canvas";
+import {
+	Canvas,
+	DEFAULT_START_NODE_PAN,
+	matchToolbarShortcut,
+} from "./workflow/canvas";
 import { PropertiesPanel } from "./workflow/properties-panel";
 import { ValidationTray } from "./workflow/validation-tray";
 import { PreviewModal } from "./workflow/preview-modal";
@@ -519,6 +523,48 @@ export function WorkflowEditor() {
 			);
 		}
 	}, [handleValidate]);
+
+	// Handle global keyboard shortcuts
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			// Check if user is typing in an input/textarea
+			const activeElement = document.activeElement;
+			const isInputActive =
+				activeElement &&
+				(activeElement.tagName === "INPUT" ||
+					activeElement.tagName === "TEXTAREA" ||
+					activeElement.getAttribute("contenteditable") === "true");
+
+			if (isInputActive) {
+				return;
+			}
+
+			const toolbarAction = matchToolbarShortcut(e);
+			if (toolbarAction) {
+				e.preventDefault();
+				if (toolbarAction === "publish") {
+					handlePublish();
+				} else if (toolbarAction === "export") {
+					handleExportJSON();
+				} else if (toolbarAction === "import") {
+					handleImportJSON();
+				} else if (toolbarAction === "flags") {
+					setShowFlagManager(true);
+				} else if (toolbarAction === "settings") {
+					setShowWorkflowProperties((prev) => {
+						const newValue = !prev;
+						if (newValue) {
+							updateWorkflow({ selectedNodeIds: [], selectedEdgeIds: [] });
+						}
+						return newValue;
+					});
+				}
+			}
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [handlePublish, handleExportJSON, handleImportJSON, updateWorkflow]);
 
 	const updateMetadata = useCallback((updates: Partial<WorkflowMetadata>) => {
 		setWorkflowState((prev) => ({

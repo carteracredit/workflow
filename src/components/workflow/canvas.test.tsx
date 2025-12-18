@@ -235,14 +235,13 @@ describe("matchToolbarShortcut", () => {
 		).toBe("validate");
 	});
 
-	it("detects reset only when alt+shift are present", () => {
+	it("detects reset with ctrl/cmd+shift+R (without alt)", () => {
 		expect(
 			matchToolbarShortcut(
 				createEvent({
 					key: "r",
 					ctrlKey: true,
 					shiftKey: true,
-					altKey: true,
 				}),
 			),
 		).toBe("reset");
@@ -252,6 +251,7 @@ describe("matchToolbarShortcut", () => {
 					key: "r",
 					ctrlKey: true,
 					shiftKey: true,
+					altKey: true,
 				}),
 			),
 		).toBeNull();

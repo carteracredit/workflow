@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, Fragment, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Menubar,
@@ -23,6 +23,12 @@ import {
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
 	Select,
@@ -49,6 +55,7 @@ import {
 	User,
 	LogOut,
 	Check,
+	Keyboard,
 } from "lucide-react";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
@@ -59,64 +66,125 @@ type ShortcutDefinition = {
 	win: string[];
 	altWin?: string[];
 	description?: string;
+	category?: string;
 };
 
 const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
+	// Barra superior - Acciones principales
 	{
 		label: "Guardar workflow",
 		mac: ["⌘", "S"],
 		win: ["Ctrl", "S"],
+		category: "Barra superior",
+	},
+	{
+		label: "Publicar",
+		mac: ["⌘", "⇧", "P"],
+		win: ["Ctrl", "⇧", "P"],
+		category: "Barra superior",
 	},
 	{
 		label: "Preview",
 		mac: ["⌘", "P"],
 		win: ["Ctrl", "P"],
+		category: "Barra superior",
 	},
 	{
 		label: "Validar",
 		mac: ["⌘", "⇧", "V"],
-		win: ["Ctrl", "Shift", "V"],
+		win: ["Ctrl", "⇧", "V"],
+		category: "Barra superior",
 	},
 	{
 		label: "Reiniciar flujo",
-		mac: ["⌘", "⌥", "⇧", "R"],
-		win: ["Ctrl", "Alt", "Shift", "R"],
+		mac: ["⌘", "⇧", "R"],
+		win: ["Ctrl", "⇧", "R"],
+		category: "Barra superior",
+	},
+	{
+		label: "Exportar JSON",
+		mac: ["⌘", "E"],
+		win: ["Ctrl", "E"],
+		category: "Barra superior",
+	},
+	{
+		label: "Importar JSON",
+		mac: ["⌘", "I"],
+		win: ["Ctrl", "I"],
+		category: "Barra superior",
+	},
+	{
+		label: "Gestionar Flags",
+		mac: ["⌘", "⇧", "F"],
+		win: ["Ctrl", "⇧", "F"],
+		category: "Barra superior",
+	},
+	{
+		label: "Propiedades del flujo",
+		mac: ["⌘", ","],
+		win: ["Ctrl", ","],
+		category: "Barra superior",
+	},
+	// Barra inferior - Herramientas
+	{
+		label: "Herramienta de pan (mano)",
+		mac: ["Space"],
+		win: ["Space"],
+		category: "Barra inferior",
+	},
+	{
+		label: "Herramienta de selección",
+		mac: ["V"],
+		win: ["V"],
+		category: "Barra inferior",
 	},
 	{
 		label: "Deshacer",
 		mac: ["⌘", "Z"],
 		win: ["Ctrl", "Z"],
+		category: "Barra inferior",
 	},
 	{
 		label: "Rehacer",
-		mac: ["⌘", "⇧", "Z"],
-		win: ["Ctrl", "Shift", "Z"],
-		altWin: ["Ctrl", "Y"],
+		mac: ["⌘", "Y"],
+		win: ["Ctrl", "Y"],
+		category: "Barra inferior",
 	},
 	{
 		label: "Copiar selección",
 		mac: ["⌘", "C"],
 		win: ["Ctrl", "C"],
+		category: "Barra inferior",
 	},
 	{
 		label: "Pegar selección",
 		mac: ["⌘", "V"],
 		win: ["Ctrl", "V"],
+		category: "Barra inferior",
+	},
+	{
+		label: "Eliminar selección",
+		mac: ["Delete"],
+		win: ["Delete"],
+		category: "Barra inferior",
 	},
 	{
 		label: "Ajustar a la vista",
 		mac: ["F"],
 		win: ["F"],
+		category: "Barra inferior",
 	},
 	{
 		label: "Acercar (Zoom +)",
 		mac: ["2"],
 		win: ["2"],
+		category: "Barra inferior",
 	},
 	{
 		label: "Alejar (Zoom -)",
 		mac: ["1"],
 		win: ["1"],
+		category: "Barra inferior",
 	},
 ];
 
@@ -149,6 +217,8 @@ export function TopBar({
 	workflowMetadata,
 	paletteProps,
 }: TopBarProps) {
+	const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+
 	const displayVersion = (() => {
 		const match = workflowMetadata.version.match(/(\d+)/);
 		if (!match) return "v1";
@@ -280,7 +350,15 @@ export function TopBar({
 									Ayuda
 								</MenubarItem>
 								<MenubarSeparator />
-								<KeyboardShortcutsSection />
+								<MenubarItem
+									onSelect={(e) => {
+										e.preventDefault();
+										setShortcutsModalOpen(true);
+									}}
+								>
+									<Keyboard className="mr-2 h-4 w-4" />
+									Atajos de teclado
+								</MenubarItem>
 							</MenubarContent>
 						</MenubarMenu>
 					</Menubar>
@@ -290,6 +368,10 @@ export function TopBar({
 					<UserMenu />
 				</div>
 			</div>
+			<KeyboardShortcutsModal
+				open={shortcutsModalOpen}
+				onOpenChange={setShortcutsModalOpen}
+			/>
 		</div>
 	);
 }
@@ -368,77 +450,134 @@ function UserMenu() {
 	);
 }
 
-function KeyboardShortcutsSection() {
+export function KeyboardShortcutsModal({
+	open,
+	onOpenChange,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+}) {
+	const normalizeKeys = (keys: string[]) =>
+		keys.map((k) => (k === "Shift" ? "⇧" : k));
+
+	const renderShortcutRow = (shortcut: ShortcutDefinition) => {
+		const macNormalized = normalizeKeys(shortcut.mac);
+		const winNormalized = normalizeKeys(shortcut.win);
+		const areIdentical =
+			JSON.stringify(macNormalized) === JSON.stringify(winNormalized);
+		const macRest = macNormalized.slice(1);
+		const canMerge =
+			!areIdentical &&
+			macNormalized[0] === "⌘" &&
+			winNormalized[0] === "Ctrl" &&
+			JSON.stringify(macRest) === JSON.stringify(winNormalized.slice(1));
+
+		return (
+			<div
+				key={shortcut.label}
+				className="flex items-center justify-between gap-8 py-2"
+			>
+				<span className="text-sm text-foreground/90 flex-shrink-0 min-w-[180px]">
+					{shortcut.label}
+				</span>
+				<div className="flex items-center gap-1.5 flex-shrink-0">
+					{areIdentical ? (
+						<ShortcutKeys keys={macNormalized} />
+					) : canMerge ? (
+						<>
+							<kbd className="inline-flex items-center justify-center min-w-[28px] h-7 px-2.5 rounded-md border border-border/40 bg-muted/80 text-xs font-semibold text-foreground shadow-sm">
+								⌘
+							</kbd>
+							<span className="text-xs text-muted-foreground/60 mx-1">/</span>
+							<span className="text-xs font-medium text-foreground/90">
+								Ctrl
+							</span>
+							{macRest.length > 0 && (
+								<>
+									<span className="text-xs text-muted-foreground/60 mx-1">
+										+
+									</span>
+									<ShortcutKeys keys={macRest} />
+								</>
+							)}
+						</>
+					) : (
+						<>
+							<ShortcutKeys keys={macNormalized} />
+							<span className="text-xs text-muted-foreground/50 mx-1">/</span>
+							<ShortcutKeys keys={winNormalized} />
+						</>
+					)}
+				</div>
+			</div>
+		);
+	};
+
+	const barraSuperior = KEYBOARD_SHORTCUTS.filter(
+		(shortcut) => shortcut.category === "Barra superior",
+	);
+	const barraInferior = KEYBOARD_SHORTCUTS.filter(
+		(shortcut) => shortcut.category === "Barra inferior",
+	);
+	const mitad = Math.ceil(barraInferior.length / 2);
+	const inferiorColumn1 = barraInferior.slice(0, mitad);
+	const inferiorColumn2 = barraInferior.slice(mitad);
+
 	return (
-		<div className="w-72 rounded-md border border-border/60 bg-muted/30 p-3">
-			<p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-				Atajos de teclado
-			</p>
-			<div className="mt-2 flex flex-col gap-2">
-				{KEYBOARD_SHORTCUTS.map((shortcut) => (
-					<div
-						key={shortcut.label}
-						className="rounded-sm border border-transparent px-2 py-1 transition-colors hover:border-border/40 hover:bg-card/60"
-					>
-						<p className="text-sm font-medium text-foreground">
-							{shortcut.label}
-						</p>
-						<div className="mt-1 flex flex-col gap-1 text-[11px] text-muted-foreground">
-							<ShortcutChord label="macOS" keys={shortcut.mac} />
-							<ShortcutChord label="Win / Linux" keys={shortcut.win} />
-							{shortcut.altWin && (
-								<ShortcutChord label="Alternativa" keys={shortcut.altWin} />
-							)}
-							{shortcut.description && (
-								<p className="text-[10px] text-muted-foreground/80">
-									{shortcut.description}
-								</p>
-							)}
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="!max-w-[1800px] sm:!max-w-[1800px] w-[96vw] h-auto max-h-none flex flex-col p-0 gap-0">
+				<DialogHeader className="px-10 pt-6 pb-5 border-b flex-shrink-0">
+					<DialogTitle className="flex items-center gap-2 text-lg">
+						<Keyboard className="h-5 w-5" />
+						Atajos de teclado
+					</DialogTitle>
+				</DialogHeader>
+
+				<div className="px-14 py-8">
+					<div className="grid grid-cols-3 gap-x-20">
+						{/* Columna 1: Barra Superior */}
+						<div className="flex flex-col gap-2">
+							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+								BARRA SUPERIOR
+							</h3>
+							{barraSuperior.map(renderShortcutRow)}
+						</div>
+
+						{/* Columna 2: Barra Inferior (primera mitad) */}
+						<div className="flex flex-col gap-2">
+							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+								BARRA INFERIOR
+							</h3>
+							{inferiorColumn1.map(renderShortcutRow)}
+						</div>
+
+						{/* Columna 3: Barra Inferior (segunda mitad) */}
+						<div className="flex flex-col gap-2">
+							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 invisible">
+								BARRA INFERIOR
+							</h3>
+							{inferiorColumn2.map(renderShortcutRow)}
 						</div>
 					</div>
-				))}
-			</div>
-		</div>
+				</div>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
-function ShortcutChord({ label, keys }: { label: string; keys: string[] }) {
+function ShortcutKeys({ keys }: { keys: string[] }) {
 	return (
-		<div className="flex flex-wrap items-center gap-2">
-			<span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-				{label}
-			</span>
-			<div className="flex items-center gap-1">
-				{keys.map((key, index) => (
-					<ShortcutKey
-						key={`${label}-${key}-${index}`}
-						separator={index < keys.length - 1}
-					>
+		<div className="flex items-center gap-1">
+			{keys.map((key, index) => (
+				<Fragment key={`${key}-${index}`}>
+					<kbd className="inline-flex items-center justify-center min-w-[28px] h-7 px-2.5 rounded-md border border-border/40 bg-muted/80 text-xs font-semibold text-foreground shadow-sm">
 						{key}
-					</ShortcutKey>
-				))}
-			</div>
+					</kbd>
+					{index < keys.length - 1 && (
+						<span className="text-xs text-muted-foreground/60 mx-0.5">+</span>
+					)}
+				</Fragment>
+			))}
 		</div>
-	);
-}
-
-function ShortcutKey({
-	children,
-	separator,
-}: {
-	children: ReactNode;
-	separator?: boolean;
-}) {
-	return (
-		<>
-			<kbd className="rounded border border-border bg-background/80 px-1.5 py-0.5 text-[11px] font-semibold text-foreground shadow-sm">
-				{children}
-			</kbd>
-			{separator && (
-				<span className="text-[10px] font-semibold text-muted-foreground">
-					+
-				</span>
-			)}
-		</>
 	);
 }

@@ -101,7 +101,16 @@ type ShortcutEventLike = Pick<
 	"key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"
 >;
 
-export type ToolbarShortcutAction = "save" | "reset" | "validate" | "preview";
+export type ToolbarShortcutAction =
+	| "save"
+	| "reset"
+	| "validate"
+	| "preview"
+	| "publish"
+	| "export"
+	| "import"
+	| "flags"
+	| "settings";
 
 export const matchToolbarShortcut = (
 	event: ShortcutEventLike,
@@ -127,8 +136,28 @@ export const matchToolbarShortcut = (
 		return "validate";
 	}
 
-	if (hasAlt && hasShift && key === "r") {
+	if (!hasAlt && hasShift && key === "r") {
 		return "reset";
+	}
+
+	if (!hasAlt && hasShift && key === "p") {
+		return "publish";
+	}
+
+	if (!hasAlt && !hasShift && key === "e") {
+		return "export";
+	}
+
+	if (!hasAlt && !hasShift && key === "i") {
+		return "import";
+	}
+
+	if (!hasAlt && hasShift && key === "f") {
+		return "flags";
+	}
+
+	if (!hasAlt && !hasShift && key === ",") {
+		return "settings";
 	}
 
 	return null;
@@ -552,10 +581,6 @@ export function Canvas({
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (!isEditorFocused) {
-				return;
-			}
-
 			// Check if user is typing in an input/textarea
 			const activeElement = document.activeElement;
 			const isInputActive =
@@ -567,6 +592,7 @@ export function Canvas({
 			const isCtrlLikePressed = e.ctrlKey || e.metaKey;
 			const key = e.key.toLowerCase();
 
+			// Toolbar shortcuts (save, reset, validate, preview) work globally
 			if (!isInputActive) {
 				const toolbarAction = matchToolbarShortcut(e);
 				if (toolbarAction) {
@@ -580,8 +606,27 @@ export function Canvas({
 					} else if (toolbarAction === "preview") {
 						onPreview?.();
 					}
+					// Los demás shortcuts (publish, export, import, flags, settings) se manejan en WorkflowEditor
 					return;
 				}
+			}
+
+			// Editor-specific shortcuts only work when editor is focused
+			if (!isEditorFocused) {
+				return;
+			}
+
+			// Handle tool selection (V key)
+			if (
+				!isInputActive &&
+				!isCtrlLikePressed &&
+				key === "v" &&
+				!e.shiftKey &&
+				!e.altKey
+			) {
+				e.preventDefault();
+				activateSelectionMode();
+				return;
 			}
 
 			// Handle Undo/Redo shortcuts
