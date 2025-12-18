@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Menubar,
 	MenubarContent,
 	MenubarItem,
 	MenubarMenu,
+	MenubarSeparator,
 	MenubarSub,
 	MenubarSubContent,
 	MenubarSubTrigger,
@@ -51,6 +52,73 @@ import {
 } from "lucide-react";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
+
+type ShortcutDefinition = {
+	label: string;
+	mac: string[];
+	win: string[];
+	altWin?: string[];
+	description?: string;
+};
+
+const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
+	{
+		label: "Guardar workflow",
+		mac: ["⌘", "S"],
+		win: ["Ctrl", "S"],
+	},
+	{
+		label: "Preview",
+		mac: ["⌘", "P"],
+		win: ["Ctrl", "P"],
+	},
+	{
+		label: "Validar",
+		mac: ["⌘", "⇧", "V"],
+		win: ["Ctrl", "Shift", "V"],
+	},
+	{
+		label: "Reiniciar flujo",
+		mac: ["⌘", "⌥", "⇧", "R"],
+		win: ["Ctrl", "Alt", "Shift", "R"],
+	},
+	{
+		label: "Deshacer",
+		mac: ["⌘", "Z"],
+		win: ["Ctrl", "Z"],
+	},
+	{
+		label: "Rehacer",
+		mac: ["⌘", "⇧", "Z"],
+		win: ["Ctrl", "Shift", "Z"],
+		altWin: ["Ctrl", "Y"],
+	},
+	{
+		label: "Copiar selección",
+		mac: ["⌘", "C"],
+		win: ["Ctrl", "C"],
+	},
+	{
+		label: "Pegar selección",
+		mac: ["⌘", "V"],
+		win: ["Ctrl", "V"],
+	},
+	{
+		label: "Ajustar a la vista",
+		mac: ["F"],
+		win: ["F"],
+	},
+	{
+		label: "Acercar (Zoom +)",
+		mac: ["2"],
+		win: ["2"],
+	},
+	{
+		label: "Alejar (Zoom -)",
+		mac: ["1"],
+		win: ["1"],
+	},
+];
 
 interface TopBarProps {
 	onNew: () => void;
@@ -211,6 +279,8 @@ export function TopBar({
 									<HelpCircle className="mr-2 h-4 w-4" />
 									Ayuda
 								</MenubarItem>
+								<MenubarSeparator />
+								<KeyboardShortcutsSection />
 							</MenubarContent>
 						</MenubarMenu>
 					</Menubar>
@@ -295,5 +365,80 @@ function UserMenu() {
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
+	);
+}
+
+function KeyboardShortcutsSection() {
+	return (
+		<div className="w-72 rounded-md border border-border/60 bg-muted/30 p-3">
+			<p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+				Atajos de teclado
+			</p>
+			<div className="mt-2 flex flex-col gap-2">
+				{KEYBOARD_SHORTCUTS.map((shortcut) => (
+					<div
+						key={shortcut.label}
+						className="rounded-sm border border-transparent px-2 py-1 transition-colors hover:border-border/40 hover:bg-card/60"
+					>
+						<p className="text-sm font-medium text-foreground">
+							{shortcut.label}
+						</p>
+						<div className="mt-1 flex flex-col gap-1 text-[11px] text-muted-foreground">
+							<ShortcutChord label="macOS" keys={shortcut.mac} />
+							<ShortcutChord label="Win / Linux" keys={shortcut.win} />
+							{shortcut.altWin && (
+								<ShortcutChord label="Alternativa" keys={shortcut.altWin} />
+							)}
+							{shortcut.description && (
+								<p className="text-[10px] text-muted-foreground/80">
+									{shortcut.description}
+								</p>
+							)}
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function ShortcutChord({ label, keys }: { label: string; keys: string[] }) {
+	return (
+		<div className="flex flex-wrap items-center gap-2">
+			<span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+				{label}
+			</span>
+			<div className="flex items-center gap-1">
+				{keys.map((key, index) => (
+					<ShortcutKey
+						key={`${label}-${key}-${index}`}
+						separator={index < keys.length - 1}
+					>
+						{key}
+					</ShortcutKey>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function ShortcutKey({
+	children,
+	separator,
+}: {
+	children: ReactNode;
+	separator?: boolean;
+}) {
+	return (
+		<>
+			<kbd className="rounded border border-border bg-background/80 px-1.5 py-0.5 text-[11px] font-semibold text-foreground shadow-sm">
+				{children}
+			</kbd>
+			{separator && (
+				<span className="text-[10px] font-semibold text-muted-foreground">
+					+
+				</span>
+			)}
+		</>
 	);
 }
