@@ -78,15 +78,9 @@ const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
 		category: "Barra superior",
 	},
 	{
-		label: "Publicar",
-		mac: ["⌘", "⇧", "P"],
-		win: ["Ctrl", "⇧", "P"],
-		category: "Barra superior",
-	},
-	{
-		label: "Preview",
-		mac: ["⌘", "P"],
-		win: ["Ctrl", "P"],
+		label: "Reiniciar flujo",
+		mac: ["⌘", "⇧", "R"],
+		win: ["Ctrl", "⇧", "R"],
 		category: "Barra superior",
 	},
 	{
@@ -96,36 +90,12 @@ const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
 		category: "Barra superior",
 	},
 	{
-		label: "Reiniciar flujo",
-		mac: ["⌘", "⇧", "R"],
-		win: ["Ctrl", "⇧", "R"],
+		label: "Preview",
+		mac: ["⌘", "P"],
+		win: ["Ctrl", "P"],
 		category: "Barra superior",
 	},
-	{
-		label: "Exportar JSON",
-		mac: ["⌘", "E"],
-		win: ["Ctrl", "E"],
-		category: "Barra superior",
-	},
-	{
-		label: "Importar JSON",
-		mac: ["⌘", "I"],
-		win: ["Ctrl", "I"],
-		category: "Barra superior",
-	},
-	{
-		label: "Gestionar Flags",
-		mac: ["⌘", "⇧", "F"],
-		win: ["Ctrl", "⇧", "F"],
-		category: "Barra superior",
-	},
-	{
-		label: "Propiedades del flujo",
-		mac: ["⌘", ","],
-		win: ["Ctrl", ","],
-		category: "Barra superior",
-	},
-	// Barra inferior - Herramientas
+	// Barra inferior - Herramientas de canvas
 	{
 		label: "Herramienta de pan (mano)",
 		mac: ["Space"],
@@ -163,18 +133,6 @@ const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
 		category: "Barra inferior",
 	},
 	{
-		label: "Eliminar selección",
-		mac: ["Delete"],
-		win: ["Delete"],
-		category: "Barra inferior",
-	},
-	{
-		label: "Ajustar a la vista",
-		mac: ["F"],
-		win: ["F"],
-		category: "Barra inferior",
-	},
-	{
 		label: "Acercar (Zoom +)",
 		mac: ["2"],
 		win: ["2"],
@@ -185,6 +143,43 @@ const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
 		mac: ["1"],
 		win: ["1"],
 		category: "Barra inferior",
+	},
+	{
+		label: "Ajustar a la vista",
+		mac: ["F"],
+		win: ["F"],
+		category: "Barra inferior",
+	},
+	// Herramientas - Acciones adicionales
+	{
+		label: "Publicar",
+		mac: ["⌘", "⇧", "P"],
+		win: ["Ctrl", "⇧", "P"],
+		category: "Herramientas",
+	},
+	{
+		label: "Exportar JSON",
+		mac: ["⌘", "E"],
+		win: ["Ctrl", "E"],
+		category: "Herramientas",
+	},
+	{
+		label: "Importar JSON",
+		mac: ["⌘", "I"],
+		win: ["Ctrl", "I"],
+		category: "Herramientas",
+	},
+	{
+		label: "Gestionar Flags",
+		mac: ["⌘", "⇧", "F"],
+		win: ["Ctrl", "⇧", "F"],
+		category: "Herramientas",
+	},
+	{
+		label: "Propiedades del flujo",
+		mac: ["⌘", ","],
+		win: ["Ctrl", ","],
+		category: "Herramientas",
 	},
 ];
 
@@ -475,9 +470,9 @@ export function KeyboardShortcutsModal({
 		return (
 			<div
 				key={shortcut.label}
-				className="flex items-center justify-between gap-8 py-2"
+				className="flex items-center justify-between gap-6 py-1.5"
 			>
-				<span className="text-sm text-foreground/90 flex-shrink-0 min-w-[180px]">
+				<span className="text-sm text-foreground/90 flex-shrink-0 min-w-[160px]">
 					{shortcut.label}
 				</span>
 				<div className="flex items-center gap-1.5 flex-shrink-0">
@@ -519,44 +514,44 @@ export function KeyboardShortcutsModal({
 	const barraInferior = KEYBOARD_SHORTCUTS.filter(
 		(shortcut) => shortcut.category === "Barra inferior",
 	);
-	const mitad = Math.ceil(barraInferior.length / 2);
-	const inferiorColumn1 = barraInferior.slice(0, mitad);
-	const inferiorColumn2 = barraInferior.slice(mitad);
+	const herramientas = KEYBOARD_SHORTCUTS.filter(
+		(shortcut) => shortcut.category === "Herramientas",
+	);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="!max-w-[1800px] sm:!max-w-[1800px] w-[96vw] h-auto max-h-none flex flex-col p-0 gap-0">
-				<DialogHeader className="px-10 pt-6 pb-5 border-b flex-shrink-0">
+			<DialogContent className="!max-w-[1400px] sm:!max-w-[1400px] w-[90vw] h-auto max-h-none flex flex-col p-0 gap-0">
+				<DialogHeader className="px-8 pt-5 pb-4 border-b flex-shrink-0">
 					<DialogTitle className="flex items-center gap-2 text-lg">
 						<Keyboard className="h-5 w-5" />
 						Atajos de teclado
 					</DialogTitle>
 				</DialogHeader>
 
-				<div className="px-14 py-8">
-					<div className="grid grid-cols-3 gap-x-20">
+				<div className="px-10 py-6">
+					<div className="grid grid-cols-3 gap-x-12 gap-y-0">
 						{/* Columna 1: Barra Superior */}
-						<div className="flex flex-col gap-2">
-							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+						<div className="flex flex-col gap-1.5">
+							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
 								BARRA SUPERIOR
 							</h3>
 							{barraSuperior.map(renderShortcutRow)}
 						</div>
 
-						{/* Columna 2: Barra Inferior (primera mitad) */}
-						<div className="flex flex-col gap-2">
-							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+						{/* Columna 2: Barra Inferior */}
+						<div className="flex flex-col gap-1.5">
+							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
 								BARRA INFERIOR
 							</h3>
-							{inferiorColumn1.map(renderShortcutRow)}
+							{barraInferior.map(renderShortcutRow)}
 						</div>
 
-						{/* Columna 3: Barra Inferior (segunda mitad) */}
-						<div className="flex flex-col gap-2">
-							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 invisible">
-								BARRA INFERIOR
+						{/* Columna 3: Herramientas */}
+						<div className="flex flex-col gap-1.5">
+							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+								HERRAMIENTAS
 							</h3>
-							{inferiorColumn2.map(renderShortcutRow)}
+							{herramientas.map(renderShortcutRow)}
 						</div>
 					</div>
 				</div>

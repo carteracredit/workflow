@@ -89,22 +89,38 @@ describe("KeyboardShortcutsModal", () => {
 		expect(barraInferior.length).toBeGreaterThan(0);
 	});
 
-	it("should display all shortcuts from Barra Superior", () => {
+	it("should display HERRAMIENTAS category", () => {
 		render(
 			<KeyboardShortcutsModal open={true} onOpenChange={mockOnOpenChange} />,
 		);
 
-		expect(screen.getAllByText("Guardar workflow").length).toBeGreaterThan(0);
+		const herramientas = screen.getAllByText("HERRAMIENTAS");
+		expect(herramientas.length).toBeGreaterThan(0);
+	});
+
+	it("should display all shortcuts from Herramientas", () => {
+		render(
+			<KeyboardShortcutsModal open={true} onOpenChange={mockOnOpenChange} />,
+		);
+
 		expect(screen.getAllByText("Publicar").length).toBeGreaterThan(0);
-		expect(screen.getAllByText("Preview").length).toBeGreaterThan(0);
-		expect(screen.getAllByText("Validar").length).toBeGreaterThan(0);
-		expect(screen.getAllByText("Reiniciar flujo").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Exportar JSON").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Importar JSON").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Gestionar Flags").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Propiedades del flujo").length).toBeGreaterThan(
 			0,
 		);
+	});
+
+	it("should display all shortcuts from Barra Superior", () => {
+		render(
+			<KeyboardShortcutsModal open={true} onOpenChange={mockOnOpenChange} />,
+		);
+
+		expect(screen.getAllByText("Guardar workflow").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Reiniciar flujo").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Validar").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Preview").length).toBeGreaterThan(0);
 	});
 
 	it("should display all shortcuts from Barra Inferior", () => {
@@ -122,10 +138,9 @@ describe("KeyboardShortcutsModal", () => {
 		expect(screen.getAllByText("Rehacer").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Copiar selección").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Pegar selección").length).toBeGreaterThan(0);
-		expect(screen.getAllByText("Eliminar selección").length).toBeGreaterThan(0);
-		expect(screen.getAllByText("Ajustar a la vista").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Acercar (Zoom +)").length).toBeGreaterThan(0);
 		expect(screen.getAllByText("Alejar (Zoom -)").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Ajustar a la vista").length).toBeGreaterThan(0);
 	});
 
 	it("should display merged Mac/Windows shortcuts", () => {
@@ -160,23 +175,8 @@ describe("KeyboardShortcutsModal", () => {
 		const dialogContents = screen.getAllByTestId("dialog-content");
 		expect(dialogContents.length).toBeGreaterThan(0);
 		const dialogContent = dialogContents[0];
-		expect(dialogContent).toHaveClass("!max-w-[1800px]");
-		expect(dialogContent).toHaveClass("w-[96vw]");
-	});
-
-	it("should display shortcuts in 3 columns layout", () => {
-		render(
-			<KeyboardShortcutsModal open={true} onOpenChange={mockOnOpenChange} />,
-		);
-
-		const dialogContents = screen.getAllByTestId("dialog-content");
-		expect(dialogContents.length).toBeGreaterThan(0);
-		const dialogContent = dialogContents[0];
-		const gridElement = dialogContent.querySelector(".grid");
-		expect(gridElement).toBeInTheDocument();
-		if (gridElement) {
-			expect(gridElement).toHaveClass("grid-cols-3");
-		}
+		expect(dialogContent).toHaveClass("!max-w-[1400px]");
+		expect(dialogContent).toHaveClass("w-[90vw]");
 	});
 
 	it("should display identical shortcuts only once", () => {
@@ -200,31 +200,30 @@ describe("KeyboardShortcutsModal", () => {
 		expect(dialogs.length).toBeGreaterThan(0);
 	});
 
-	it("should render all 19 shortcuts", () => {
+	it("should render all 18 shortcuts", () => {
 		render(
 			<KeyboardShortcutsModal open={true} onOpenChange={mockOnOpenChange} />,
 		);
 
 		const expectedShortcuts = [
 			"Guardar workflow",
-			"Publicar",
-			"Preview",
-			"Validar",
 			"Reiniciar flujo",
-			"Exportar JSON",
-			"Importar JSON",
-			"Gestionar Flags",
-			"Propiedades del flujo",
+			"Validar",
+			"Preview",
 			"Herramienta de pan (mano)",
 			"Herramienta de selección",
 			"Deshacer",
 			"Rehacer",
 			"Copiar selección",
 			"Pegar selección",
-			"Eliminar selección",
-			"Ajustar a la vista",
 			"Acercar (Zoom +)",
 			"Alejar (Zoom -)",
+			"Ajustar a la vista",
+			"Publicar",
+			"Exportar JSON",
+			"Importar JSON",
+			"Gestionar Flags",
+			"Propiedades del flujo",
 		];
 
 		expectedShortcuts.forEach((shortcutLabel) => {
@@ -259,7 +258,7 @@ describe("KeyboardShortcutsModal", () => {
 		expect(content).toContain("Ctrl");
 	});
 
-	it("should split Barra inferior into two columns", () => {
+	it("should display shortcuts in 3 columns (Barra Superior, Barra Inferior, Herramientas)", () => {
 		render(
 			<KeyboardShortcutsModal open={true} onOpenChange={mockOnOpenChange} />,
 		);
@@ -273,6 +272,11 @@ describe("KeyboardShortcutsModal", () => {
 		if (gridElement) {
 			expect(gridElement).toHaveClass("grid-cols-3");
 		}
+
+		// Verify all three categories are present
+		expect(screen.getAllByText("BARRA SUPERIOR").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("BARRA INFERIOR").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("HERRAMIENTAS").length).toBeGreaterThan(0);
 	});
 });
 
