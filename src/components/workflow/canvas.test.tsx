@@ -3,6 +3,7 @@ import {
 	getCanvasGridStyle,
 	getEmptyStatePanTarget,
 	estimateNodeDimensions,
+	matchToolbarShortcut,
 } from "./canvas";
 import type { WorkflowNode } from "@/lib/workflow/types";
 
@@ -190,5 +191,81 @@ describe("getEmptyStatePanTarget", () => {
 
 		expect(screenLeft).toBeCloseTo(canvasWidth * 0.32, 0);
 		expect(screenCenterY).toBeCloseTo(canvasHeight * 0.62, 0);
+	});
+});
+
+describe("matchToolbarShortcut", () => {
+	const createEvent = (
+		overrides: Partial<{
+			key: string;
+			ctrlKey: boolean;
+			metaKey: boolean;
+			shiftKey: boolean;
+			altKey: boolean;
+		}> = {},
+	) => ({
+		key: "",
+		ctrlKey: false,
+		metaKey: false,
+		shiftKey: false,
+		altKey: false,
+		...overrides,
+	});
+
+	it("detects save with ctrl/cmd+S", () => {
+		expect(matchToolbarShortcut(createEvent({ key: "s", ctrlKey: true }))).toBe(
+			"save",
+		);
+		expect(matchToolbarShortcut(createEvent({ key: "S", metaKey: true }))).toBe(
+			"save",
+		);
+	});
+
+	it("detects preview with ctrl/cmd+P", () => {
+		expect(matchToolbarShortcut(createEvent({ key: "p", ctrlKey: true }))).toBe(
+			"preview",
+		);
+	});
+
+	it("detects validate with ctrl/cmd+shift+V", () => {
+		expect(
+			matchToolbarShortcut(
+				createEvent({ key: "v", ctrlKey: true, shiftKey: true }),
+			),
+		).toBe("validate");
+	});
+
+	it("detects reset with ctrl/cmd+shift+R (without alt)", () => {
+		expect(
+			matchToolbarShortcut(
+				createEvent({
+					key: "r",
+					ctrlKey: true,
+					shiftKey: true,
+				}),
+			),
+		).toBe("reset");
+		expect(
+			matchToolbarShortcut(
+				createEvent({
+					key: "r",
+					ctrlKey: true,
+					shiftKey: true,
+					altKey: true,
+				}),
+			),
+		).toBeNull();
+	});
+
+	it("returns null when ctrl/cmd is not pressed", () => {
+		expect(matchToolbarShortcut(createEvent({ key: "s" }))).toBeNull();
+	});
+
+	it("ignores conflicting modifiers for copy/paste combos", () => {
+		expect(
+			matchToolbarShortcut(
+				createEvent({ key: "s", ctrlKey: true, altKey: true }),
+			),
+		).toBeNull();
 	});
 });

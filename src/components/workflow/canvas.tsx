@@ -96,6 +96,73 @@ export const getCanvasGridStyle = (
 	};
 };
 
+type ShortcutEventLike = Pick<
+	KeyboardEvent,
+	"key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"
+>;
+
+export type ToolbarShortcutAction =
+	| "save"
+	| "reset"
+	| "validate"
+	| "preview"
+	| "publish"
+	| "export"
+	| "import"
+	| "flags"
+	| "settings";
+
+export const matchToolbarShortcut = (
+	event: ShortcutEventLike,
+): ToolbarShortcutAction | null => {
+	const isCtrlLikePressed = event.ctrlKey || event.metaKey;
+	if (!isCtrlLikePressed) {
+		return null;
+	}
+
+	const key = event.key.toLowerCase();
+	const hasAlt = event.altKey;
+	const hasShift = event.shiftKey;
+
+	if (!hasAlt && !hasShift && key === "s") {
+		return "save";
+	}
+
+	if (!hasAlt && !hasShift && key === "p") {
+		return "preview";
+	}
+
+	if (!hasAlt && hasShift && key === "v") {
+		return "validate";
+	}
+
+	if (!hasAlt && hasShift && key === "r") {
+		return "reset";
+	}
+
+	if (!hasAlt && hasShift && key === "p") {
+		return "publish";
+	}
+
+	if (!hasAlt && !hasShift && key === "e") {
+		return "export";
+	}
+
+	if (!hasAlt && !hasShift && key === "i") {
+		return "import";
+	}
+
+	if (!hasAlt && hasShift && key === "f") {
+		return "flags";
+	}
+
+	if (!hasAlt && !hasShift && key === ",") {
+		return "settings";
+	}
+
+	return null;
+};
+
 const getPortDescriptor = (
 	nodeType: WorkflowNode["type"],
 	port: "top" | "bottom",
@@ -185,6 +252,8 @@ export function Canvas({
 	const hasAutoPositionedEmptyState = useRef(false);
 	const [hasCopiedData, setHasCopiedData] = useState(false);
 	const [justCopied, setJustCopied] = useState(false);
+	const editorContainerRef = useRef<HTMLDivElement>(null);
+	const [isEditorFocused, setIsEditorFocused] = useState(true);
 	useEffect(() => {
 		const element = canvasRef.current;
 		if (!element) return;
@@ -209,6 +278,36 @@ export function Canvas({
 
 		window.addEventListener("resize", updateSize);
 		return () => window.removeEventListener("resize", updateSize);
+	}, []);
+
+	useEffect(() => {
+		const syncFocusState = (target: EventTarget | null) => {
+			if (!editorContainerRef.current || !(target instanceof Node)) {
+				setIsEditorFocused(false);
+				return;
+			}
+			setIsEditorFocused(editorContainerRef.current.contains(target));
+		};
+
+		const handlePointerDown = (event: PointerEvent) => {
+			syncFocusState(event.target);
+		};
+
+		const handleFocusIn = (event: FocusEvent) => {
+			syncFocusState(event.target);
+		};
+
+		const handleWindowBlur = () => setIsEditorFocused(false);
+
+		window.addEventListener("pointerdown", handlePointerDown, true);
+		window.addEventListener("focusin", handleFocusIn);
+		window.addEventListener("blur", handleWindowBlur);
+
+		return () => {
+			window.removeEventListener("pointerdown", handlePointerDown, true);
+			window.removeEventListener("focusin", handleFocusIn);
+			window.removeEventListener("blur", handleWindowBlur);
+		};
 	}, []);
 
 	const dragRef = useRef<{
@@ -493,6 +592,43 @@ export function Canvas({
 			const isCtrlLikePressed = e.ctrlKey || e.metaKey;
 			const key = e.key.toLowerCase();
 
+			// Toolbar shortcuts (save, reset, validate, preview) work globally
+			if (!isInputActive) {
+				const toolbarAction = matchToolbarShortcut(e);
+				if (toolbarAction) {
+					e.preventDefault();
+					if (toolbarAction === "save") {
+						onSave?.();
+					} else if (toolbarAction === "reset") {
+						onReset?.();
+					} else if (toolbarAction === "validate") {
+						onValidate?.();
+					} else if (toolbarAction === "preview") {
+						onPreview?.();
+					}
+					// Los demás shortcuts (publish, export, import, flags, settings) se manejan en WorkflowEditor
+					return;
+				}
+			}
+
+			// Editor-specific shortcuts only work when editor is focused
+			if (!isEditorFocused) {
+				return;
+			}
+
+			// Handle tool selection (V key)
+			if (
+				!isInputActive &&
+				!isCtrlLikePressed &&
+				key === "v" &&
+				!e.shiftKey &&
+				!e.altKey
+			) {
+				e.preventDefault();
+				activateSelectionMode();
+				return;
+			}
+
 			// Handle Undo/Redo shortcuts
 			if (isCtrlLikePressed && !isInputActive) {
 				if (key === "z") {
@@ -513,7 +649,13 @@ export function Canvas({
 			}
 
 			// Handle Copy (Ctrl/Cmd+C)
-			if (isCtrlLikePressed && e.key === "c" && !isInputActive) {
+			if (
+				isCtrlLikePressed &&
+				key === "c" &&
+				!isInputActive &&
+				!e.shiftKey &&
+				!e.altKey
+			) {
 				e.preventDefault();
 				if (
 					onCopy &&
@@ -540,7 +682,13 @@ export function Canvas({
 			}
 
 			// Handle Paste (Ctrl/Cmd+V)
-			if (isCtrlLikePressed && e.key === "v" && !isInputActive) {
+			if (
+				isCtrlLikePressed &&
+				key === "v" &&
+				!isInputActive &&
+				!e.shiftKey &&
+				!e.altKey
+			) {
 				e.preventDefault();
 				if (onPaste && copiedDataRef.current) {
 					const { nodes: pastedNodes, edges: pastedEdges } =
@@ -572,9 +720,6 @@ export function Canvas({
 			if (e.key === "f" || e.key === "F") {
 				handleFitToView();
 			}
-			if (isCtrlLikePressed && e.key === "s") {
-				e.preventDefault();
-			}
 			if (e.key === "Escape" && connectingFrom) {
 				setConnectingFrom(null);
 				setTempEdgeTo(null);
@@ -598,6 +743,11 @@ export function Canvas({
 		onPaste,
 		onUndo,
 		onRedo,
+		onSave,
+		onReset,
+		onValidate,
+		onPreview,
+		isEditorFocused,
 	]);
 
 	const startPanning = useCallback(
@@ -1173,12 +1323,20 @@ export function Canvas({
 	const isHandToolActive = isPanning || isSpacePressed || isPanModeLocked;
 
 	return (
-		<div className="relative h-full w-full select-none overflow-hidden">
+		<div
+			ref={editorContainerRef}
+			className="relative h-full w-full select-none overflow-hidden"
+		>
 			{/* Toolbar superior */}
 			{(onSave || onReset || onValidate || onPreview) && (
 				<div className="absolute top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-border/50 bg-card/95 px-3 py-2 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-card/90">
 					{onSave && (
-						<Button variant="ghost" size="sm" onClick={onSave} title="Guardar">
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={onSave}
+							title="Guardar (Ctrl/Cmd+S)"
+						>
 							<Save className="h-4 w-4" />
 						</Button>
 					)}
@@ -1187,7 +1345,7 @@ export function Canvas({
 							variant="ghost"
 							size="sm"
 							onClick={onReset}
-							title="Reiniciar"
+							title="Reiniciar (Ctrl/Cmd+Shift+Alt+R)"
 						>
 							<Trash2 className="h-4 w-4" />
 						</Button>
@@ -1199,7 +1357,7 @@ export function Canvas({
 							}
 							size="sm"
 							onClick={onValidate}
-							title="Validar"
+							title="Validar (Ctrl/Cmd+Shift+V)"
 						>
 							<CheckCircle className="h-4 w-4" />
 						</Button>
@@ -1209,7 +1367,7 @@ export function Canvas({
 							variant="ghost"
 							size="sm"
 							onClick={onPreview}
-							title="Preview"
+							title="Preview (Ctrl/Cmd+P)"
 						>
 							<Play className="h-4 w-4" />
 						</Button>
