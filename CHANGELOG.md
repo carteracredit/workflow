@@ -1,3 +1,12 @@
+# [1.0.0-rc.10](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.9...v1.0.0-rc.10) (2025-12-19)
+
+
+### Features
+
+* Add toolbar shortcuts and focus management ([85e5828](https://github.com/carteracredit/workflow/commit/85e5828e2d66b33ebf637aecec99443928af628d))
+* reorganize keyboard shortcuts in top bar and update layout ([13e9df7](https://github.com/carteracredit/workflow/commit/13e9df7f00765c104112487c928b255dad18ba90))
+* shortcuts and add keyboard shortcuts modal with 3-column layout ([f8adb69](https://github.com/carteracredit/workflow/commit/f8adb69e4f39e8f0b173dfb2951dfeb1b0690446))
+
 # [1.0.0-rc.9](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.8...v1.0.0-rc.9) (2025-12-17)
 
 
