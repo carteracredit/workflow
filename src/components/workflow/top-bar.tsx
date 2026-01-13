@@ -230,10 +230,13 @@ export function TopBar({
 					<div className="flex flex-wrap items-center gap-2">
 						<img
 							src="/app-icon.svg"
-							alt="Cartera"
+							alt="workflow"
 							className="h-6"
 							style={{ width: "auto" }}
 						/>
+						<span className="text-base font-semibold text-foreground">
+							Workflow
+						</span>
 						<ChevronRight className="h-4 w-4 text-muted-foreground" />
 						<div className="flex items-center gap-1.5">
 							<h1 className="truncate text-base font-semibold text-foreground">
