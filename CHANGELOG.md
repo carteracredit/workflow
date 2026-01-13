@@ -1,3 +1,11 @@
+# [1.0.0-rc.11](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.10...v1.0.0-rc.11) (2026-01-13)
+
+
+### Features
+
+* add app icon SVG and update top bar to use the icon ([933db00](https://github.com/carteracredit/workflow/commit/933db00f34555ca2a381beb349c3dfa952ad2157))
+* add code generation feature for workflows with validation and syntax highlighting ([4995820](https://github.com/carteracredit/workflow/commit/4995820b526119b87d6d69465394e72b375030b1))
+
 # [1.0.0-rc.10](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.9...v1.0.0-rc.10) (2025-12-19)
 
 
