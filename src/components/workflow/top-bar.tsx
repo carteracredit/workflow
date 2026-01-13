@@ -228,9 +228,12 @@ export function TopBar({
 			<div className="flex items-center gap-3">
 				<div className="min-w-0 flex-shrink-0">
 					<div className="flex flex-wrap items-center gap-2">
-						<span className="text-base font-semibold text-foreground">
-							Cartera
-						</span>
+						<img
+							src="/app-icon.svg"
+							alt="Cartera"
+							className="h-6"
+							style={{ width: "auto" }}
+						/>
 						<ChevronRight className="h-4 w-4 text-muted-foreground" />
 						<div className="flex items-center gap-1.5">
 							<h1 className="truncate text-base font-semibold text-foreground">
@@ -380,7 +383,7 @@ function LanguageSelect() {
 				<Button
 					variant="outline"
 					size="sm"
-					className="h-9 w-auto min-w-[40px] rounded-md border-purple-400/50 bg-background px-2 text-xs font-medium text-foreground hover:bg-accent hover:border-purple-400/70"
+					className="h-9 w-auto min-w-[40px] rounded-md border border-border/70 bg-card px-2 text-xs font-medium text-foreground hover:bg-accent"
 				>
 					{language.toUpperCase()}
 				</Button>
