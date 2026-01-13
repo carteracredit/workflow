@@ -11,6 +11,7 @@ import { PropertiesPanel } from "./workflow/properties-panel";
 import { ValidationTray } from "./workflow/validation-tray";
 import { PreviewModal } from "./workflow/preview-modal";
 import { JSONModal } from "./workflow/json-modal";
+import { CodeModal } from "./workflow/code-modal";
 import { FlagManagerModal } from "./workflow/flag-manager-modal";
 import type {
 	WorkflowNode,
@@ -195,6 +196,7 @@ export function WorkflowEditor() {
 	const [showPreview, setShowPreview] = useState(false);
 	const [showJSON, setShowJSON] = useState(false);
 	const [jsonMode, setJsonMode] = useState<"export" | "import">("export");
+	const [showCode, setShowCode] = useState(false);
 	const [showFlagManager, setShowFlagManager] = useState(false);
 	const [showWorkflowProperties, setShowWorkflowProperties] = useState(false);
 	const [validationStatus, setValidationStatus] = useState<
@@ -675,6 +677,7 @@ export function WorkflowEditor() {
 							onReset={handleReset}
 							onValidate={handleValidate}
 							onPreview={() => setShowPreview(true)}
+							onGenerateCode={() => setShowCode(true)}
 							validationState={{
 								status: validationStatus,
 							}}
@@ -778,6 +781,15 @@ export function WorkflowEditor() {
 					flags={workflowState.flags}
 					onClose={() => setShowFlagManager(false)}
 					onUpdateFlags={updateFlags}
+				/>
+			)}
+
+			{showCode && (
+				<CodeModal
+					nodes={workflowState.nodes}
+					edges={workflowState.edges}
+					metadata={workflowState.metadata}
+					onClose={() => setShowCode(false)}
 				/>
 			)}
 		</div>

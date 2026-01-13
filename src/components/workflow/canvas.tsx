@@ -30,6 +30,7 @@ import {
 	Copy,
 	Clipboard,
 	Check,
+	FileCode,
 } from "lucide-react";
 import { findNearestPreviousCheckpoint } from "@/lib/workflow/graph-utils";
 import {
@@ -198,6 +199,7 @@ interface CanvasProps {
 	onReset?: () => void;
 	onValidate?: () => void;
 	onPreview?: () => void;
+	onGenerateCode?: () => void;
 	validationState?: {
 		status: "idle" | "valid" | "invalid";
 	};
@@ -231,6 +233,7 @@ export function Canvas({
 	onReset,
 	onValidate,
 	onPreview,
+	onGenerateCode,
 	validationState,
 	onCopy,
 	onPaste,
@@ -1328,7 +1331,7 @@ export function Canvas({
 			className="relative h-full w-full select-none overflow-hidden"
 		>
 			{/* Toolbar superior */}
-			{(onSave || onReset || onValidate || onPreview) && (
+			{(onSave || onReset || onValidate || onPreview || onGenerateCode) && (
 				<div className="absolute top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-border/50 bg-card/95 px-3 py-2 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-card/90">
 					{onSave && (
 						<Button
@@ -1370,6 +1373,16 @@ export function Canvas({
 							title="Preview (Ctrl/Cmd+P)"
 						>
 							<Play className="h-4 w-4" />
+						</Button>
+					)}
+					{onGenerateCode && (
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={onGenerateCode}
+							title="Generar código Cloudflare Workflow"
+						>
+							<FileCode className="h-4 w-4" />
 						</Button>
 					)}
 				</div>
