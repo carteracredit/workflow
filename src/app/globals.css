@@ -3,6 +3,8 @@
 
 /* Tailwind v4: explicitly declare where to scan for class usage. */
 @source "../**/*.{js,ts,jsx,tsx,mdx}";
+/* Scan @algenium/blocks package for utility classes */
+@source "../../node_modules/@algenium/blocks/dist/*.{js,cjs,mjs}";
 
 @custom-variant dark (&:is(.dark *));
 
