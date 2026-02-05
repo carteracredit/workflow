@@ -1,7 +1,10 @@
-import ClientLayout from "@/components/ClientLayout";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { LanguageProvider } from "@/components/LanguageProvider";
+import { SessionHydrator } from "@/lib/auth/useAuthSession";
+import { getServerSession } from "@/lib/auth/getServerSession";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -14,22 +17,37 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	title: "Algenium | Development in progress",
-	description:
-		"This is a placeholder for a project under construction, check back soon!",
+	title: "Cartera Workflow",
+	description: "Workflow Editor - Workflow Integration Platform",
+	icons: {
+		icon: [
+			{ url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+			{ url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+		],
+		apple: "/apple-touch-icon.png",
+	},
+	manifest: "/site.webmanifest",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
 	children,
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
+	const session = await getServerSession();
+
 	return (
-		<html suppressHydrationWarning>
+		<html lang="es" suppressHydrationWarning>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
-				<ClientLayout>{children}</ClientLayout>
+				<ThemeProvider>
+					<LanguageProvider>
+						<SessionHydrator serverSession={session}>
+							{children}
+						</SessionHydrator>
+					</LanguageProvider>
+				</ThemeProvider>
 			</body>
 		</html>
 	);

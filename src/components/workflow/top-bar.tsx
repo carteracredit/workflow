@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment, type ReactNode } from "react";
+import { useState, Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Menubar,
@@ -17,11 +17,8 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import {
 	Dialog,
@@ -30,14 +27,12 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { LanguageSwitcher } from "@algenium/blocks";
+import { useLanguage } from "@/components/LanguageProvider";
+import { useAuthSession } from "@/lib/auth/useAuthSession";
+import { getAuthAppUrl } from "@/lib/auth/config";
+import { logout } from "@/lib/auth/actions";
 import {
 	Save,
 	Upload,
@@ -54,11 +49,15 @@ import {
 	ChevronRight,
 	User,
 	LogOut,
-	Check,
 	Keyboard,
 } from "lucide-react";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
+
+const languages = [
+	{ key: "en", label: "EN", nativeName: "English" },
+	{ key: "es", label: "ES", nativeName: "Español" },
+];
 
 type ShortcutDefinition = {
 	label: string;
@@ -364,7 +363,7 @@ export function TopBar({
 						</MenubarMenu>
 					</Menubar>
 
-					<LanguageSelect />
+					<LanguageSwitcherWrapper />
 					<ThemeSwitcher />
 					<UserMenu />
 				</div>
@@ -377,74 +376,90 @@ export function TopBar({
 	);
 }
 
-function LanguageSelect() {
-	const [language, setLanguage] = useState<"es" | "en">("es");
+function LanguageSwitcherWrapper() {
+	const { t, language, setLanguage } = useLanguage();
 
 	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button
-					variant="outline"
-					size="sm"
-					className="h-9 w-auto min-w-[40px] rounded-md border border-border/70 bg-card px-2 text-xs font-medium text-foreground hover:bg-accent"
-				>
-					{language.toUpperCase()}
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-auto min-w-[44px] p-0.5">
-				<DropdownMenuRadioGroup
-					value={language}
-					onValueChange={(value) => setLanguage(value as "es" | "en")}
-				>
-					<DropdownMenuRadioItem
-						value="en"
-						className="cursor-pointer justify-center px-3 py-1.5 text-xs rounded-sm pl-3 pr-3 [&>span:first-child]:hidden data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
-					>
-						EN
-					</DropdownMenuRadioItem>
-					<DropdownMenuRadioItem
-						value="es"
-						className="cursor-pointer justify-center px-3 py-1.5 text-xs rounded-sm pl-3 pr-3 [&>span:first-child]:hidden data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
-					>
-						ES
-					</DropdownMenuRadioItem>
-				</DropdownMenuRadioGroup>
-			</DropdownMenuContent>
-		</DropdownMenu>
+		<LanguageSwitcher
+			languages={languages}
+			currentLanguage={language}
+			onLanguageChange={(key) => setLanguage(key as "en" | "es")}
+			labels={{ language: t("languageToggle") }}
+			showIcon
+		/>
 	);
 }
 
 function UserMenu() {
+	const { data: session } = useAuthSession();
+	const { t } = useLanguage();
+
+	const handleLogout = async () => {
+		await logout();
+	};
+
+	if (!session) {
+		return null;
+	}
+
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-9 w-9 rounded-full border border-border/60 bg-muted/40"
-					title="Menú de usuario"
-				>
-					<Avatar className="h-7 w-7">
-						<AvatarImage src="https://api.dicebear.com/7.x/thumbs/svg?seed=cartera" />
-						<AvatarFallback>CA</AvatarFallback>
+				<Button variant="ghost" className="relative h-10 w-10 rounded-full">
+					<Avatar className="h-10 w-10">
+						<AvatarImage
+							src={session.user.image || undefined}
+							alt={session.user.name}
+						/>
+						<AvatarFallback>
+							{session.user.name
+								?.split(" ")
+								.map((n) => n[0])
+								.join("")
+								.toUpperCase() || "U"}
+						</AvatarFallback>
 					</Avatar>
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-48">
-				<DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
+			<DropdownMenuContent className="w-56" align="end">
+				<div className="flex items-center gap-2 p-2">
+					<Avatar className="h-8 w-8">
+						<AvatarImage
+							src={session.user.image || undefined}
+							alt={session.user.name}
+						/>
+						<AvatarFallback>
+							{session.user.name
+								?.split(" ")
+								.map((n) => n[0])
+								.join("")
+								.toUpperCase() || "U"}
+						</AvatarFallback>
+					</Avatar>
+					<div className="flex flex-col space-y-0.5">
+						<p className="text-sm font-medium">{session.user.name}</p>
+						<p className="text-xs text-muted-foreground">
+							{session.user.email}
+						</p>
+					</div>
+				</div>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem>
-					<User className="mr-2 h-4 w-4" />
-					Perfil
-				</DropdownMenuItem>
-				<DropdownMenuItem>
-					<Settings className="mr-2 h-4 w-4" />
-					Preferencias
+				<DropdownMenuItem asChild>
+					<a
+						href={`${getAuthAppUrl()}/settings`}
+						className="flex items-center gap-2 cursor-pointer"
+					>
+						<User className="h-4 w-4" />
+						{t("userAccount")}
+					</a>
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem>
-					<LogOut className="mr-2 h-4 w-4" />
-					Cerrar sesión
+				<DropdownMenuItem
+					onClick={handleLogout}
+					className="flex items-center gap-2 cursor-pointer text-destructive"
+				>
+					<LogOut className="h-4 w-4" />
+					{t("userLogout")}
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>

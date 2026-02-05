@@ -2,7 +2,58 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TopBar, KeyboardShortcutsModal } from "./top-bar";
+import { LanguageProvider } from "@/components/LanguageProvider";
 import type { WorkflowMetadata } from "@/lib/workflow/types";
+
+// Mock session store and auth
+vi.mock("@/lib/auth/useAuthSession", () => ({
+	useAuthSession: () => ({
+		data: {
+			user: {
+				id: "test-user",
+				name: "Test User",
+				email: "test@example.com",
+				image: null,
+			},
+			session: { id: "session-123" },
+		},
+		error: null,
+		isPending: false,
+		isAdmin: true,
+	}),
+}));
+
+vi.mock("@/lib/auth/config", () => ({
+	getAuthAppUrl: () => "https://auth.example.com",
+}));
+
+vi.mock("@/lib/auth/actions", () => ({
+	logout: vi.fn(),
+}));
+
+// Mock cookies module
+vi.mock("@/lib/cookies", () => ({
+	getCookie: vi.fn(() => "en"),
+	setCookie: vi.fn(),
+	COOKIE_NAMES: { LANGUAGE: "cartera-lang" },
+}));
+
+// Mock translations
+vi.mock("@/lib/translations", () => ({
+	translations: {
+		en: {
+			languageToggle: "Toggle language",
+			userAccount: "My Account",
+			userLogout: "Log Out",
+		},
+		es: {
+			languageToggle: "Cambiar idioma",
+			userAccount: "Mi Cuenta",
+			userLogout: "Cerrar Sesión",
+		},
+	},
+	detectBrowserLanguage: vi.fn(() => "es"),
+}));
 
 // Mock the Dialog component to avoid portal issues
 vi.mock("@/components/ui/dialog", () => ({
@@ -320,14 +371,22 @@ describe("TopBar Integration", () => {
 	});
 
 	it("should render TopBar component", () => {
-		render(<TopBar {...defaultProps} />);
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} />
+			</LanguageProvider>,
+		);
 
 		const workflowNames = screen.getAllByText("Test Workflow");
 		expect(workflowNames.length).toBeGreaterThan(0);
 	});
 
 	it("should render shortcuts menu button", () => {
-		render(<TopBar {...defaultProps} />);
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} />
+			</LanguageProvider>,
+		);
 
 		const menuButtons = screen.getAllByTitle("Más opciones");
 		expect(menuButtons.length).toBeGreaterThan(0);
@@ -335,7 +394,11 @@ describe("TopBar Integration", () => {
 
 	it("should open modal when shortcuts menu item is clicked", async () => {
 		const user = userEvent.setup();
-		render(<TopBar {...defaultProps} />);
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} />
+			</LanguageProvider>,
+		);
 
 		// Find the menu button
 		const menuButtons = screen.getAllByTitle("Más opciones");
