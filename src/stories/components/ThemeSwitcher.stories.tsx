@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { ThemeSwitcher } from "@algenium/blocks";
 
 const meta = {
 	title: "Components/ThemeSwitcher",
@@ -23,7 +22,14 @@ export const Default: Story = {
 					Sincroniza con el tema global o fuerza light/dark.
 				</span>
 			</div>
-			<ThemeSwitcher />
+			<ThemeSwitcher
+				labels={{
+					theme: "Toggle theme",
+					light: "Light",
+					dark: "Dark",
+					system: "System",
+				}}
+			/>
 		</div>
 	),
 };

@@ -27,8 +27,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-import { LanguageSwitcher } from "@algenium/blocks";
+import { LanguageSwitcher, ThemeSwitcher } from "@algenium/blocks";
 import { useLanguage } from "@/components/LanguageProvider";
 import { useAuthSession } from "@/lib/auth/useAuthSession";
 import { getAuthAppUrl } from "@/lib/auth/config";
@@ -364,7 +363,7 @@ export function TopBar({
 					</Menubar>
 
 					<LanguageSwitcherWrapper />
-					<ThemeSwitcher />
+					<ThemeSwitcherWrapper />
 					<UserMenu />
 				</div>
 			</div>
@@ -386,6 +385,21 @@ function LanguageSwitcherWrapper() {
 			onLanguageChange={(key) => setLanguage(key as "en" | "es")}
 			labels={{ language: t("languageToggle") }}
 			showIcon
+		/>
+	);
+}
+
+function ThemeSwitcherWrapper() {
+	const { t } = useLanguage();
+
+	return (
+		<ThemeSwitcher
+			labels={{
+				theme: t("themeToggle"),
+				light: t("themeLight"),
+				dark: t("themeDark"),
+				system: t("themeSystem"),
+			}}
 		/>
 	);
 }
