@@ -3,6 +3,7 @@ import { ReactNode, useEffect } from "react";
 import { useTheme } from "next-themes";
 
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { LanguageProvider } from "@/components/LanguageProvider";
 import "../src/app/globals.css";
 
 type ThemeOption = "light" | "dark" | "system";
@@ -59,13 +60,15 @@ const preview: Preview = {
 				(context.globals.theme as ThemeOption | undefined) ?? "system";
 
 			return (
-				<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-					<ThemeSync theme={theme}>
-						<div className="min-h-screen bg-background text-foreground p-6">
-							<Story />
-						</div>
-					</ThemeSync>
-				</ThemeProvider>
+				<LanguageProvider defaultLanguage="es">
+					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+						<ThemeSync theme={theme}>
+							<div className="min-h-screen bg-background text-foreground p-6">
+								<Story />
+							</div>
+						</ThemeSync>
+					</ThemeProvider>
+				</LanguageProvider>
 			);
 		},
 	],
