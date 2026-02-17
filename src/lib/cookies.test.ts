@@ -126,6 +126,39 @@ describe("cookies", () => {
 			expect(cookieValue).toContain("path=/");
 			expect(cookieValue).toContain("samesite=lax");
 		});
+
+		it("should set secure cookie in production environment", () => {
+			vi.stubGlobal("window", {
+				location: { hostname: "workflow.cartera.credit" },
+			});
+			setCookie("secure-cookie", "secure-value");
+			expect(cookieValue).toContain("secure-cookie=secure-value");
+			expect(cookieValue).toContain("secure");
+			expect(cookieValue).toContain("domain=.cartera.credit");
+		});
+
+		it("should set cookie with custom max-age", () => {
+			setCookie("short-cookie", "short-value", { maxAge: 3600 });
+			expect(cookieValue).toContain("short-cookie=short-value");
+			expect(cookieValue).toContain("max-age=3600");
+		});
+
+		it("should set cookie with custom path", () => {
+			setCookie("path-cookie", "path-value", { path: "/custom" });
+			expect(cookieValue).toContain("path-cookie=path-value");
+			expect(cookieValue).toContain("path=/custom");
+		});
+
+		it("should set cookie with sameSite=strict", () => {
+			setCookie("strict-cookie", "strict-value", { sameSite: "strict" });
+			expect(cookieValue).toContain("strict-cookie=strict-value");
+			expect(cookieValue).toContain("samesite=strict");
+		});
+
+		it("should not set secure flag in local environment", () => {
+			setCookie("local-cookie", "local-value");
+			expect(cookieValue).not.toContain("; secure");
+		});
 	});
 
 	describe("getCookie", () => {
@@ -179,6 +212,16 @@ describe("cookies", () => {
 			deleteCookie("test-cookie");
 			expect(cookieValue).toContain("test-cookie=");
 			expect(cookieValue).toContain("max-age=0");
+		});
+
+		it("should delete cookie with domain in production", () => {
+			vi.stubGlobal("window", {
+				location: { hostname: "workflow.cartera.credit" },
+			});
+			deleteCookie("prod-cookie");
+			expect(cookieValue).toContain("prod-cookie=");
+			expect(cookieValue).toContain("max-age=0");
+			expect(cookieValue).toContain("domain=.cartera.credit");
 		});
 	});
 
