@@ -163,3 +163,18 @@ describe("workflow history helpers", () => {
 		);
 	});
 });
+
+describe("createHistorySnapshot", () => {
+	it("clones nodes and edges deeply", () => {
+		const nodes = [makeNode("1")];
+		const edges = [makeEdge("1")];
+
+		const initial = initializeHistory(nodes, edges);
+		const snapshot = initial.history[0];
+
+		expect(snapshot.nodes).not.toBe(nodes);
+		expect(snapshot.edges).not.toBe(edges);
+		expect(snapshot.nodes[0]).toEqual(nodes[0]);
+		expect(snapshot.edges[0]).toEqual(edges[0]);
+	});
+});

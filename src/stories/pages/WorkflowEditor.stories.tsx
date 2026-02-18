@@ -6,6 +6,9 @@ const meta: Meta<typeof WorkflowEditor> = {
 	component: WorkflowEditor,
 	parameters: {
 		layout: "fullscreen",
+		chromatic: {
+			delay: 2000,
+		},
 	},
 };
 

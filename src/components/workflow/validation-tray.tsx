@@ -50,7 +50,12 @@ export function ValidationTray({
 						)}
 					</div>
 				</div>
-				<Button variant="ghost" size="icon" onClick={onClose}>
+				<Button
+					variant="ghost"
+					size="icon"
+					onClick={onClose}
+					aria-label="Cerrar panel de validación"
+				>
 					<X className="h-4 w-4" />
 				</Button>
 			</div>
