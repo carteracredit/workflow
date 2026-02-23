@@ -13,6 +13,8 @@ import { PreviewModal } from "./workflow/preview-modal";
 import { JSONModal } from "./workflow/json-modal";
 import { CodeModal } from "./workflow/code-modal";
 import { FlagManagerModal } from "./workflow/flag-manager-modal";
+import { PublishModal } from "./workflow/publish-modal";
+import { Toaster } from "sonner";
 import type {
 	WorkflowNode,
 	WorkflowEdge,
@@ -199,6 +201,7 @@ export function WorkflowEditor() {
 	const [showCode, setShowCode] = useState(false);
 	const [showFlagManager, setShowFlagManager] = useState(false);
 	const [showWorkflowProperties, setShowWorkflowProperties] = useState(false);
+	const [showPublish, setShowPublish] = useState(false);
 	const [validationStatus, setValidationStatus] = useState<
 		"idle" | "valid" | "invalid"
 	>("idle");
@@ -518,11 +521,7 @@ export function WorkflowEditor() {
 	const handlePublish = useCallback(() => {
 		const isValid = handleValidate();
 		if (isValid) {
-			alert("✅ Publicación exitosa (mock)");
-		} else {
-			alert(
-				"❌ El flujo tiene errores. Por favor corrígelos antes de publicar.",
-			);
+			setShowPublish(true);
 		}
 	}, [handleValidate]);
 
@@ -792,6 +791,18 @@ export function WorkflowEditor() {
 					onClose={() => setShowCode(false)}
 				/>
 			)}
+
+			{showPublish && (
+				<PublishModal
+					nodes={workflowState.nodes}
+					edges={workflowState.edges}
+					metadata={workflowState.metadata}
+					flags={workflowState.flags}
+					onClose={() => setShowPublish(false)}
+				/>
+			)}
+
+			<Toaster position="top-right" richColors />
 		</div>
 	);
 }

@@ -575,3 +575,236 @@ export function validateForCodeGeneration(
 
 	return { valid: errors.length === 0, errors };
 }
+
+/**
+ * Phase status and logs for progress tracking
+ */
+export interface TranspilationPhase {
+	id: string;
+	label: string;
+	status: "pending" | "running" | "done" | "error";
+	logs: string[];
+	durationMs?: number;
+}
+
+/**
+ * Result of code generation with progress tracking
+ */
+export interface TranspilationResult {
+	code: string;
+	warnings: string[];
+	phases: TranspilationPhase[];
+	totalDurationMs: number;
+	valid: boolean;
+	errors: string[];
+}
+
+/**
+ * Generate workflow code with progress tracking and detailed logs
+ */
+export async function generateWorkflowCodeWithProgress(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+	metadata?: WorkflowMetadata,
+	options: CodeGeneratorOptions = {},
+	onPhaseUpdate?: (phases: TranspilationPhase[]) => void,
+): Promise<TranspilationResult> {
+	const startTime = Date.now();
+	const phases: TranspilationPhase[] = [
+		{
+			id: "validate",
+			label: "Validando workflow",
+			status: "pending",
+			logs: [],
+		},
+		{
+			id: "slugs",
+			label: "Generando slugs únicos",
+			status: "pending",
+			logs: [],
+		},
+		{
+			id: "analyze",
+			label: "Analizando estructura del grafo",
+			status: "pending",
+			logs: [],
+		},
+		{
+			id: "transpile",
+			label: "Transpilando a TypeScript",
+			status: "pending",
+			logs: [],
+		},
+		{
+			id: "complete",
+			label: "Completado",
+			status: "pending",
+			logs: [],
+		},
+	];
+
+	const updatePhase = (
+		phaseId: string,
+		status: TranspilationPhase["status"],
+		logs: string[] = [],
+		durationMs?: number,
+	) => {
+		const phase = phases.find((p) => p.id === phaseId);
+		if (phase) {
+			phase.status = status;
+			phase.logs.push(...logs);
+			if (durationMs !== undefined) {
+				phase.durationMs = durationMs;
+			}
+		}
+		if (onPhaseUpdate) {
+			onPhaseUpdate([...phases]);
+		}
+	};
+
+	// Phase 1: Validate
+	updatePhase("validate", "running");
+	const phaseStart = Date.now();
+	const validation = validateForCodeGeneration(nodes, edges);
+	const validationDuration = Date.now() - phaseStart;
+
+	if (!validation.valid) {
+		updatePhase("validate", "error", [
+			`❌ Validación fallida con ${validation.errors.length} error(es):`,
+			...validation.errors.map((e) => `  • ${e}`),
+		]);
+		return {
+			code: "",
+			warnings: [],
+			phases,
+			totalDurationMs: Date.now() - startTime,
+			valid: false,
+			errors: validation.errors,
+		};
+	}
+
+	updatePhase(
+		"validate",
+		"done",
+		[
+			`✅ Validación exitosa`,
+			`  • ${nodes.length} nodos encontrados`,
+			`  • ${edges.length} conexiones encontradas`,
+			`  • Tiempo: ${validationDuration}ms`,
+		],
+		validationDuration,
+	);
+
+	// Small delay to allow UI update
+	await new Promise((resolve) => setTimeout(resolve, 100));
+
+	// Phase 2: Generate slugs
+	updatePhase("slugs", "running");
+	const slugsStart = Date.now();
+	const nodesByType = new Map<string, number>();
+	const slugMap = new Map<string, string>();
+
+	for (const node of nodes) {
+		const slug = createStepName(node);
+		slugMap.set(node.id, slug);
+		const count = nodesByType.get(node.type) || 0;
+		nodesByType.set(node.type, count + 1);
+	}
+
+	const slugsDuration = Date.now() - slugsStart;
+	const typesSummary = Array.from(nodesByType.entries())
+		.map(([type, count]) => `  • ${type}: ${count}`)
+		.join("\n");
+
+	updatePhase(
+		"slugs",
+		"done",
+		[
+			`✅ Slugs generados para ${nodes.length} nodos`,
+			`Distribución por tipo:`,
+			typesSummary,
+			`  • Tiempo: ${slugsDuration}ms`,
+		],
+		slugsDuration,
+	);
+
+	await new Promise((resolve) => setTimeout(resolve, 100));
+
+	// Phase 3: Analyze graph structure
+	updatePhase("analyze", "running");
+	const analyzeStart = Date.now();
+	const { outgoingMap, incomingMap } = buildAdjacencyMaps(edges);
+
+	const startNodes = nodes.filter((n) => n.type === "Start");
+	const endNodes = nodes.filter((n) => n.type === "End" || n.type === "Reject");
+	const checkpointNodes = nodes.filter((n) => n.type === "Checkpoint");
+	const decisionNodes = nodes.filter((n) => n.type === "Decision");
+	const joinNodes = nodes.filter((n) => n.type === "Join");
+
+	const analyzeDuration = Date.now() - analyzeStart;
+
+	updatePhase(
+		"analyze",
+		"done",
+		[
+			`✅ Análisis de estructura completado`,
+			`  • Nodos Start: ${startNodes.length}`,
+			`  • Nodos End/Reject: ${endNodes.length}`,
+			`  • Checkpoints: ${checkpointNodes.length}`,
+			`  • Decisiones: ${decisionNodes.length}`,
+			`  • Joins: ${joinNodes.length}`,
+			`  • Tiempo: ${analyzeDuration}ms`,
+		],
+		analyzeDuration,
+	);
+
+	await new Promise((resolve) => setTimeout(resolve, 100));
+
+	// Phase 4: Transpile
+	updatePhase("transpile", "running");
+	const transpileStart = Date.now();
+
+	const generated = generateWorkflowCode(nodes, edges, metadata, options);
+
+	const transpileDuration = Date.now() - transpileStart;
+	const linesOfCode = generated.code.split("\n").length;
+
+	const transpileLogs = [
+		`✅ Código generado exitosamente`,
+		`  • ${linesOfCode} líneas de código`,
+		`  • ${generated.warnings.length} advertencias`,
+	];
+
+	if (generated.warnings.length > 0) {
+		transpileLogs.push(`Advertencias:`);
+		transpileLogs.push(...generated.warnings.map((w) => `  ⚠️  ${w}`));
+	}
+
+	transpileLogs.push(`  • Tiempo: ${transpileDuration}ms`);
+
+	updatePhase("transpile", "done", transpileLogs, transpileDuration);
+
+	await new Promise((resolve) => setTimeout(resolve, 100));
+
+	// Phase 5: Complete
+	const totalDuration = Date.now() - startTime;
+	updatePhase(
+		"complete",
+		"done",
+		[
+			`✅ Transpilación completada exitosamente`,
+			`  • Tiempo total: ${totalDuration}ms`,
+			`  • Archivo listo para descargar`,
+		],
+		totalDuration,
+	);
+
+	return {
+		code: generated.code,
+		warnings: generated.warnings,
+		phases,
+		totalDurationMs: totalDuration,
+		valid: true,
+		errors: [],
+	};
+}
