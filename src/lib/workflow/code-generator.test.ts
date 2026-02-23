@@ -767,3 +767,139 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).toContain("timeout: '24 hours'"); // default timeout
 	});
 });
+
+describe("generateWorkflowCodeWithProgress", () => {
+	it("should generate code with progress phases", async () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "form", type: "Form", title: "Formulario" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end"),
+		];
+
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+		const result = await generateWorkflowCodeWithProgress(nodes, edges);
+
+		expect(result.valid).toBe(true);
+		expect(result.code).toBeTruthy();
+		expect(result.phases).toHaveLength(5);
+		expect(result.phases[0].id).toBe("validate");
+		expect(result.phases[1].id).toBe("slugs");
+		expect(result.phases[2].id).toBe("analyze");
+		expect(result.phases[3].id).toBe("transpile");
+		expect(result.phases[4].id).toBe("complete");
+		expect(result.totalDurationMs).toBeGreaterThan(0);
+	});
+
+	it("should report phase updates through callback", async () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const updates: Array<any> = [];
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+
+		await generateWorkflowCodeWithProgress(
+			nodes,
+			edges,
+			undefined,
+			{},
+			(phases) => {
+				updates.push([...phases]);
+			},
+		);
+
+		expect(updates.length).toBeGreaterThan(0);
+		const lastUpdate = updates[updates.length - 1];
+		expect(lastUpdate[lastUpdate.length - 1].status).toBe("done");
+	});
+
+	it("should return errors for invalid workflow", async () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "form", type: "Form", title: "Formulario" }),
+		];
+
+		const edges: WorkflowEdge[] = [];
+
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+		const result = await generateWorkflowCodeWithProgress(nodes, edges);
+
+		expect(result.valid).toBe(false);
+		expect(result.errors.length).toBeGreaterThan(0);
+		expect(result.code).toBe("");
+		const validatePhase = result.phases.find((p) => p.id === "validate");
+		expect(validatePhase?.status).toBe("error");
+	});
+
+	it("should include detailed logs in phases", async () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "decision", type: "Decision", title: "Decidir" }),
+			createNode({ id: "form", type: "Form", title: "Formulario" }),
+			createNode({ id: "checkpoint", type: "Checkpoint", title: "Checkpoint" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "decision"),
+			createEdge("decision", "form", { fromPort: "top" }),
+			createEdge("decision", "checkpoint", { fromPort: "bottom" }),
+			createEdge("form", "end"),
+			createEdge("checkpoint", "end"),
+		];
+
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+		const result = await generateWorkflowCodeWithProgress(nodes, edges);
+
+		expect(result.valid).toBe(true);
+
+		const validatePhase = result.phases.find((p) => p.id === "validate");
+		expect(validatePhase?.logs.length).toBeGreaterThan(0);
+		expect(validatePhase?.logs.some((log) => log.includes("5 nodos"))).toBe(
+			true,
+		);
+
+		const analyzePhase = result.phases.find((p) => p.id === "analyze");
+		expect(
+			analyzePhase?.logs.some((log) => log.includes("Decisiones: 1")),
+		).toBe(true);
+		expect(
+			analyzePhase?.logs.some((log) => log.includes("Checkpoints: 1")),
+		).toBe(true);
+
+		const transpilePhase = result.phases.find((p) => p.id === "transpile");
+		expect(
+			transpilePhase?.logs.some((log) => log.includes("líneas de código")),
+		).toBe(true);
+	});
+
+	it("should include duration for each phase", async () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+		const result = await generateWorkflowCodeWithProgress(nodes, edges);
+
+		for (const phase of result.phases) {
+			if (phase.status === "done") {
+				expect(phase.durationMs).toBeGreaterThanOrEqual(0);
+			}
+		}
+	});
+});
