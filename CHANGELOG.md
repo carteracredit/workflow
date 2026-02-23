@@ -1,3 +1,10 @@
+# [1.0.0-rc.13](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.12...v1.0.0-rc.13) (2026-02-23)
+
+
+### Features
+
+* add PublishModal for workflow publishing with progress tracking ([f0f21ea](https://github.com/carteracredit/workflow/commit/f0f21eae33e4e86fb8402846f6a380a98dd62b0a))
+
 # [1.0.0-rc.12](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.11...v1.0.0-rc.12) (2026-02-23)
 
 
