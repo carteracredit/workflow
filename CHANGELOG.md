@@ -1,3 +1,17 @@
+# [1.0.0-rc.12](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.11...v1.0.0-rc.12) (2026-02-23)
+
+
+### Bug Fixes
+
+* **ci:** remove hardcoded pnpm v9 from release workflow to match packageManager field ([b771dc5](https://github.com/carteracredit/workflow/commit/b771dc508ab9196b3eeb72033a3df49c93c9145d))
+
+
+### Features
+
+* add authentication middleware and session management ([6151b80](https://github.com/carteracredit/workflow/commit/6151b8082eefa32af04f05c3278a2bbdcdd49527))
+* enhance workflow testing and configuration ([da93f7a](https://github.com/carteracredit/workflow/commit/da93f7ab917822df7fb8967b9be56c83e2a18f99))
+* integrate LanguageProvider and enhance Storybook configurations ([370bae0](https://github.com/carteracredit/workflow/commit/370bae0c29a29ea1ee428ad1f2ab21e064146a2a))
+
 # [1.0.0-rc.11](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.10...v1.0.0-rc.11) (2026-01-13)
 
 
