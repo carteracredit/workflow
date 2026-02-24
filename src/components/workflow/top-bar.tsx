@@ -183,7 +183,7 @@ const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
 
 interface TopBarProps {
 	onNew: () => void;
-	onSave: () => void;
+	onSave: () => void | Promise<void>;
 	onPublish: () => void;
 	onExportJSON: () => void;
 	onImportJSON: () => void;

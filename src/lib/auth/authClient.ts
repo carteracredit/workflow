@@ -26,3 +26,22 @@ export const authClient = createAuthClient({
 });
 
 export type AuthClient = typeof authClient;
+
+/**
+ * Get JWT token for client-side API calls to workflow-svc.
+ * Uses the jwtClient plugin to exchange the session cookie for a JWT.
+ * @returns JWT token or null if not authenticated
+ */
+export async function getClientJwt(): Promise<string | null> {
+	try {
+		const result = await authClient.token();
+		if (result.error || !result.data?.token) {
+			console.error("Failed to get JWT:", result.error);
+			return null;
+		}
+		return result.data.token;
+	} catch (error) {
+		console.error("Error fetching JWT:", error);
+		return null;
+	}
+}

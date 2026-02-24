@@ -14,7 +14,7 @@ import { JSONModal } from "./workflow/json-modal";
 import { CodeModal } from "./workflow/code-modal";
 import { FlagManagerModal } from "./workflow/flag-manager-modal";
 import { PublishModal } from "./workflow/publish-modal";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 import type {
 	WorkflowNode,
 	WorkflowEdge,
@@ -34,8 +34,42 @@ import {
 	redoHistory,
 	undoHistory,
 } from "@/lib/workflow/history";
+import { slugify } from "@/lib/slugify";
+import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
+import {
+	createWorkflow,
+	updateWorkflow as updateWorkflowApi,
+} from "@/lib/workflow-api/workflows";
+import { ApiError } from "@/lib/workflow-api/http";
 
 const STORAGE_KEY = "cartera-workflow-state";
+const WORKFLOW_API_ID_KEY = "cartera-workflow-api-id";
+
+/**
+ * Derives a PascalCase class name from a workflow name.
+ * e.g. "Credit App Workflow" → "CreditAppWorkflow"
+ */
+function toClassName(name: string): string {
+	return (
+		name
+			.replace(/[^a-zA-Z0-9\s]/g, "")
+			.trim()
+			.split(/\s+/)
+			.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+			.join("") || "GeneratedWorkflow"
+	);
+}
+
+/**
+ * Extracts the major version number from a semver string.
+ * e.g. "2.1.0" → 2, "v3" → 3. Falls back to 1.
+ */
+function extractMajorVersion(version: string): number {
+	const match = version.match(/(\d+)/);
+	if (!match) return 1;
+	const parsed = Number.parseInt(match[1], 10);
+	return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+}
 
 type NodeWithOptionalStaleTimeout = Omit<WorkflowNode, "staleTimeout"> & {
 	staleTimeout?: WorkflowNode["staleTimeout"];
@@ -155,6 +189,19 @@ type HistoryChange = Partial<WorkflowState> & {
 };
 
 export function WorkflowEditor() {
+	const { token: apiToken } = useWorkflowApiToken();
+
+	const [workflowApiId, setWorkflowApiId] = useState<number | null>(() => {
+		if (typeof window !== "undefined") {
+			const saved = localStorage.getItem(WORKFLOW_API_ID_KEY);
+			if (saved) {
+				const parsed = Number.parseInt(saved, 10);
+				return Number.isNaN(parsed) ? null : parsed;
+			}
+		}
+		return null;
+	});
+
 	const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
 		if (typeof window !== "undefined") {
 			const saved = localStorage.getItem(STORAGE_KEY);
@@ -470,11 +517,60 @@ export function WorkflowEditor() {
 		return isValid;
 	}, [workflowState.nodes, workflowState.edges]);
 
-	const handleSave = useCallback(() => {
-		console.warn("[v0] Guardando flujo:", workflowState);
-		// Already saved to localStorage automatically
-		alert("✅ Flujo guardado exitosamente");
-	}, [workflowState]);
+	const handleSave = useCallback(async () => {
+		if (!apiToken) {
+			toast.error("No autenticado", {
+				description: "Debes iniciar sesión para guardar el workflow.",
+			});
+			return;
+		}
+
+		const payload = {
+			name: workflowState.metadata.name || "Nuevo Flujo de Trabajo",
+			slug: slugify(workflowState.metadata.name || "nuevo-flujo-de-trabajo"),
+			description: workflowState.metadata.description || "",
+			github_repo_url: `https://github.com/carteracredit/${slugify(workflowState.metadata.name || "nuevo-flujo")}`,
+			class_name: toClassName(
+				workflowState.metadata.name || "GeneratedWorkflow",
+			),
+			current_major_version: extractMajorVersion(
+				workflowState.metadata.version,
+			),
+		};
+
+		try {
+			if (workflowApiId !== null) {
+				await updateWorkflowApi(workflowApiId, payload, { jwt: apiToken });
+				toast.success("Workflow actualizado", {
+					description: `"${payload.name}" guardado correctamente.`,
+				});
+			} else {
+				const created = await createWorkflow(payload, { jwt: apiToken });
+				setWorkflowApiId(created.id);
+				if (typeof window !== "undefined") {
+					localStorage.setItem(WORKFLOW_API_ID_KEY, String(created.id));
+				}
+				toast.success("Workflow guardado", {
+					description: `"${payload.name}" creado correctamente.`,
+				});
+			}
+		} catch (error) {
+			if (error instanceof ApiError && error.status === 401) {
+				toast.error("No autorizado", {
+					description: "Tu sesión expiró. Por favor inicia sesión nuevamente.",
+				});
+			} else if (error instanceof ApiError && error.status === 403) {
+				toast.error("Acceso denegado", {
+					description: "Solo los administradores pueden guardar workflows.",
+				});
+			} else {
+				toast.error("Error al guardar", {
+					description:
+						error instanceof Error ? error.message : "Error desconocido.",
+				});
+			}
+		}
+	}, [apiToken, workflowApiId, workflowState.metadata]);
 
 	const handleReset = useCallback(() => {
 		const confirmed = window.confirm(
@@ -482,11 +578,13 @@ export function WorkflowEditor() {
 		);
 		if (confirmed) {
 			setWorkflowState(createEmptyWorkflowState());
+			setWorkflowApiId(null);
 			setValidationErrors([]);
 			setValidationStatus("idle");
 			setLastValidationErrorCount(0);
 			if (typeof window !== "undefined") {
 				localStorage.removeItem(STORAGE_KEY);
+				localStorage.removeItem(WORKFLOW_API_ID_KEY);
 			}
 		}
 	}, []);

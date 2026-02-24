@@ -170,6 +170,7 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("step.do('datos-personales'");
+		expect(result.code).toContain("const datosPersonales =");
 		expect(result.code).toContain("FORMS.collect");
 		expect(result.code).toContain("Solicitante");
 	});
@@ -197,6 +198,7 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("step.do('verify-credit'");
+		expect(result.code).toContain("const verifyCredit =");
 		expect(result.code).toContain("fetch('https://api.example.com/credit'");
 		expect(result.code).toContain("method: 'POST'");
 	});
@@ -259,6 +261,7 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("step.waitForEvent('manual-approval'");
+		expect(result.code).toContain("const manualApproval =");
 		expect(result.code).toContain("type: 'acceptance'");
 		expect(result.code).toContain("timeout: '48 hours'");
 	});
@@ -309,6 +312,7 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("step.do('calcular-total'");
+		expect(result.code).toContain("const calcularTotal =");
 		expect(result.code).toContain("items.reduce((a, b) => a + b, 0)");
 	});
 
@@ -583,6 +587,7 @@ describe("generateWorkflowCode with Challenge branching", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
+		expect(result.code).toContain("const approval =");
 		expect(result.code).toContain("if (approval.accepted)");
 		expect(result.code).toContain("return { success: true");
 		expect(result.code).toContain("} else {");
@@ -765,6 +770,55 @@ describe("generateWorkflowCode edge cases", () => {
 
 		expect(result.code).toContain("type: 'signature'");
 		expect(result.code).toContain("timeout: '24 hours'"); // default timeout
+	});
+
+	it("should generate camelCase variable names for forms with special characters", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form1",
+				type: "Form",
+				title: "Formulario A",
+				roles: ["Vendedor"],
+			}),
+			createNode({
+				id: "form2",
+				type: "Form",
+				title: "Formulario B",
+				roles: ["Vendedor"],
+			}),
+			createNode({
+				id: "form3",
+				type: "Form",
+				title: "Formulario C",
+				roles: ["Vendedor"],
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form1"),
+			createEdge("form1", "form2"),
+			createEdge("form2", "form3"),
+			createEdge("form3", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Variable names should be camelCase without hyphens
+		expect(result.code).toContain("const formularioA =");
+		expect(result.code).toContain("const formularioB =");
+		expect(result.code).toContain("const formularioC =");
+
+		// Step names should still use kebab-case
+		expect(result.code).toContain("step.do('formulario-a'");
+		expect(result.code).toContain("step.do('formulario-b'");
+		expect(result.code).toContain("step.do('formulario-c'");
+
+		// Should not contain invalid JavaScript identifiers
+		expect(result.code).not.toContain("const formulario-a");
+		expect(result.code).not.toContain("const formulario-b");
+		expect(result.code).not.toContain("const formulario-c");
 	});
 });
 
