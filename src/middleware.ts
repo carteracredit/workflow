@@ -2,6 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
 /**
+ * Helper to add Set-Cookie headers from auth-svc to a Next.js response.
+ * This is CRITICAL for cookie cache refresh - without forwarding these headers,
+ * the browser never receives refreshed session cookies and sessions expire prematurely.
+ */
+function addAuthCookies(
+	response: NextResponse,
+	cookies: string[],
+): NextResponse {
+	if (!cookies || cookies.length === 0) {
+		return response;
+	}
+
+	for (const cookie of cookies) {
+		response.headers.append("Set-Cookie", cookie);
+	}
+
+	return response;
+}
+
+/**
  * Get auth app URL for redirects.
  */
 const getAuthAppUrl = () => {
@@ -103,18 +123,31 @@ interface SessionResponse {
  * Non-admin users are redirected to forbidden page.
  */
 export async function middleware(request: NextRequest) {
+	console.log("[Workflow Middleware] Auth Service URL:", getAuthServiceUrl());
+	console.log("[Workflow Middleware] Auth App URL:", getAuthAppUrl());
+
 	const sessionCookie = getSessionCookie(request);
+
+	console.log(
+		"[Workflow Middleware] Session cookie:",
+		sessionCookie ? "EXISTS" : "NULL",
+	);
 
 	// No session cookie → redirect to auth app login
 	if (!sessionCookie) {
+		console.log(
+			"[Workflow Middleware] No session cookie, redirecting to login",
+		);
 		return redirectToLogin(request);
 	}
 
 	const cookieHeader = request.headers.get("cookie") || "";
 
 	let sessionData: SessionResponse | null = null;
+	let authServiceSetCookies: string[] = [];
 
 	try {
+		console.log("[Workflow Middleware] Validating session with auth-svc...");
 		const response = await fetch(
 			`${getAuthServiceUrl()}/api/auth/get-session`,
 			{
@@ -126,31 +159,59 @@ export async function middleware(request: NextRequest) {
 			},
 		);
 
+		console.log(
+			"[Workflow Middleware] Auth-svc response status:",
+			response.status,
+		);
+
+		// CRITICAL: Capture Set-Cookie headers from auth-svc
+		// These headers contain refreshed session cookies that MUST be forwarded to the browser
+		// Without this, the cookie cache never refreshes and sessions expire prematurely
+		const setCookies = response.headers.getSetCookie?.();
+		if (setCookies && setCookies.length > 0) {
+			authServiceSetCookies = setCookies;
+			console.log(
+				`[Workflow Middleware] Captured ${setCookies.length} Set-Cookie headers from auth-svc`,
+			);
+		}
+
 		if (!response.ok) {
-			return redirectToLogin(request);
+			console.log(
+				"[Workflow Middleware] Response not OK, redirecting to login",
+			);
+			return addAuthCookies(redirectToLogin(request), authServiceSetCookies);
 		}
 
 		sessionData = (await response.json()) as SessionResponse;
 
 		if (!sessionData?.session || !sessionData?.user) {
-			return redirectToLogin(request);
+			console.log(
+				"[Workflow Middleware] No session/user in response, redirecting to login",
+			);
+			return addAuthCookies(redirectToLogin(request), authServiceSetCookies);
 		}
-	} catch {
-		return redirectToLogin(request);
+	} catch (error) {
+		console.log("[Workflow Middleware] Error during validation:", error);
+		return addAuthCookies(redirectToLogin(request), authServiceSetCookies);
 	}
 
 	// Check if user is banned
 	if (sessionData.user?.banned) {
-		return redirectToForbidden(request);
+		console.log("[Workflow Middleware] User is banned, redirecting to login");
+		return addAuthCookies(redirectToForbidden(request), authServiceSetCookies);
 	}
 
 	// Check for admin role
 	if (!hasAdminRole(sessionData.user?.role)) {
-		return redirectToForbidden(request);
+		console.log(
+			"[Workflow Middleware] User lacks admin role, redirecting to forbidden",
+		);
+		return addAuthCookies(redirectToForbidden(request), authServiceSetCookies);
 	}
 
 	// Admin user with valid session - allow access
-	return NextResponse.next();
+	console.log("[Workflow Middleware] Session valid, allowing request");
+	return addAuthCookies(NextResponse.next(), authServiceSetCookies);
 }
 
 /**
