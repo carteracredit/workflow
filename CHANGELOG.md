@@ -1,3 +1,10 @@
+# [1.0.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.13...v1.0.0-rc.14) (2026-02-24)
+
+
+### Features
+
+* add logging to getExternalOrigin function in middleware ([68e0c79](https://github.com/carteracredit/workflow/commit/68e0c7948bd49d0e3b6e110cbc861725377c8cd4))
+
 # [1.0.0-rc.13](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.12...v1.0.0-rc.13) (2026-02-23)
 
 
