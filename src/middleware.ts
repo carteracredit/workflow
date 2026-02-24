@@ -26,7 +26,6 @@ const getAuthServiceUrl = () => {
  * Returns the origin (protocol + host) without path.
  */
 function getExternalOrigin(request: NextRequest): string {
-	console.log("getExternalOrigin request", request);
 	const forwardedHost = request.headers.get("x-forwarded-host");
 	const forwardedProto = request.headers.get("x-forwarded-proto");
 
