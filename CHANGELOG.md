@@ -1,3 +1,10 @@
+# [1.0.0-rc.15](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.14...v1.0.0-rc.15) (2026-02-25)
+
+
+### Features
+
+* enhance PublishModal with deployment status and workflow publishing ([dc77885](https://github.com/carteracredit/workflow/commit/dc77885f8656be58812cb3a1bb843ea5fde8e9ce))
+
 # [1.0.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.13...v1.0.0-rc.14) (2026-02-25)
 
 
