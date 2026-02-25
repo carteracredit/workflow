@@ -36,6 +36,56 @@ function createStepName(node: WorkflowNode): string {
 }
 
 /**
+ * Helper to create a valid JavaScript variable name in camelCase
+ * Converts "Formulario A" to "formularioA", "Decisión 1" to "decision1", etc.
+ */
+function createVariableName(title: string, fallback: string): string {
+	if (!title || title.trim().length === 0) {
+		return fallback;
+	}
+
+	// Remove quotes and normalize
+	const cleaned = title
+		.replace(/['"]/g, "")
+		.replace(/á/g, "a")
+		.replace(/é/g, "e")
+		.replace(/í/g, "i")
+		.replace(/ó/g, "o")
+		.replace(/ú/g, "u")
+		.replace(/ñ/g, "n")
+		.replace(/Á/g, "A")
+		.replace(/É/g, "E")
+		.replace(/Í/g, "I")
+		.replace(/Ó/g, "O")
+		.replace(/Ú/g, "U")
+		.replace(/Ñ/g, "N");
+
+	// Split by non-alphanumeric characters
+	const words = cleaned.split(/[^a-zA-Z0-9]+/).filter((w) => w.length > 0);
+
+	if (words.length === 0) {
+		return fallback;
+	}
+
+	// First word lowercase, rest with first letter uppercase (camelCase)
+	const camelCased = words
+		.map((word, index) => {
+			if (index === 0) {
+				return word.charAt(0).toLowerCase() + word.slice(1).toLowerCase();
+			}
+			return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+		})
+		.join("");
+
+	// Ensure it starts with a letter or underscore
+	if (!/^[a-zA-Z_]/.test(camelCased)) {
+		return `${fallback}${camelCased}`;
+	}
+
+	return camelCased;
+}
+
+/**
  * Helper to escape string for use in generated code
  */
 function escapeString(str: string): string {
@@ -72,11 +122,12 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
  */
 function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
+	const varName = createVariableName(node.title, "formData");
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const fields = (node.config.fields as string[]) || [];
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
-	code += `${indent}const ${slugify(node.title) || "formData"} = await step.do('${stepName}', async () => {\n`;
+	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
 	code += `${indent}  // Collect form data from user\n`;
 	if (fields.length > 0) {
 		code += `${indent}  // Fields: ${fields.join(", ")}\n`;
@@ -95,6 +146,7 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
  */
 function generateAPIStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
+	const varName = createVariableName(node.title, "apiResult");
 	const endpoint = (node.config.endpoint as string) || "/api/endpoint";
 	const method = (node.config.method as string) || "POST";
 	const failureHandling = node.config.failureHandling as
@@ -102,7 +154,7 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 		| undefined;
 
 	let code = `${indent}// API Call: ${node.title}\n`;
-	code += `${indent}const ${slugify(node.title) || "apiResult"} = await step.do('${stepName}', async () => {\n`;
+	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
 	code += `${indent}  const response = await fetch('${escapeString(endpoint)}', {\n`;
 	code += `${indent}    method: '${method}',\n`;
 	code += `${indent}    headers: { 'Content-Type': 'application/json' },\n`;
@@ -136,10 +188,11 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
  */
 function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
+	const varName = createVariableName(node.title, "transformed");
 	const transformCode = (node.config.code as string) || "// Transform logic";
 
 	let code = `${indent}// Transform: ${node.title}\n`;
-	code += `${indent}const ${slugify(node.title) || "transformed"} = await step.do('${stepName}', async () => {\n`;
+	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
 	code += `${indent}  ${transformCode.split("\n").join(`\n${indent}  `)}\n`;
 	code += `${indent}});\n`;
 
@@ -192,13 +245,14 @@ function generateCheckpointStep(node: WorkflowNode, indent: string): string {
  */
 function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
+	const varName = createVariableName(node.title, "challengeResult");
 	const config = node.config as ChallengeNodeConfig | undefined;
 	const challengeType = config?.challengeType || "acceptance";
 	const timeout = config?.challengeTimeout;
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
-	code += `${indent}const ${slugify(node.title) || "challengeResult"} = await step.waitForEvent('${stepName}', {\n`;
+	code += `${indent}const ${varName} = await step.waitForEvent('${stepName}', {\n`;
 	code += `${indent}  type: '${challengeType}',\n`;
 	code += `${indent}  timeout: '${timeoutStr}',\n`;
 	code += `${indent}});\n`;
@@ -357,7 +411,7 @@ function traverseBranch(
 		}
 		// Handle Challenge nodes (branching based on acceptance)
 		else if (node.type === "Challenge" && outgoing.length === 2) {
-			const varName = slugify(node.title) || "challengeResult";
+			const varName = createVariableName(node.title, "challengeResult");
 			const topEdge = outgoing.find((e: WorkflowEdge) => e.fromPort === "top");
 			const bottomEdge = outgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "bottom",
