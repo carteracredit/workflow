@@ -4,6 +4,14 @@
 ### Features
 
 * add logging to getExternalOrigin function in middleware ([68e0c79](https://github.com/carteracredit/workflow/commit/68e0c7948bd49d0e3b6e110cbc861725377c8cd4))
+* implement workflow API integration and session management ([c98a48f](https://github.com/carteracredit/workflow/commit/c98a48f7accf5cd208ac70abbb42aec9fac2d30f))
+
+# [1.0.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.13...v1.0.0-rc.14) (2026-02-25)
+
+
+### Features
+
+* add logging to getExternalOrigin function in middleware ([68e0c79](https://github.com/carteracredit/workflow/commit/68e0c7948bd49d0e3b6e110cbc861725377c8cd4))
 
 # [1.0.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.13...v1.0.0-rc.14) (2026-02-24)
 
