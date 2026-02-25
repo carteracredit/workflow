@@ -529,7 +529,6 @@ export function WorkflowEditor() {
 			name: workflowState.metadata.name || "Nuevo Flujo de Trabajo",
 			slug: slugify(workflowState.metadata.name || "nuevo-flujo-de-trabajo"),
 			description: workflowState.metadata.description || "",
-			github_repo_url: `https://github.com/carteracredit/${slugify(workflowState.metadata.name || "nuevo-flujo")}`,
 			class_name: toClassName(
 				workflowState.metadata.name || "GeneratedWorkflow",
 			),
@@ -896,6 +895,9 @@ export function WorkflowEditor() {
 					edges={workflowState.edges}
 					metadata={workflowState.metadata}
 					flags={workflowState.flags}
+					workflowApiId={workflowApiId}
+					onSave={handleSave}
+					apiToken={apiToken}
 					onClose={() => setShowPublish(false)}
 				/>
 			)}

@@ -5,6 +5,7 @@ import {
 	getWorkflow,
 	updateWorkflow,
 	deleteWorkflow,
+	publishWorkflow,
 } from "./workflows";
 import { ApiError } from "./http";
 
@@ -149,6 +150,123 @@ describe("workflow API functions", () => {
 				expect.objectContaining({ method: "DELETE" }),
 			);
 			expect(result.id).toBe(1);
+		});
+	});
+
+	describe("publishWorkflow", () => {
+		const mockDeployment = {
+			id: 10,
+			workflow_id: 1,
+			major_version: 1,
+			semver: "1.0.0",
+			environment: "development" as const,
+			worker_name: "credit-app-dev-v1",
+			status: "deploying" as const,
+			deployed_at: null,
+			created_at: "2026-02-24T00:00:00.000Z",
+			updated_at: "2026-02-24T00:00:00.000Z",
+		};
+
+		const mockPublishResult = {
+			deployment: mockDeployment,
+			repo_url: "https://github.com/carteracredit/credit-app",
+			worker_name: "credit-app-dev-v1",
+			branch: "dev",
+		};
+
+		it("POSTs to correct publish URL", async () => {
+			mockFetch({ success: true, result: mockPublishResult });
+
+			await publishWorkflow(
+				1,
+				{
+					code: "export class MyWorkflow {}",
+					environment: "development",
+				},
+				{ jwt: "my-token" },
+			);
+
+			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+				`${BASE_URL}/workflows/1/publish`,
+				expect.objectContaining({ method: "POST" }),
+			);
+		});
+
+		it("sends code and environment in body", async () => {
+			mockFetch({ success: true, result: mockPublishResult });
+
+			const code = "export class MyWorkflow extends WorkflowEntrypoint {}";
+			await publishWorkflow(1, { code, environment: "production" });
+
+			const call = vi.mocked(fetch).mock.calls[0];
+			const body = JSON.parse(call[1]?.body as string) as {
+				code: string;
+				environment: string;
+			};
+			expect(body.code).toBe(code);
+			expect(body.environment).toBe("production");
+		});
+
+		it("returns deployment result on success", async () => {
+			mockFetch({ success: true, result: mockPublishResult });
+
+			const result = await publishWorkflow(1, {
+				code: "export class MyWorkflow {}",
+				environment: "development",
+			});
+
+			expect(result.deployment.status).toBe("deploying");
+			expect(result.worker_name).toBe("credit-app-dev-v1");
+			expect(result.branch).toBe("dev");
+			expect(result.repo_url).toBe(
+				"https://github.com/carteracredit/credit-app",
+			);
+		});
+
+		it("passes JWT Authorization header", async () => {
+			mockFetch({ success: true, result: mockPublishResult });
+
+			await publishWorkflow(
+				1,
+				{ code: "code", environment: "development" },
+				{ jwt: "publish-token" },
+			);
+
+			const headers = vi.mocked(fetch).mock.calls[0][1]?.headers as Record<
+				string,
+				string
+			>;
+			expect(headers.Authorization).toBe("Bearer publish-token");
+		});
+
+		it("throws ApiError on 503 (GitHub not configured)", async () => {
+			mockFetch(
+				{ success: false, error: "GitHub integration is not configured" },
+				503,
+			);
+
+			await expect(
+				publishWorkflow(1, { code: "code", environment: "development" }),
+			).rejects.toThrow(ApiError);
+		});
+
+		it("throws ApiError on 404 (workflow not found)", async () => {
+			mockFetch({ success: false, error: "Workflow not found" }, 404);
+
+			await expect(
+				publishWorkflow(99, { code: "code", environment: "development" }),
+			).rejects.toThrow(ApiError);
+		});
+
+		it("works without JWT option", async () => {
+			mockFetch({ success: true, result: mockPublishResult });
+
+			const result = await publishWorkflow(1, {
+				code: "code",
+				environment: "development",
+			});
+
+			expect(result).toEqual(mockPublishResult);
 		});
 	});
 });

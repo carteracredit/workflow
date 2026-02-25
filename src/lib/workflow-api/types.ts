@@ -6,7 +6,7 @@ export interface Workflow {
 	name: string;
 	slug: string;
 	description: string;
-	github_repo_url: string;
+	github_repo_url: string | null;
 	class_name: string;
 	current_major_version: number;
 	created_at: string;
@@ -20,7 +20,7 @@ export interface CreateWorkflowPayload {
 	name: string;
 	slug: string;
 	description: string;
-	github_repo_url: string;
+	github_repo_url?: string | null;
 	class_name: string;
 	current_major_version: number;
 }
@@ -64,6 +64,16 @@ export interface CreateWorkflowDeploymentPayload {
 export interface UpdateWorkflowDeploymentPayload {
 	status?: "deploying" | "active" | "deprecated" | "retired";
 	deployed_at?: string | null;
+}
+
+/**
+ * Response from POST /workflows/:id/publish
+ */
+export interface PublishWorkflowResponse {
+	deployment: WorkflowDeployment;
+	repo_url: string | null;
+	worker_name: string;
+	branch: string;
 }
 
 /**

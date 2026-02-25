@@ -4,11 +4,17 @@ import type {
 	Workflow,
 	CreateWorkflowPayload,
 	UpdateWorkflowPayload,
+	PublishWorkflowResponse,
 	ApiResponse,
 	ApiCallOptions,
 } from "./types";
 
-export type { Workflow, CreateWorkflowPayload, UpdateWorkflowPayload };
+export type {
+	Workflow,
+	CreateWorkflowPayload,
+	UpdateWorkflowPayload,
+	PublishWorkflowResponse,
+};
 
 export interface ListWorkflowsOptions extends ApiCallOptions {
 	search?: string;
@@ -86,6 +92,31 @@ export async function updateWorkflow(
 		`${baseUrl}/workflows/${id}`,
 		{
 			method: "PUT",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(payload),
+			jwt: options?.jwt,
+		},
+	);
+
+	return json.result;
+}
+
+/**
+ * Publishes a workflow by pushing generated TypeScript code to GitHub
+ * and triggering a Cloudflare Workers deployment via GitHub Actions.
+ * Creates a deployment record in workflow-svc with status "deploying".
+ */
+export async function publishWorkflow(
+	id: number,
+	payload: { code: string; environment: "development" | "production" },
+	options?: ApiCallOptions,
+): Promise<PublishWorkflowResponse> {
+	const baseUrl = getWorkflowServiceUrl();
+
+	const { json } = await fetchJson<ApiResponse<PublishWorkflowResponse>>(
+		`${baseUrl}/workflows/${id}/publish`,
+		{
+			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(payload),
 			jwt: options?.jwt,
