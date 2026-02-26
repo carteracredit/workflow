@@ -170,7 +170,7 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain('step.do("datos-personales"');
-		expect(result.code).toContain("FORMS.collect");
+		expect(result.code).toContain("forms.collect");
 		expect(result.code).toContain("Solicitante");
 	});
 
@@ -258,7 +258,9 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain('step.waitForEvent("manual-approval"');
+		expect(result.code).toContain(
+			'step.waitForEvent<{ accepted: boolean }>("manual-approval"',
+		);
 		expect(result.code).toContain("const manualApproval =");
 		expect(result.code).toContain('type: "acceptance"');
 		expect(result.code).toContain('timeout: "48 hours"');
@@ -357,7 +359,7 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain('step.do("send-notification"');
-		expect(result.code).toContain("NOTIFICATIONS.send");
+		expect(result.code).toContain("notifications.send");
 		expect(result.code).toContain('type: "email"');
 	});
 
@@ -529,8 +531,8 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("Flag Change: Update Status");
-		expect(result.code).toContain('FLAGS.set("status", "approved")');
-		expect(result.code).toContain('FLAGS.set("priority", "high")');
+		expect(result.code).toContain('flags.set("status", "approved")');
+		expect(result.code).toContain('flags.set("priority", "high")');
 	});
 
 	it("should handle FlagChange with no flag changes", () => {
@@ -585,7 +587,7 @@ describe("generateWorkflowCode with Challenge branching", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("const approval =");
-		expect(result.code).toContain("if (approval.accepted)");
+		expect(result.code).toContain("if (approval.payload.accepted)");
 		expect(result.code).toContain("return { success: true");
 		expect(result.code).toContain("} else {");
 		expect(result.code).toContain("return { success: false");
@@ -1004,7 +1006,7 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(result.code).toContain('step.do("mensaje-rechazo"');
 
 		// Join and End must appear AFTER the if/else, not inside a branch
-		const ifIdx = result.code.indexOf("if (aprobacion.accepted)");
+		const ifIdx = result.code.indexOf("if (aprobacion.payload.accepted)");
 		const joinIdx = result.code.indexOf('step.do("union"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
@@ -1163,7 +1165,7 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 			.length;
 		expect(returnCount).toBe(1);
 
-		const ifIdx = result.code.indexOf("if (firma.accepted)");
+		const ifIdx = result.code.indexOf("if (firma.payload.accepted)");
 		const returnIdx = result.code.indexOf("return { success: true");
 		expect(returnIdx).toBeGreaterThan(ifIdx);
 	});

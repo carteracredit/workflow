@@ -131,7 +131,8 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	if (fields.length > 0) {
 		code += `${indent}\t// Fields: ${fields.join(", ")}\n`;
 	}
-	code += `${indent}\treturn await this.env.FORMS.collect({\n`;
+	code += `${indent}\tconst forms = this.env.FORMS as { collect: (opts: unknown) => Promise<unknown> };\n`;
+	code += `${indent}\treturn await forms.collect({\n`;
 	code += `${indent}\t\tformId: "${stepName}",\n`;
 	code += `${indent}\t\troles: [${node.roles.map((r) => `"${escapeString(r)}"`).join(", ")}],\n`;
 	code += `${indent}\t});\n`;
@@ -206,7 +207,10 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 
 	let code = `${indent}// Message: ${node.title}\n`;
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
-	code += `${indent}\tawait this.env.NOTIFICATIONS.send({\n`;
+	code += `${indent}\tconst notifications = this.env.NOTIFICATIONS as {\n`;
+	code += `${indent}\t\tsend: (opts: unknown) => Promise<void>;\n`;
+	code += `${indent}\t};\n`;
+	code += `${indent}\tawait notifications.send({\n`;
 	code += `${indent}\t\ttype: "${messageType}",\n`;
 	if (template) {
 		code += `${indent}\t\ttemplate: "${escapeString(template)}",\n`;
@@ -249,7 +253,7 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
-	code += `${indent}const ${varName} = await step.waitForEvent("${stepName}", {\n`;
+	code += `${indent}const ${varName} = await step.waitForEvent<{ accepted: boolean }>("${stepName}", {\n`;
 	code += `${indent}\ttype: "${challengeType}",\n`;
 	code += `${indent}\ttimeout: "${timeoutStr}",\n`;
 	code += `${indent}});\n`;
@@ -268,10 +272,14 @@ function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
 
 	let code = `${indent}// Flag Change: ${node.title}\n`;
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
-	for (const change of flagChanges) {
-		code += `${indent}\tawait this.env.FLAGS.set("${escapeString(change.flagId)}", "${escapeString(change.optionId)}");\n`;
-	}
-	if (flagChanges.length === 0) {
+	if (flagChanges.length > 0) {
+		code += `${indent}\tconst flags = this.env.FLAGS as {\n`;
+		code += `${indent}\t\tset: (id: string, value: string) => Promise<void>;\n`;
+		code += `${indent}\t};\n`;
+		for (const change of flagChanges) {
+			code += `${indent}\tawait flags.set("${escapeString(change.flagId)}", "${escapeString(change.optionId)}");\n`;
+		}
+	} else {
 		code += `${indent}\t// Configure flag changes in the workflow editor\n`;
 	}
 	code += `${indent}});\n`;
@@ -506,7 +514,7 @@ function traverseBranch(
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			code += `${indent}if (${varName}.accepted) {\n`;
+			code += `${indent}if (${varName}.payload.accepted) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(
