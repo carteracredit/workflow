@@ -294,13 +294,56 @@ function generateJoinStep(
 	const branchCount = incomingEdges.length;
 
 	let code = `${indent}// Join: ${node.title} (merging ${branchCount} branches)\n`;
-	code += `${indent}// Note: In Cloudflare Workflows, parallel branches can be achieved with Promise.all\n`;
 	code += `${indent}await step.do('${stepName}', async () => {\n`;
 	code += `${indent}  // Merge point for ${branchCount} branches\n`;
 	code += `${indent}  return { merged: true };\n`;
 	code += `${indent}});\n`;
 
 	return code;
+}
+
+/**
+ * Finds the first node reachable from BOTH topStartId and bottomStartId
+ * (the post-dominator / convergence point for a branching node).
+ *
+ * Algorithm:
+ *  1. BFS from topStartId to collect all reachable node IDs.
+ *  2. BFS from bottomStartId – return the first node found in the top set.
+ *
+ * Returns null when the branches never converge (e.g. each ends in its own
+ * End/Reject with no shared successor).
+ */
+function findConvergenceNode(
+	topStartId: string,
+	bottomStartId: string,
+	outgoingMap: Map<string, WorkflowEdge[]>,
+): string | null {
+	// Collect all nodes reachable from the top branch
+	const topReachable = new Set<string>();
+	const topQueue: string[] = [topStartId];
+	while (topQueue.length > 0) {
+		const id = topQueue.shift()!;
+		if (topReachable.has(id)) continue;
+		topReachable.add(id);
+		for (const edge of outgoingMap.get(id) ?? []) {
+			if (!topReachable.has(edge.to)) topQueue.push(edge.to);
+		}
+	}
+
+	// BFS from bottom branch – first hit in topReachable is the convergence node
+	const bottomVisited = new Set<string>();
+	const bottomQueue: string[] = [bottomStartId];
+	while (bottomQueue.length > 0) {
+		const id = bottomQueue.shift()!;
+		if (bottomVisited.has(id)) continue;
+		bottomVisited.add(id);
+		if (topReachable.has(id)) return id;
+		for (const edge of outgoingMap.get(id) ?? []) {
+			if (!bottomVisited.has(edge.to)) bottomQueue.push(edge.to);
+		}
+	}
+
+	return null;
 }
 
 /**
@@ -355,21 +398,31 @@ function generateNodeCode(
 }
 
 /**
- * Recursively traverse a branch and generate code
+ * Recursively traverse a branch and generate code.
+ *
+ * @param nodeId       - Starting node ID for this traversal.
+ * @param indent       - Current indentation string.
+ * @param ctx          - Shared traversal context (visited set, maps, warnings).
+ * @param stopAtNodeId - Optional convergence boundary: when this node ID is
+ *                       reached the traversal stops WITHOUT processing it.
+ *                       The caller is responsible for continuing from that node.
  */
 function traverseBranch(
 	nodeId: string,
 	indent: string,
 	ctx: TraversalContext,
+	stopAtNodeId?: string,
 ): string {
 	let code = "";
-
-	// Process nodes in a chain until we hit a visited node or end
 	let currentNodeId: string | null = nodeId;
 
 	while (currentNodeId) {
+		// Stop at the convergence boundary – the outer traversal will process it
+		if (stopAtNodeId && currentNodeId === stopAtNodeId) {
+			break;
+		}
+
 		if (ctx.visited.has(currentNodeId)) {
-			// Already visited (e.g., Join node from another branch)
 			break;
 		}
 		ctx.visited.add(currentNodeId);
@@ -380,8 +433,8 @@ function traverseBranch(
 			break;
 		}
 
-		// Get outgoing edges - explicit type to help TypeScript with recursion
-		const outgoing: WorkflowEdge[] = ctx.outgoingMap.get(currentNodeId) || [];
+		// Get outgoing edges
+		const outgoing: WorkflowEdge[] = ctx.outgoingMap.get(currentNodeId) ?? [];
 
 		// Handle Decision nodes (branching)
 		if (node.type === "Decision") {
@@ -391,23 +444,38 @@ function traverseBranch(
 				(e: WorkflowEdge) => e.fromPort === "bottom",
 			);
 
+			// Detect convergence point so both branches stop before it and we
+			// continue from it after the if/else block.
+			const convergenceNodeId =
+				topEdge && bottomEdge
+					? findConvergenceNode(topEdge.to, bottomEdge.to, ctx.outgoingMap)
+					: null;
+
+			// Effective stop boundary for sub-branches: prefer the inner
+			// convergence, but never go past the outer stopAtNodeId.
+			const innerStop = convergenceNodeId ?? stopAtNodeId;
+
 			code += `${indent}// Decision: ${node.title}\n`;
 			code += `${indent}if (${condition}) {\n`;
 
-			// Generate true branch
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "  ", ctx);
+				code += traverseBranch(topEdge.to, indent + "  ", ctx, innerStop);
 			}
 
 			code += `${indent}} else {\n`;
 
-			// Generate false branch
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "  ", ctx);
+				code += traverseBranch(bottomEdge.to, indent + "  ", ctx, innerStop);
 			}
 
 			code += `${indent}}\n\n`;
-			break; // Decision handled, stop linear traversal
+
+			if (convergenceNodeId) {
+				// Continue linear traversal from the convergence node
+				currentNodeId = convergenceNodeId;
+			} else {
+				break;
+			}
 		}
 		// Handle Challenge nodes (branching based on acceptance)
 		else if (node.type === "Challenge" && outgoing.length === 2) {
@@ -417,46 +485,50 @@ function traverseBranch(
 				(e: WorkflowEdge) => e.fromPort === "bottom",
 			);
 
-			// Generate challenge step first
+			// Detect convergence point
+			const convergenceNodeId =
+				topEdge && bottomEdge
+					? findConvergenceNode(topEdge.to, bottomEdge.to, ctx.outgoingMap)
+					: null;
+
+			const innerStop = convergenceNodeId ?? stopAtNodeId;
+
+			// Generate the waitForEvent step first
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
 			code += `${indent}if (${varName}.accepted) {\n`;
 
-			// Generate accepted branch
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "  ", ctx);
+				code += traverseBranch(topEdge.to, indent + "  ", ctx, innerStop);
 			}
 
 			code += `${indent}} else {\n`;
 
-			// Generate rejected branch
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "  ", ctx);
+				code += traverseBranch(bottomEdge.to, indent + "  ", ctx, innerStop);
 			}
 
 			code += `${indent}}\n\n`;
-			break; // Challenge handled, stop linear traversal
+
+			if (convergenceNodeId) {
+				currentNodeId = convergenceNodeId;
+			} else {
+				break;
+			}
 		}
 		// Linear flow
 		else {
-			// Generate code for current node
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			// Handle multiple outgoing edges (shouldn't happen for non-branching nodes)
 			if (outgoing.length > 1) {
 				ctx.warnings.push(
 					`Node "${node.title}" has multiple outgoing edges but is not a Decision or Challenge node`,
 				);
 			}
 
-			// Move to next node
-			if (outgoing.length >= 1) {
-				currentNodeId = outgoing[0].to;
-			} else {
-				currentNodeId = null;
-			}
+			currentNodeId = outgoing.length >= 1 ? outgoing[0].to : null;
 		}
 	}
 
