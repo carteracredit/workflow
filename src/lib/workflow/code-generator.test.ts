@@ -146,7 +146,7 @@ describe("generateWorkflowCode", () => {
 
 		expect(result.code).toContain("class GeneratedWorkflow");
 		expect(result.code).toContain("extends WorkflowEntrypoint");
-		expect(result.code).toContain("async run(event: WorkflowEvent");
+		expect(result.code).toContain("async run(");
 		expect(result.code).toContain("return { success: true");
 	});
 
@@ -169,8 +169,7 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.do('datos-personales'");
-		expect(result.code).toContain("const datosPersonales =");
+		expect(result.code).toContain('step.do("datos-personales"');
 		expect(result.code).toContain("FORMS.collect");
 		expect(result.code).toContain("Solicitante");
 	});
@@ -197,10 +196,9 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.do('verify-credit'");
-		expect(result.code).toContain("const verifyCredit =");
-		expect(result.code).toContain("fetch('https://api.example.com/credit'");
-		expect(result.code).toContain("method: 'POST'");
+		expect(result.code).toContain('step.do("verify-credit"');
+		expect(result.code).toContain('fetch("https://api.example.com/credit"');
+		expect(result.code).toContain('method: "POST"');
 	});
 
 	it("should generate API step with retries", () => {
@@ -234,7 +232,7 @@ describe("generateWorkflowCode", () => {
 
 		expect(result.code).toContain("retries:");
 		expect(result.code).toContain("limit: 3");
-		expect(result.code).toContain("timeout: '30 seconds'");
+		expect(result.code).toContain('timeout: "30 seconds"');
 	});
 
 	it("should generate Challenge (waitForEvent) step code", () => {
@@ -260,10 +258,10 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.waitForEvent('manual-approval'");
+		expect(result.code).toContain('step.waitForEvent("manual-approval"');
 		expect(result.code).toContain("const manualApproval =");
-		expect(result.code).toContain("type: 'acceptance'");
-		expect(result.code).toContain("timeout: '48 hours'");
+		expect(result.code).toContain('type: "acceptance"');
+		expect(result.code).toContain('timeout: "48 hours"');
 	});
 
 	it("should generate Decision branching code", () => {
@@ -311,8 +309,7 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.do('calcular-total'");
-		expect(result.code).toContain("const calcularTotal =");
+		expect(result.code).toContain('step.do("calcular-total"');
 		expect(result.code).toContain("items.reduce((a, b) => a + b, 0)");
 	});
 
@@ -335,7 +332,7 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.do('guardar-estado'");
+		expect(result.code).toContain('step.do("guardar-estado"');
 		expect(result.code).toContain("checkpoint:");
 		expect(result.code).toContain("(safe)");
 	});
@@ -359,9 +356,9 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.do('send-notification'");
+		expect(result.code).toContain('step.do("send-notification"');
 		expect(result.code).toContain("NOTIFICATIONS.send");
-		expect(result.code).toContain("type: 'email'");
+		expect(result.code).toContain('type: "email"');
 	});
 
 	it("should include metadata in comments when provided", () => {
@@ -427,10 +424,10 @@ describe("generateWorkflowCode", () => {
 			includeImports: true,
 		});
 
-		expect(result.code).toContain(
-			"import { WorkflowEntrypoint, WorkflowEvent, WorkflowStep }",
-		);
-		expect(result.code).toContain("from 'cloudflare:workers'");
+		expect(result.code).toContain("WorkflowEntrypoint");
+		expect(result.code).toContain("WorkflowEvent");
+		expect(result.code).toContain("WorkflowStep");
+		expect(result.code).toContain('from "cloudflare:workers"');
 	});
 
 	it("should not generate imports when includeImports is false", () => {
@@ -532,8 +529,8 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("Flag Change: Update Status");
-		expect(result.code).toContain("FLAGS.set('status', 'approved')");
-		expect(result.code).toContain("FLAGS.set('priority', 'high')");
+		expect(result.code).toContain('FLAGS.set("status", "approved")');
+		expect(result.code).toContain('FLAGS.set("priority", "high")');
 	});
 
 	it("should handle FlagChange with no flag changes", () => {
@@ -652,7 +649,7 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.do('transform'");
+		expect(result.code).toContain('step.do("transform"');
 		expect(result.code).toContain("// Transform logic");
 	});
 
@@ -698,7 +695,7 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("type: 'sms'");
+		expect(result.code).toContain('type: "sms"');
 		expect(result.code).not.toContain("template:");
 	});
 
@@ -745,7 +742,7 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.do('simple-api'");
+		expect(result.code).toContain('step.do("simple-api"');
 		expect(result.code).not.toContain("retries:");
 	});
 
@@ -768,8 +765,8 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("type: 'signature'");
-		expect(result.code).toContain("timeout: '24 hours'"); // default timeout
+		expect(result.code).toContain('type: "signature"');
+		expect(result.code).toContain('timeout: "24 hours"'); // default timeout
 	});
 
 	it("should generate camelCase variable names for forms with special characters", () => {
@@ -805,15 +802,10 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Variable names should be camelCase without hyphens
-		expect(result.code).toContain("const formularioA =");
-		expect(result.code).toContain("const formularioB =");
-		expect(result.code).toContain("const formularioC =");
-
-		// Step names should still use kebab-case
-		expect(result.code).toContain("step.do('formulario-a'");
-		expect(result.code).toContain("step.do('formulario-b'");
-		expect(result.code).toContain("step.do('formulario-c'");
+		// Step names should use kebab-case
+		expect(result.code).toContain('step.do("formulario-a"');
+		expect(result.code).toContain('step.do("formulario-b"');
+		expect(result.code).toContain('step.do("formulario-c"');
 
 		// Should not contain invalid JavaScript identifiers
 		expect(result.code).not.toContain("const formulario-a");
@@ -1008,24 +1000,24 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(result.warnings).toHaveLength(0);
 
 		// Both messages must appear
-		expect(result.code).toContain("step.do('mensaje-aceptacion'");
-		expect(result.code).toContain("step.do('mensaje-rechazo'");
+		expect(result.code).toContain('step.do("mensaje-aceptacion"');
+		expect(result.code).toContain('step.do("mensaje-rechazo"');
 
 		// Join and End must appear AFTER the if/else, not inside a branch
 		const ifIdx = result.code.indexOf("if (aprobacion.accepted)");
-		const joinIdx = result.code.indexOf("step.do('union'");
+		const joinIdx = result.code.indexOf('step.do("union"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
 		expect(ifIdx).toBeGreaterThanOrEqual(0);
 		expect(joinIdx).toBeGreaterThan(ifIdx);
 		expect(returnIdx).toBeGreaterThan(joinIdx);
 
-		// The Join step must NOT be indented inside the if/else (no leading 4+ spaces before it)
+		// The Join step must NOT be indented inside the if/else (2 tabs = method body, not nested)
 		const joinLine = result.code
 			.split("\n")
-			.find((l) => l.includes("step.do('union'"))!;
+			.find((l) => l.includes('step.do("union"'))!;
 		expect(joinLine).toBeDefined();
-		expect(joinLine.startsWith("    await")).toBe(true); // 4 spaces = method body, not nested
+		expect(joinLine.startsWith("\t\tawait")).toBe(true); // 2 tabs = method body, not nested
 	});
 
 	// ── Decision + Join + End ───────────────────────────────────────────────
@@ -1066,11 +1058,11 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.warnings).toHaveLength(0);
-		expect(result.code).toContain("step.do('formulario-a'");
-		expect(result.code).toContain("step.do('formulario-b'");
+		expect(result.code).toContain('step.do("formulario-a"');
+		expect(result.code).toContain('step.do("formulario-b"');
 
 		const ifIdx = result.code.indexOf("if (amount > 1000)");
-		const joinIdx = result.code.indexOf("step.do('union'");
+		const joinIdx = result.code.indexOf('step.do("union"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
 		expect(joinIdx).toBeGreaterThan(ifIdx);
@@ -1113,8 +1105,8 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.warnings).toHaveLength(0);
-		expect(result.code).toContain("step.do('aprobado'");
-		expect(result.code).toContain("step.do('rechazado'");
+		expect(result.code).toContain('step.do("aprobado"');
+		expect(result.code).toContain('step.do("rechazado"');
 
 		// return must appear exactly once
 		const returnCount = (result.code.match(/return \{ success: true/g) ?? [])
@@ -1122,8 +1114,8 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(returnCount).toBe(1);
 
 		// return appears after both message steps
-		const approvedIdx = result.code.indexOf("step.do('aprobado'");
-		const rejectedIdx = result.code.indexOf("step.do('rechazado'");
+		const approvedIdx = result.code.indexOf('step.do("aprobado"');
+		const rejectedIdx = result.code.indexOf('step.do("rechazado"');
 		const returnIdx = result.code.indexOf("return { success: true");
 		expect(returnIdx).toBeGreaterThan(Math.max(approvedIdx, rejectedIdx));
 	});
@@ -1255,9 +1247,9 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.warnings).toHaveLength(0);
-		expect(result.code).toContain("step.do('mensaje-a'");
-		expect(result.code).toContain("step.do('mensaje-b'");
-		expect(result.code).toContain("step.do('mensaje-c'");
+		expect(result.code).toContain('step.do("mensaje-a"');
+		expect(result.code).toContain('step.do("mensaje-b"');
+		expect(result.code).toContain('step.do("mensaje-c"');
 
 		// return appears only once (shared End)
 		const returnCount = (result.code.match(/return \{ success: true/g) ?? [])
@@ -1316,8 +1308,8 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 
 		expect(result.warnings).toHaveLength(0);
 
-		const joinIdx = result.code.indexOf("step.do('union'");
-		const msgIdx = result.code.indexOf("step.do('mensaje-final'");
+		const joinIdx = result.code.indexOf('step.do("union"');
+		const msgIdx = result.code.indexOf('step.do("mensaje-final"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
 		expect(joinIdx).toBeGreaterThanOrEqual(0);

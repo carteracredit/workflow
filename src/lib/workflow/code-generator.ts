@@ -86,10 +86,10 @@ function createVariableName(title: string, fallback: string): string {
 }
 
 /**
- * Helper to escape string for use in generated code
+ * Helper to escape string for use in generated code (double-quoted strings).
  */
 function escapeString(str: string): string {
-	return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
+	return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
 }
 
 /**
@@ -122,20 +122,19 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
  */
 function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "formData");
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const fields = (node.config.fields as string[]) || [];
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
-	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  // Collect form data from user\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t// Collect form data from user\n`;
 	if (fields.length > 0) {
-		code += `${indent}  // Fields: ${fields.join(", ")}\n`;
+		code += `${indent}\t// Fields: ${fields.join(", ")}\n`;
 	}
-	code += `${indent}  return await this.env.FORMS.collect({\n`;
-	code += `${indent}    formId: '${stepName}',\n`;
-	code += `${indent}    roles: [${node.roles.map((r) => `'${r}'`).join(", ")}],\n`;
-	code += `${indent}  });\n`;
+	code += `${indent}\treturn await this.env.FORMS.collect({\n`;
+	code += `${indent}\t\tformId: "${stepName}",\n`;
+	code += `${indent}\t\troles: [${node.roles.map((r) => `"${escapeString(r)}"`).join(", ")}],\n`;
+	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -146,7 +145,6 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
  */
 function generateAPIStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "apiResult");
 	const endpoint = (node.config.endpoint as string) || "/api/endpoint";
 	const method = (node.config.method as string) || "POST";
 	const failureHandling = node.config.failureHandling as
@@ -154,27 +152,27 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 		| undefined;
 
 	let code = `${indent}// API Call: ${node.title}\n`;
-	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  const response = await fetch('${escapeString(endpoint)}', {\n`;
-	code += `${indent}    method: '${method}',\n`;
-	code += `${indent}    headers: { 'Content-Type': 'application/json' },\n`;
-	code += `${indent}    body: JSON.stringify(event.payload),\n`;
-	code += `${indent}  });\n`;
-	code += `${indent}  if (!response.ok) {\n`;
-	code += `${indent}    throw new Error(\`API call failed: \${response.status}\`);\n`;
-	code += `${indent}  }\n`;
-	code += `${indent}  return response.json();\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\tconst response = await fetch("${escapeString(endpoint)}", {\n`;
+	code += `${indent}\t\tmethod: "${method}",\n`;
+	code += `${indent}\t\theaders: { "Content-Type": "application/json" },\n`;
+	code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+	code += `${indent}\t});\n`;
+	code += `${indent}\tif (!response.ok) {\n`;
+	code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
+	code += `${indent}\t}\n`;
+	code += `${indent}\treturn response.json();\n`;
 	code += `${indent}}`;
 
 	// Add retry configuration if specified
 	if (failureHandling && failureHandling.maxRetries > 0) {
 		code += `, {\n`;
-		code += `${indent}  retries: {\n`;
-		code += `${indent}    limit: ${failureHandling.maxRetries},\n`;
-		code += `${indent}    delay: '1 second',\n`;
-		code += `${indent}    backoff: 'exponential',\n`;
-		code += `${indent}  },\n`;
-		code += `${indent}  timeout: '${Math.round(failureHandling.timeout / 1000)} seconds',\n`;
+		code += `${indent}\tretries: {\n`;
+		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
+		code += `${indent}\t\tdelay: "1 second",\n`;
+		code += `${indent}\t\tbackoff: "exponential",\n`;
+		code += `${indent}\t},\n`;
+		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
 		code += `${indent}}`;
 	}
 
@@ -188,12 +186,11 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
  */
 function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "transformed");
 	const transformCode = (node.config.code as string) || "// Transform logic";
 
 	let code = `${indent}// Transform: ${node.title}\n`;
-	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  ${transformCode.split("\n").join(`\n${indent}  `)}\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t${transformCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -208,14 +205,14 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 	const template = (node.config.template as string) || "";
 
 	let code = `${indent}// Message: ${node.title}\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  await this.env.NOTIFICATIONS.send({\n`;
-	code += `${indent}    type: '${messageType}',\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\tawait this.env.NOTIFICATIONS.send({\n`;
+	code += `${indent}\t\ttype: "${messageType}",\n`;
 	if (template) {
-		code += `${indent}    template: '${escapeString(template)}',\n`;
+		code += `${indent}\t\ttemplate: "${escapeString(template)}",\n`;
 	}
-	code += `${indent}    payload: event.payload,\n`;
-	code += `${indent}  });\n`;
+	code += `${indent}\t\tpayload: event.payload,\n`;
+	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -229,12 +226,12 @@ function generateCheckpointStep(node: WorkflowNode, indent: string): string {
 	const isSafe = node.checkpointType === "safe";
 
 	let code = `${indent}// Checkpoint: ${node.title}${isSafe ? " (safe)" : ""}\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  // State is automatically persisted at this point\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t// State is automatically persisted at this point\n`;
 	if (isSafe) {
-		code += `${indent}  // This is a safe checkpoint - workflow can be safely retried from here\n`;
+		code += `${indent}\t// This is a safe checkpoint - workflow can be safely retried from here\n`;
 	}
-	code += `${indent}  return { checkpoint: '${stepName}', timestamp: Date.now() };\n`;
+	code += `${indent}\treturn { checkpoint: "${stepName}", timestamp: Date.now() };\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -252,9 +249,9 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
-	code += `${indent}const ${varName} = await step.waitForEvent('${stepName}', {\n`;
-	code += `${indent}  type: '${challengeType}',\n`;
-	code += `${indent}  timeout: '${timeoutStr}',\n`;
+	code += `${indent}const ${varName} = await step.waitForEvent("${stepName}", {\n`;
+	code += `${indent}\ttype: "${challengeType}",\n`;
+	code += `${indent}\ttimeout: "${timeoutStr}",\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -270,12 +267,12 @@ function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
 		[];
 
 	let code = `${indent}// Flag Change: ${node.title}\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	for (const change of flagChanges) {
-		code += `${indent}  await this.env.FLAGS.set('${change.flagId}', '${change.optionId}');\n`;
+		code += `${indent}\tawait this.env.FLAGS.set("${escapeString(change.flagId)}", "${escapeString(change.optionId)}");\n`;
 	}
 	if (flagChanges.length === 0) {
-		code += `${indent}  // Configure flag changes in the workflow editor\n`;
+		code += `${indent}\t// Configure flag changes in the workflow editor\n`;
 	}
 	code += `${indent}});\n`;
 
@@ -294,9 +291,9 @@ function generateJoinStep(
 	const branchCount = incomingEdges.length;
 
 	let code = `${indent}// Join: ${node.title} (merging ${branchCount} branches)\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  // Merge point for ${branchCount} branches\n`;
-	code += `${indent}  return { merged: true };\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t// Merge point for ${branchCount} branches\n`;
+	code += `${indent}\treturn { merged: true };\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -390,7 +387,7 @@ function generateNodeCode(
 		case "End":
 			return `${indent}// Workflow completed successfully\n${indent}return { success: true, payload: event.payload };\n`;
 		case "Reject":
-			return `${indent}// Workflow rejected\n${indent}return { success: false, reason: '${escapeString(node.title)}' };\n`;
+			return `${indent}// Workflow rejected\n${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`;
 		default:
 			ctx.warnings.push(`Unknown node type: ${node.type}`);
 			return `${indent}// Unknown node type: ${node.type}\n`;
@@ -459,13 +456,13 @@ function traverseBranch(
 			code += `${indent}if (${condition}) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "  ", ctx, innerStop);
+				code += traverseBranch(topEdge.to, indent + "\t", ctx, innerStop);
 			}
 
 			code += `${indent}} else {\n`;
 
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "  ", ctx, innerStop);
+				code += traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop);
 			}
 
 			code += `${indent}}\n\n`;
@@ -500,13 +497,13 @@ function traverseBranch(
 			code += `${indent}if (${varName}.accepted) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "  ", ctx, innerStop);
+				code += traverseBranch(topEdge.to, indent + "\t", ctx, innerStop);
 			}
 
 			code += `${indent}} else {\n`;
 
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "  ", ctx, innerStop);
+				code += traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop);
 			}
 
 			code += `${indent}}\n\n`;
@@ -600,22 +597,22 @@ export function generateWorkflowCode(
 
 	// Generate imports
 	if (includeImports) {
-		code += `import { WorkflowEntrypoint, WorkflowEvent, WorkflowStep } from 'cloudflare:workers';\n\n`;
+		code += `import {\n\tWorkflowEntrypoint,\n\tWorkflowEvent,\n\tWorkflowStep,\n} from "cloudflare:workers";\n\n`;
 	}
 
 	// Generate environment interface
-	code += `interface Env {\n`;
-	code += `  // Add your bindings here\n`;
-	code += `  FORMS?: any;\n`;
-	code += `  NOTIFICATIONS?: any;\n`;
-	code += `  FLAGS?: any;\n`;
-	code += `  AI?: any;\n`;
+	// Use WorkflowEnv (not Env) to avoid clashing with the global Env type
+	// generated by `wrangler types` (worker-configuration.d.ts).
+	code += `interface WorkflowEnv {\n`;
+	code += `\tFORMS?: unknown;\n`;
+	code += `\tNOTIFICATIONS?: unknown;\n`;
+	code += `\tFLAGS?: unknown;\n`;
+	code += `\tAI?: unknown;\n`;
 	code += `}\n\n`;
 
 	// Generate workflow params interface
 	code += `interface WorkflowParams {\n`;
-	code += `  // Define your workflow input parameters\n`;
-	code += `  [key: string]: unknown;\n`;
+	code += `\t[key: string]: unknown;\n`;
 	code += `}\n\n`;
 
 	// Add metadata as comments
@@ -636,21 +633,21 @@ export function generateWorkflowCode(
 	}
 
 	// Generate class
-	code += `export class ${className} extends WorkflowEntrypoint<Env, WorkflowParams> {\n`;
-	code += `  async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep): Promise<unknown> {\n`;
+	code += `export class ${className} extends WorkflowEntrypoint<WorkflowEnv, WorkflowParams> {\n`;
+	code += `\tasync run(\n\t\tevent: WorkflowEvent<WorkflowParams>,\n\t\tstep: WorkflowStep,\n\t): Promise<unknown> {\n`;
 
-	// Traverse and generate step code
+	// Traverse and generate step code (2 tabs = class body + method body)
 	const { code: stepsCode, warnings: traverseWarnings } = traverseAndGenerate(
 		startNode,
 		nodes,
 		edges,
-		"    ",
+		"\t\t",
 	);
 	code += stepsCode;
 	warnings.push(...traverseWarnings);
 
 	// Close class
-	code += `  }\n`;
+	code += `\t}\n`;
 	code += `}\n`;
 
 	return { code, warnings };
