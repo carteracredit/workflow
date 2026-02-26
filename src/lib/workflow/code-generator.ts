@@ -300,6 +300,14 @@ function generateJoinStep(
 }
 
 /**
+ * Removes consecutive blank lines at the end of a generated code block so
+ * Prettier doesn't flag a blank line immediately before the closing `}`.
+ */
+function trimTrailingBlankLines(code: string): string {
+	return code.replace(/\n\n+$/, "\n");
+}
+
+/**
  * Finds the first node reachable from BOTH topStartId and bottomStartId
  * (the post-dominator / convergence point for a branching node).
  *
@@ -456,13 +464,17 @@ function traverseBranch(
 			code += `${indent}if (${condition}) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "\t", ctx, innerStop);
+				code += trimTrailingBlankLines(
+					traverseBranch(topEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}} else {\n`;
 
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop);
+				code += trimTrailingBlankLines(
+					traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}}\n\n`;
@@ -497,13 +509,17 @@ function traverseBranch(
 			code += `${indent}if (${varName}.accepted) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "\t", ctx, innerStop);
+				code += trimTrailingBlankLines(
+					traverseBranch(topEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}} else {\n`;
 
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop);
+				code += trimTrailingBlankLines(
+					traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}}\n\n`;
@@ -620,10 +636,10 @@ export function generateWorkflowCode(
 		code += `/**\n`;
 		code += ` * ${metadata.name || "Generated Workflow"}\n`;
 		if (metadata.description) {
-			code += ` * \n`;
+			code += ` *\n`;
 			code += ` * ${metadata.description}\n`;
 		}
-		code += ` * \n`;
+		code += ` *\n`;
 		code += ` * Version: ${metadata.version || "1.0.0"}\n`;
 		if (metadata.author) {
 			code += ` * Author: ${metadata.author}\n`;
@@ -643,7 +659,8 @@ export function generateWorkflowCode(
 		edges,
 		"\t\t",
 	);
-	code += stepsCode;
+	// Trim trailing blank lines so Prettier doesn't flag a blank line before `}`
+	code += trimTrailingBlankLines(stepsCode);
 	warnings.push(...traverseWarnings);
 
 	// Close class
