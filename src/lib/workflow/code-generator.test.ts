@@ -258,9 +258,8 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain(
-			'step.waitForEvent<{ accepted: boolean }>("manual-approval"',
-		);
+		expect(result.code).toContain("step.waitForEvent<{ accepted: boolean }>(");
+		expect(result.code).toContain('"manual-approval"');
 		expect(result.code).toContain("const manualApproval =");
 		expect(result.code).toContain('type: "acceptance"');
 		expect(result.code).toContain('timeout: "48 hours"');

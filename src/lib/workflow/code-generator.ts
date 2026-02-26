@@ -253,10 +253,13 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
-	code += `${indent}const ${varName} = await step.waitForEvent<{ accepted: boolean }>("${stepName}", {\n`;
-	code += `${indent}\ttype: "${challengeType}",\n`;
-	code += `${indent}\ttimeout: "${timeoutStr}",\n`;
-	code += `${indent}});\n`;
+	code += `${indent}const ${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+	code += `${indent}\t"${stepName}",\n`;
+	code += `${indent}\t{\n`;
+	code += `${indent}\t\ttype: "${challengeType}",\n`;
+	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
+	code += `${indent}\t},\n`;
+	code += `${indent});\n`;
 
 	return code;
 }
