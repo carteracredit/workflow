@@ -648,8 +648,18 @@ export function generateWorkflowCode(
 		code += ` */\n`;
 	}
 
-	// Generate class
-	code += `export class ${className} extends WorkflowEntrypoint<WorkflowEnv, WorkflowParams> {\n`;
+	// Generate class - use multi-line generic only when line would exceed 80 chars
+	// Single-line: "export class X extends WorkflowEntrypoint<WorkflowEnv, WorkflowParams> {"
+	// That's 71 chars + className.length. If > 80, use multi-line.
+	const singleLineClassDecl = `export class ${className} extends WorkflowEntrypoint<WorkflowEnv, WorkflowParams> {\n`;
+	if (singleLineClassDecl.length - 1 <= 80) {
+		code += singleLineClassDecl;
+	} else {
+		code += `export class ${className} extends WorkflowEntrypoint<\n`;
+		code += `\tWorkflowEnv,\n`;
+		code += `\tWorkflowParams\n`;
+		code += `> {\n`;
+	}
 	code += `\tasync run(\n\t\tevent: WorkflowEvent<WorkflowParams>,\n\t\tstep: WorkflowStep,\n\t): Promise<unknown> {\n`;
 
 	// Traverse and generate step code (2 tabs = class body + method body)
