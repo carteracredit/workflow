@@ -1,3 +1,18 @@
+# [1.0.0-rc.16](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.15...v1.0.0-rc.16) (2026-02-27)
+
+
+### Bug Fixes
+
+* standardize code generation references and improve test assertions ([849f083](https://github.com/carteracredit/workflow/commit/849f0839a7125342fe0e2c405463f318e2dbe914))
+* update string formatting in code generation tests and implementation ([82ffe58](https://github.com/carteracredit/workflow/commit/82ffe5804313196a8acd9930cc79cf10333ad3cd))
+
+
+### Features
+
+* add function to trim trailing blank lines in generated code ([f36bbca](https://github.com/carteracredit/workflow/commit/f36bbcaab7132fc5eb1534cfaff15bec0cd872f4))
+* enhance error handling in WorkflowEditor and PublishModal ([a15c59a](https://github.com/carteracredit/workflow/commit/a15c59abbf38bf1a4d1dad22b30cf2d0b59ed3ae))
+* improve class declaration formatting in code generation ([956eaf4](https://github.com/carteracredit/workflow/commit/956eaf4ada9f14ca327be2e180afefba7abe7fc7))
+
 # [1.0.0-rc.15](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.14...v1.0.0-rc.15) (2026-02-25)
 
 
