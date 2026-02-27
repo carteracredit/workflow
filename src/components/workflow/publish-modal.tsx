@@ -31,7 +31,7 @@ import {
 	type TranspilationResult,
 } from "@/lib/workflow/code-generator";
 import { publishWorkflow } from "@/lib/workflow-api/workflows";
-import type { PublishWorkflowResponse } from "@/lib/workflow-api/types";
+import type { PublishWorkflowDeployedResponse } from "@/lib/workflow-api/types";
 import { extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { toast } from "sonner";
 
@@ -40,6 +40,10 @@ export interface PublishModalProps {
 	edges: WorkflowEdge[];
 	metadata: WorkflowMetadata;
 	flags: Flag[];
+	/** Current canvas zoom level — included in the definition snapshot */
+	zoom?: number;
+	/** Current canvas pan offset — included in the definition snapshot */
+	pan?: { x: number; y: number };
 	/** API id of the saved workflow in workflow-svc (null = not yet saved) */
 	workflowApiId: number | null;
 	/** Callback to save the workflow first if workflowApiId is null */
@@ -47,6 +51,8 @@ export interface PublishModalProps {
 	/** JWT token for authenticated API calls */
 	apiToken: string | null;
 	onClose: () => void;
+	/** Called with the new status when publish completes successfully */
+	onPublished?: (status: "published") => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,22 +185,28 @@ export function PublishModal({
 	nodes,
 	edges,
 	metadata,
+	flags,
+	zoom = 1,
+	pan = { x: 0, y: 0 },
 	workflowApiId,
 	onSave,
 	apiToken,
 	onClose,
+	onPublished,
 }: PublishModalProps) {
 	const [phases, setPhases] = useState<TranspilationPhase[]>([]);
 	const [transpileResult, setTranspileResult] =
 		useState<TranspilationResult | null>(null);
 	const [deployStatus, setDeployStatus] = useState<DeployPhaseStatus>("idle");
 	const [deployResult, setDeployResult] =
-		useState<PublishWorkflowResponse | null>(null);
+		useState<PublishWorkflowDeployedResponse | null>(null);
 	const [deployError, setDeployError] = useState<string | undefined>();
+	const [skipped, setSkipped] = useState(false);
 	const [isRunning, setIsRunning] = useState(true);
 
 	const run = useCallback(async () => {
 		setIsRunning(true);
+		setSkipped(false);
 
 		// Step 1: Auto-save if needed
 		if (!workflowApiId) {
@@ -270,18 +282,43 @@ export function PublishModal({
 			return;
 		}
 
+		// Build definition snapshot: always sent to keep the DB in sync with the
+		// editor state, even when the user never clicked "Save" explicitly.
+		const definitionSnapshot = JSON.stringify({
+			nodes,
+			edges,
+			flags,
+			zoom,
+			pan,
+		});
+
 		setDeployStatus("running");
 		try {
 			const result = await publishWorkflow(
 				currentWorkflowId,
-				{ code: generatedCode, environment: "development" },
+				{
+					code: generatedCode,
+					environment: "development",
+					definition: definitionSnapshot,
+				},
 				{ jwt: apiToken },
 			);
-			setDeployResult(result);
-			setDeployStatus("done");
-			toast.success("Workflow publicado", {
-				description: `Deployment iniciado. GitHub Actions desplegará a Cloudflare automáticamente.`,
-			});
+
+			if (result.skipped) {
+				setSkipped(true);
+				setDeployStatus("done");
+				toast.info("Sin cambios detectados", {
+					description:
+						"El workflow no ha cambiado desde la última publicación. No se realizó un nuevo deploy.",
+				});
+			} else {
+				setDeployResult(result as PublishWorkflowDeployedResponse);
+				setDeployStatus("done");
+				onPublished?.("published");
+				toast.success("Workflow publicado", {
+					description: `Deployment iniciado. GitHub Actions desplegará a Cloudflare automáticamente.`,
+				});
+			}
 		} catch (err) {
 			const msg = extractApiErrorMessage(err);
 			setDeployError(msg);
@@ -290,7 +327,18 @@ export function PublishModal({
 		}
 
 		setIsRunning(false);
-	}, [nodes, edges, metadata, workflowApiId, onSave, apiToken]);
+	}, [
+		nodes,
+		edges,
+		metadata,
+		flags,
+		zoom,
+		pan,
+		workflowApiId,
+		onSave,
+		apiToken,
+		onPublished,
+	]);
 
 	useEffect(() => {
 		run();
@@ -322,6 +370,8 @@ export function PublishModal({
 
 	const getDescription = () => {
 		if (isRunning) return "Generando y publicando workflow...";
+		if (deployStatus === "done" && skipped)
+			return "No se detectaron cambios desde la última publicación.";
 		if (deployStatus === "done")
 			return "Workflow publicado. GitHub Actions desplegará a Cloudflare automáticamente.";
 		if (deployStatus === "error") return "Error al publicar el workflow.";
@@ -348,8 +398,21 @@ export function PublishModal({
 					)}
 				</div>
 
+				{/* No changes — skipped */}
+				{deployStatus === "done" && skipped && (
+					<div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+						<p className="mb-1 text-sm font-medium text-amber-800">
+							Sin cambios detectados
+						</p>
+						<p className="text-xs text-amber-700">
+							El código generado es idéntico al de la última publicación. No se
+							realizó un nuevo deploy ni se incrementó la versión.
+						</p>
+					</div>
+				)}
+
 				{/* Deployment result */}
-				{deployStatus === "done" && deployResult && (
+				{deployStatus === "done" && deployResult && !skipped && (
 					<div className="mb-4 rounded-md border border-green-200 bg-green-50 p-4">
 						<p className="mb-2 text-sm font-medium text-green-800">
 							Deployment iniciado correctamente
@@ -362,6 +425,10 @@ export function PublishModal({
 							<p>
 								<span className="font-medium">Branch:</span>{" "}
 								{deployResult.branch}
+							</p>
+							<p>
+								<span className="font-medium">Versión:</span> v
+								{deployResult.version}
 							</p>
 							<p>
 								<span className="font-medium">Estado:</span>{" "}

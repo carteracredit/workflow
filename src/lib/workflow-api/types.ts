@@ -6,6 +6,9 @@ export interface Workflow {
 	name: string;
 	slug: string;
 	description: string;
+	status: "draft" | "published" | "archived";
+	definition?: string | null;
+	published_code_checksum?: string | null;
 	github_repo_url: string | null;
 	class_name: string;
 	current_major_version: number;
@@ -20,6 +23,8 @@ export interface CreateWorkflowPayload {
 	name: string;
 	slug: string;
 	description: string;
+	status?: "draft" | "published" | "archived";
+	definition?: string | null;
 	github_repo_url?: string | null;
 	class_name: string;
 	current_major_version: number;
@@ -47,6 +52,19 @@ export interface WorkflowDeployment {
 }
 
 /**
+ * Workflow version snapshot as returned by workflow-svc
+ */
+export interface WorkflowVersion {
+	id: number;
+	workflow_id: number;
+	version: number;
+	definition: string;
+	code_checksum: string;
+	created_by: string | null;
+	created_at: string;
+}
+
+/**
  * Payload for creating a new workflow deployment
  */
 export interface CreateWorkflowDeploymentPayload {
@@ -67,14 +85,32 @@ export interface UpdateWorkflowDeploymentPayload {
 }
 
 /**
- * Response from POST /workflows/:id/publish
+ * Response when publish was skipped (no code changes detected)
  */
-export interface PublishWorkflowResponse {
+export interface PublishWorkflowSkippedResponse {
+	skipped: true;
+	reason: "no_changes";
+	current_version: number;
+}
+
+/**
+ * Response when publish succeeded (code was deployed)
+ */
+export interface PublishWorkflowDeployedResponse {
+	skipped: false;
 	deployment: WorkflowDeployment;
 	repo_url: string | null;
 	worker_name: string;
 	branch: string;
+	version: number;
 }
+
+/**
+ * Response from POST /workflows/:id/publish
+ */
+export type PublishWorkflowResponse =
+	| PublishWorkflowSkippedResponse
+	| PublishWorkflowDeployedResponse;
 
 /**
  * Standard API response envelope from workflow-svc
