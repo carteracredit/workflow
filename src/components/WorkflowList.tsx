@@ -11,10 +11,14 @@ import {
 	Loader2,
 	AlertCircle,
 	Workflow as WorkflowIcon,
+	Layers,
+	CheckCircle2,
+	FileEdit,
+	Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -239,13 +243,6 @@ function CreateWorkflowDialog({
 // Main WorkflowList component
 // ---------------------------------------------------------------------------
 
-const STATUS_TABS: Array<{ value: string; label: string }> = [
-	{ value: "all", label: "Todos" },
-	{ value: "draft", label: "Borradores" },
-	{ value: "published", label: "Publicados" },
-	{ value: "archived", label: "Archivados" },
-];
-
 export function WorkflowList() {
 	const router = useRouter();
 	const { token } = useWorkflowApiToken();
@@ -342,67 +339,77 @@ export function WorkflowList() {
 					</Button>
 				</div>
 
-				{/* Stats cards */}
-				<div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+				{/* Stats chips */}
+				<div className="mb-5 flex flex-wrap gap-2">
 					{[
-						{ label: "Total", value: stats.total, color: "text-foreground" },
+						{
+							label: "Total",
+							value: stats.total,
+							tab: "all",
+							icon: <Layers className="h-3.5 w-3.5" />,
+							iconBg: "bg-primary/10",
+							iconColor: "text-primary",
+							numColor: "text-foreground",
+						},
 						{
 							label: "Publicados",
 							value: stats.published,
-							color: "text-emerald-600 dark:text-emerald-400",
+							tab: "published",
+							icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+							iconBg: "bg-emerald-500/10",
+							iconColor: "text-emerald-500",
+							numColor: "text-emerald-600 dark:text-emerald-400",
 						},
 						{
 							label: "Borradores",
 							value: stats.draft,
-							color: "text-amber-600 dark:text-amber-400",
+							tab: "draft",
+							icon: <FileEdit className="h-3.5 w-3.5" />,
+							iconBg: "bg-amber-500/10",
+							iconColor: "text-amber-500",
+							numColor: "text-amber-600 dark:text-amber-400",
 						},
 						{
 							label: "Archivados",
 							value: stats.archived,
-							color: "text-muted-foreground",
+							tab: "archived",
+							icon: <Archive className="h-3.5 w-3.5" />,
+							iconBg: "bg-muted",
+							iconColor: "text-muted-foreground",
+							numColor: "text-muted-foreground",
 						},
 					].map((stat) => (
-						<Card key={stat.label}>
-							<CardHeader className="pb-2">
-								<CardTitle className="text-sm font-medium text-muted-foreground">
-									{stat.label}
-								</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<span className={`text-2xl font-bold ${stat.color}`}>
-									{stat.value}
-								</span>
-							</CardContent>
-						</Card>
+						<button
+							key={stat.label}
+							onClick={() => setActiveTab(stat.tab)}
+							className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-accent ${
+								activeTab === stat.tab
+									? "border-primary/40 bg-primary/5"
+									: "border-border bg-card"
+							}`}
+						>
+							<span
+								className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${stat.iconBg} ${stat.iconColor}`}
+							>
+								{stat.icon}
+							</span>
+							<span className={`font-bold tabular-nums ${stat.numColor}`}>
+								{stat.value}
+							</span>
+							<span className="text-muted-foreground">{stat.label}</span>
+						</button>
 					))}
 				</div>
 
-				{/* Search + Status tabs */}
-				<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<div className="relative max-w-sm flex-1">
-						<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-						<Input
-							placeholder="Buscar por nombre o descripción..."
-							value={search}
-							onChange={(e) => setSearch(e.target.value)}
-							className="pl-9"
-						/>
-					</div>
-					<div className="flex gap-1 rounded-lg border bg-muted p-1">
-						{STATUS_TABS.map((tab) => (
-							<button
-								key={tab.value}
-								onClick={() => setActiveTab(tab.value)}
-								className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-									activeTab === tab.value
-										? "bg-background shadow-sm"
-										: "text-muted-foreground hover:text-foreground"
-								}`}
-							>
-								{tab.label}
-							</button>
-						))}
-					</div>
+				{/* Search */}
+				<div className="mb-4 relative max-w-sm">
+					<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+					<Input
+						placeholder="Buscar por nombre o descripción..."
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+						className="pl-9"
+					/>
 				</div>
 
 				{/* Table */}

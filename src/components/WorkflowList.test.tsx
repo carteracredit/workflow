@@ -210,8 +210,8 @@ describe("WorkflowList – renderización con datos", () => {
 // Stats cards
 // -------------------------------------------------------------------------
 
-describe("WorkflowList – tarjetas de estadísticas", () => {
-	it("muestra conteos correctos por estado", () => {
+describe("WorkflowList – chips de estadísticas", () => {
+	it("muestra conteos correctos por estado en los chips", () => {
 		makeHooksReturn([
 			makeWorkflow({ id: 1, status: "published" }),
 			makeWorkflow({ id: 2, status: "published" }),
@@ -220,9 +220,9 @@ describe("WorkflowList – tarjetas de estadísticas", () => {
 		]);
 		render(<WorkflowList />);
 
-		// Stats numbers are rendered with specific classes inside card-content slots
+		// Stat numbers are rendered with tabular-nums class inside chip buttons
 		const statNumbers = Array.from(
-			document.querySelectorAll(".text-2xl.font-bold"),
+			document.querySelectorAll(".tabular-nums"),
 		).map((el) => el.textContent);
 
 		// Total = 4, Published = 2, Draft = 1, Archived = 1
@@ -231,15 +231,42 @@ describe("WorkflowList – tarjetas de estadísticas", () => {
 		expect(statNumbers).toContain("1");
 	});
 
-	it("muestra los encabezados de tarjetas de estadísticas", () => {
+	it("muestra las etiquetas de los chips de estadísticas", () => {
 		makeHooksReturn([]);
 		render(<WorkflowList />);
-		// "Total" only appears once; the others also appear in the status tabs but
-		// we use getAllByText to avoid the "multiple elements" error
 		expect(screen.getByText("Total")).toBeInTheDocument();
-		expect(screen.getAllByText("Publicados").length).toBeGreaterThanOrEqual(1);
-		expect(screen.getAllByText("Borradores").length).toBeGreaterThanOrEqual(1);
-		expect(screen.getAllByText("Archivados").length).toBeGreaterThanOrEqual(1);
+		expect(screen.getByText("Publicados")).toBeInTheDocument();
+		expect(screen.getByText("Borradores")).toBeInTheDocument();
+		expect(screen.getByText("Archivados")).toBeInTheDocument();
+	});
+
+	it("los chips son clicables y actúan como filtro de estado", () => {
+		const workflows: Workflow[] = [
+			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
+			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
+		];
+		makeHooksReturn(workflows);
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
+
+		expect(screen.getByText("Draft")).toBeInTheDocument();
+		expect(screen.queryByText("Pub")).not.toBeInTheDocument();
+	});
+
+	it("chip Total muestra todos los workflows", () => {
+		const workflows: Workflow[] = [
+			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
+			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
+		];
+		makeHooksReturn(workflows);
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
+		fireEvent.click(screen.getByRole("button", { name: /Total/ }));
+
+		expect(screen.getByText("Pub")).toBeInTheDocument();
+		expect(screen.getByText("Draft")).toBeInTheDocument();
 	});
 });
 
@@ -302,7 +329,7 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 		).toBeInTheDocument();
 	});
 
-	it("filtra por estado al hacer clic en tab", async () => {
+	it("filtra por estado al hacer clic en chip de estado", async () => {
 		const workflows: Workflow[] = [
 			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
 			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
@@ -310,14 +337,13 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 		makeHooksReturn(workflows);
 		render(<WorkflowList />);
 
-		// The tab buttons are <button> elements; stat card labels are <div>s
-		fireEvent.click(screen.getByRole("button", { name: "Borradores" }));
+		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
 
 		expect(screen.getByText("Draft")).toBeInTheDocument();
 		expect(screen.queryByText("Pub")).not.toBeInTheDocument();
 	});
 
-	it("muestra todos los workflows al seleccionar tab Todos", async () => {
+	it("chip Total vuelve a mostrar todos los workflows", async () => {
 		const workflows: Workflow[] = [
 			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
 			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
@@ -325,8 +351,8 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 		makeHooksReturn(workflows);
 		render(<WorkflowList />);
 
-		fireEvent.click(screen.getByRole("button", { name: "Borradores" }));
-		fireEvent.click(screen.getByRole("button", { name: "Todos" }));
+		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
+		fireEvent.click(screen.getByRole("button", { name: /Total/ }));
 
 		expect(screen.getByText("Pub")).toBeInTheDocument();
 		expect(screen.getByText("Draft")).toBeInTheDocument();
