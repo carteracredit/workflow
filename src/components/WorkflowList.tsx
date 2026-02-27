@@ -93,7 +93,9 @@ function formatRelativeDate(dateStr: string): string {
 	const date = new Date(dateStr);
 	const now = new Date();
 	const diffMs = now.getTime() - date.getTime();
-	const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+	// Use ceil so that timestamps slightly in the future (server clock skew)
+	// round to 0 instead of producing negative values.
+	const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 	if (diffDays === 0) return "Hoy";
 	if (diffDays === 1) return "Ayer";
 	if (diffDays < 7) return `Hace ${diffDays} días`;
@@ -145,13 +147,9 @@ function CreateWorkflowDialog({
 					status: "draft",
 					class_name: toClassName(name.trim()),
 					current_major_version: 0,
-					definition: JSON.stringify({
-						nodes: [],
-						edges: [],
-						flags: [],
-						zoom: 1,
-						pan: { x: 0, y: 0 },
-					}),
+					// No definition on creation — the editor initialises with a default
+					// Start node when definition is null. That state gets persisted to
+					// localStorage automatically and to the DB on first explicit Save.
 				},
 				{ jwt: apiToken },
 			);

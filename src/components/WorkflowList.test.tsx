@@ -427,6 +427,14 @@ describe("WorkflowList – diálogo de creación", () => {
 				{ jwt: "test-jwt" },
 			);
 		});
+		// definition must NOT be sent at creation time — the editor initialises
+		// with a default Start node when definition is null, preventing it from
+		// being overwritten by an empty nodes array from the API.
+		const payload = mockCreateWorkflow.mock.calls[0][0] as Record<
+			string,
+			unknown
+		>;
+		expect(payload).not.toHaveProperty("definition");
 		await waitFor(() => {
 			expect(mockPush).toHaveBeenCalledWith("/editor/99");
 		});
