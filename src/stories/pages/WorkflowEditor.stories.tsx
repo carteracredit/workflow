@@ -10,7 +10,7 @@ const meta: Meta<typeof WorkflowEditor> = {
 			delay: 2000,
 		},
 		nextjs: {
-			router: {
+			navigation: {
 				pathname: "/editor",
 			},
 		},

@@ -7,8 +7,7 @@ const meta: Meta<typeof Home> = {
 	parameters: {
 		layout: "fullscreen",
 		nextjs: {
-			appDirectory: true,
-			router: {
+			navigation: {
 				pathname: "/",
 			},
 		},

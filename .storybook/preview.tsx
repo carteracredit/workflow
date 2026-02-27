@@ -53,6 +53,12 @@ const preview: Preview = {
 			default: "app",
 			values: [{ name: "app", value: "transparent" }],
 		},
+		// All components in this app use the Next.js App Router (next/navigation).
+		// This ensures @storybook/nextjs calls createNavigation() instead of
+		// createRouter(), so useRouter() mocks are available in every story.
+		nextjs: {
+			appDirectory: true,
+		},
 	},
 	decorators: [
 		(Story, context) => {

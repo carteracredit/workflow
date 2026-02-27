@@ -340,7 +340,7 @@ export function WorkflowList() {
 				</div>
 
 				{/* Stats chips */}
-				<div className="mb-5 flex flex-wrap gap-2">
+				<div className="mb-5 flex flex-wrap justify-center gap-2">
 					{[
 						{
 							label: "Total",
@@ -350,6 +350,9 @@ export function WorkflowList() {
 							iconBg: "bg-primary/10",
 							iconColor: "text-primary",
 							numColor: "text-foreground",
+							activeBorder: "border-primary",
+							activeBg: "bg-primary/10",
+							activeLabel: "text-primary",
 						},
 						{
 							label: "Publicados",
@@ -359,6 +362,9 @@ export function WorkflowList() {
 							iconBg: "bg-emerald-500/10",
 							iconColor: "text-emerald-500",
 							numColor: "text-emerald-600 dark:text-emerald-400",
+							activeBorder: "border-emerald-500",
+							activeBg: "bg-emerald-500/10",
+							activeLabel: "text-emerald-600 dark:text-emerald-400",
 						},
 						{
 							label: "Borradores",
@@ -368,6 +374,9 @@ export function WorkflowList() {
 							iconBg: "bg-amber-500/10",
 							iconColor: "text-amber-500",
 							numColor: "text-amber-600 dark:text-amber-400",
+							activeBorder: "border-amber-500",
+							activeBg: "bg-amber-500/10",
+							activeLabel: "text-amber-600 dark:text-amber-400",
 						},
 						{
 							label: "Archivados",
@@ -377,28 +386,38 @@ export function WorkflowList() {
 							iconBg: "bg-muted",
 							iconColor: "text-muted-foreground",
 							numColor: "text-muted-foreground",
+							activeBorder: "border-slate-400 dark:border-slate-500",
+							activeBg: "bg-slate-500/10",
+							activeLabel: "text-slate-600 dark:text-slate-400",
 						},
-					].map((stat) => (
-						<button
-							key={stat.label}
-							onClick={() => setActiveTab(stat.tab)}
-							className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-accent ${
-								activeTab === stat.tab
-									? "border-primary/40 bg-primary/5"
-									: "border-border bg-card"
-							}`}
-						>
-							<span
-								className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${stat.iconBg} ${stat.iconColor}`}
+					].map((stat) => {
+						const isActive = activeTab === stat.tab;
+						return (
+							<button
+								key={stat.label}
+								onClick={() => setActiveTab(stat.tab)}
+								className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-all hover:bg-accent ${
+									isActive
+										? `${stat.activeBorder} ${stat.activeBg} shadow-sm`
+										: "border-border bg-card"
+								}`}
 							>
-								{stat.icon}
-							</span>
-							<span className={`font-bold tabular-nums ${stat.numColor}`}>
-								{stat.value}
-							</span>
-							<span className="text-muted-foreground">{stat.label}</span>
-						</button>
-					))}
+								<span
+									className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${stat.iconBg} ${stat.iconColor}`}
+								>
+									{stat.icon}
+								</span>
+								<span className={`font-bold tabular-nums ${stat.numColor}`}>
+									{stat.value}
+								</span>
+								<span
+									className={`transition-colors ${isActive ? stat.activeLabel : "text-muted-foreground"}`}
+								>
+									{stat.label}
+								</span>
+							</button>
+						);
+					})}
 				</div>
 
 				{/* Search */}
