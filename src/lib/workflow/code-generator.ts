@@ -86,10 +86,10 @@ function createVariableName(title: string, fallback: string): string {
 }
 
 /**
- * Helper to escape string for use in generated code
+ * Helper to escape string for use in generated code (double-quoted strings).
  */
 function escapeString(str: string): string {
-	return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
+	return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
 }
 
 /**
@@ -122,20 +122,20 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
  */
 function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "formData");
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const fields = (node.config.fields as string[]) || [];
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
-	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  // Collect form data from user\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t// Collect form data from user\n`;
 	if (fields.length > 0) {
-		code += `${indent}  // Fields: ${fields.join(", ")}\n`;
+		code += `${indent}\t// Fields: ${fields.join(", ")}\n`;
 	}
-	code += `${indent}  return await this.env.FORMS.collect({\n`;
-	code += `${indent}    formId: '${stepName}',\n`;
-	code += `${indent}    roles: [${node.roles.map((r) => `'${r}'`).join(", ")}],\n`;
-	code += `${indent}  });\n`;
+	code += `${indent}\tconst forms = this.env.FORMS as { collect: (opts: unknown) => Promise<unknown> };\n`;
+	code += `${indent}\treturn await forms.collect({\n`;
+	code += `${indent}\t\tformId: "${stepName}",\n`;
+	code += `${indent}\t\troles: [${node.roles.map((r) => `"${escapeString(r)}"`).join(", ")}],\n`;
+	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -146,7 +146,6 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
  */
 function generateAPIStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "apiResult");
 	const endpoint = (node.config.endpoint as string) || "/api/endpoint";
 	const method = (node.config.method as string) || "POST";
 	const failureHandling = node.config.failureHandling as
@@ -154,27 +153,27 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 		| undefined;
 
 	let code = `${indent}// API Call: ${node.title}\n`;
-	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  const response = await fetch('${escapeString(endpoint)}', {\n`;
-	code += `${indent}    method: '${method}',\n`;
-	code += `${indent}    headers: { 'Content-Type': 'application/json' },\n`;
-	code += `${indent}    body: JSON.stringify(event.payload),\n`;
-	code += `${indent}  });\n`;
-	code += `${indent}  if (!response.ok) {\n`;
-	code += `${indent}    throw new Error(\`API call failed: \${response.status}\`);\n`;
-	code += `${indent}  }\n`;
-	code += `${indent}  return response.json();\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\tconst response = await fetch("${escapeString(endpoint)}", {\n`;
+	code += `${indent}\t\tmethod: "${method}",\n`;
+	code += `${indent}\t\theaders: { "Content-Type": "application/json" },\n`;
+	code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+	code += `${indent}\t});\n`;
+	code += `${indent}\tif (!response.ok) {\n`;
+	code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
+	code += `${indent}\t}\n`;
+	code += `${indent}\treturn response.json();\n`;
 	code += `${indent}}`;
 
 	// Add retry configuration if specified
 	if (failureHandling && failureHandling.maxRetries > 0) {
 		code += `, {\n`;
-		code += `${indent}  retries: {\n`;
-		code += `${indent}    limit: ${failureHandling.maxRetries},\n`;
-		code += `${indent}    delay: '1 second',\n`;
-		code += `${indent}    backoff: 'exponential',\n`;
-		code += `${indent}  },\n`;
-		code += `${indent}  timeout: '${Math.round(failureHandling.timeout / 1000)} seconds',\n`;
+		code += `${indent}\tretries: {\n`;
+		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
+		code += `${indent}\t\tdelay: "1 second",\n`;
+		code += `${indent}\t\tbackoff: "exponential",\n`;
+		code += `${indent}\t},\n`;
+		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
 		code += `${indent}}`;
 	}
 
@@ -188,12 +187,11 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
  */
 function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "transformed");
 	const transformCode = (node.config.code as string) || "// Transform logic";
 
 	let code = `${indent}// Transform: ${node.title}\n`;
-	code += `${indent}const ${varName} = await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  ${transformCode.split("\n").join(`\n${indent}  `)}\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t${transformCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -208,14 +206,17 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 	const template = (node.config.template as string) || "";
 
 	let code = `${indent}// Message: ${node.title}\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  await this.env.NOTIFICATIONS.send({\n`;
-	code += `${indent}    type: '${messageType}',\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\tconst notifications = this.env.NOTIFICATIONS as {\n`;
+	code += `${indent}\t\tsend: (opts: unknown) => Promise<void>;\n`;
+	code += `${indent}\t};\n`;
+	code += `${indent}\tawait notifications.send({\n`;
+	code += `${indent}\t\ttype: "${messageType}",\n`;
 	if (template) {
-		code += `${indent}    template: '${escapeString(template)}',\n`;
+		code += `${indent}\t\ttemplate: "${escapeString(template)}",\n`;
 	}
-	code += `${indent}    payload: event.payload,\n`;
-	code += `${indent}  });\n`;
+	code += `${indent}\t\tpayload: event.payload,\n`;
+	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -229,12 +230,12 @@ function generateCheckpointStep(node: WorkflowNode, indent: string): string {
 	const isSafe = node.checkpointType === "safe";
 
 	let code = `${indent}// Checkpoint: ${node.title}${isSafe ? " (safe)" : ""}\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  // State is automatically persisted at this point\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t// State is automatically persisted at this point\n`;
 	if (isSafe) {
-		code += `${indent}  // This is a safe checkpoint - workflow can be safely retried from here\n`;
+		code += `${indent}\t// This is a safe checkpoint - workflow can be safely retried from here\n`;
 	}
-	code += `${indent}  return { checkpoint: '${stepName}', timestamp: Date.now() };\n`;
+	code += `${indent}\treturn { checkpoint: "${stepName}", timestamp: Date.now() };\n`;
 	code += `${indent}});\n`;
 
 	return code;
@@ -252,10 +253,13 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
-	code += `${indent}const ${varName} = await step.waitForEvent('${stepName}', {\n`;
-	code += `${indent}  type: '${challengeType}',\n`;
-	code += `${indent}  timeout: '${timeoutStr}',\n`;
-	code += `${indent}});\n`;
+	code += `${indent}const ${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+	code += `${indent}\t"${stepName}",\n`;
+	code += `${indent}\t{\n`;
+	code += `${indent}\t\ttype: "${challengeType}",\n`;
+	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
+	code += `${indent}\t},\n`;
+	code += `${indent});\n`;
 
 	return code;
 }
@@ -270,12 +274,16 @@ function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
 		[];
 
 	let code = `${indent}// Flag Change: ${node.title}\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
-	for (const change of flagChanges) {
-		code += `${indent}  await this.env.FLAGS.set('${change.flagId}', '${change.optionId}');\n`;
-	}
-	if (flagChanges.length === 0) {
-		code += `${indent}  // Configure flag changes in the workflow editor\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	if (flagChanges.length > 0) {
+		code += `${indent}\tconst flags = this.env.FLAGS as {\n`;
+		code += `${indent}\t\tset: (id: string, value: string) => Promise<void>;\n`;
+		code += `${indent}\t};\n`;
+		for (const change of flagChanges) {
+			code += `${indent}\tawait flags.set("${escapeString(change.flagId)}", "${escapeString(change.optionId)}");\n`;
+		}
+	} else {
+		code += `${indent}\t// Configure flag changes in the workflow editor\n`;
 	}
 	code += `${indent}});\n`;
 
@@ -294,13 +302,64 @@ function generateJoinStep(
 	const branchCount = incomingEdges.length;
 
 	let code = `${indent}// Join: ${node.title} (merging ${branchCount} branches)\n`;
-	code += `${indent}// Note: In Cloudflare Workflows, parallel branches can be achieved with Promise.all\n`;
-	code += `${indent}await step.do('${stepName}', async () => {\n`;
-	code += `${indent}  // Merge point for ${branchCount} branches\n`;
-	code += `${indent}  return { merged: true };\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}\t// Merge point for ${branchCount} branches\n`;
+	code += `${indent}\treturn { merged: true };\n`;
 	code += `${indent}});\n`;
 
 	return code;
+}
+
+/**
+ * Removes consecutive blank lines at the end of a generated code block so
+ * Prettier doesn't flag a blank line immediately before the closing `}`.
+ */
+function trimTrailingBlankLines(code: string): string {
+	return code.replace(/\n\n+$/, "\n");
+}
+
+/**
+ * Finds the first node reachable from BOTH topStartId and bottomStartId
+ * (the post-dominator / convergence point for a branching node).
+ *
+ * Algorithm:
+ *  1. BFS from topStartId to collect all reachable node IDs.
+ *  2. BFS from bottomStartId – return the first node found in the top set.
+ *
+ * Returns null when the branches never converge (e.g. each ends in its own
+ * End/Reject with no shared successor).
+ */
+function findConvergenceNode(
+	topStartId: string,
+	bottomStartId: string,
+	outgoingMap: Map<string, WorkflowEdge[]>,
+): string | null {
+	// Collect all nodes reachable from the top branch
+	const topReachable = new Set<string>();
+	const topQueue: string[] = [topStartId];
+	while (topQueue.length > 0) {
+		const id = topQueue.shift()!;
+		if (topReachable.has(id)) continue;
+		topReachable.add(id);
+		for (const edge of outgoingMap.get(id) ?? []) {
+			if (!topReachable.has(edge.to)) topQueue.push(edge.to);
+		}
+	}
+
+	// BFS from bottom branch – first hit in topReachable is the convergence node
+	const bottomVisited = new Set<string>();
+	const bottomQueue: string[] = [bottomStartId];
+	while (bottomQueue.length > 0) {
+		const id = bottomQueue.shift()!;
+		if (bottomVisited.has(id)) continue;
+		bottomVisited.add(id);
+		if (topReachable.has(id)) return id;
+		for (const edge of outgoingMap.get(id) ?? []) {
+			if (!bottomVisited.has(edge.to)) bottomQueue.push(edge.to);
+		}
+	}
+
+	return null;
 }
 
 /**
@@ -347,7 +406,7 @@ function generateNodeCode(
 		case "End":
 			return `${indent}// Workflow completed successfully\n${indent}return { success: true, payload: event.payload };\n`;
 		case "Reject":
-			return `${indent}// Workflow rejected\n${indent}return { success: false, reason: '${escapeString(node.title)}' };\n`;
+			return `${indent}// Workflow rejected\n${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`;
 		default:
 			ctx.warnings.push(`Unknown node type: ${node.type}`);
 			return `${indent}// Unknown node type: ${node.type}\n`;
@@ -355,21 +414,31 @@ function generateNodeCode(
 }
 
 /**
- * Recursively traverse a branch and generate code
+ * Recursively traverse a branch and generate code.
+ *
+ * @param nodeId       - Starting node ID for this traversal.
+ * @param indent       - Current indentation string.
+ * @param ctx          - Shared traversal context (visited set, maps, warnings).
+ * @param stopAtNodeId - Optional convergence boundary: when this node ID is
+ *                       reached the traversal stops WITHOUT processing it.
+ *                       The caller is responsible for continuing from that node.
  */
 function traverseBranch(
 	nodeId: string,
 	indent: string,
 	ctx: TraversalContext,
+	stopAtNodeId?: string,
 ): string {
 	let code = "";
-
-	// Process nodes in a chain until we hit a visited node or end
 	let currentNodeId: string | null = nodeId;
 
 	while (currentNodeId) {
+		// Stop at the convergence boundary – the outer traversal will process it
+		if (stopAtNodeId && currentNodeId === stopAtNodeId) {
+			break;
+		}
+
 		if (ctx.visited.has(currentNodeId)) {
-			// Already visited (e.g., Join node from another branch)
 			break;
 		}
 		ctx.visited.add(currentNodeId);
@@ -380,8 +449,8 @@ function traverseBranch(
 			break;
 		}
 
-		// Get outgoing edges - explicit type to help TypeScript with recursion
-		const outgoing: WorkflowEdge[] = ctx.outgoingMap.get(currentNodeId) || [];
+		// Get outgoing edges
+		const outgoing: WorkflowEdge[] = ctx.outgoingMap.get(currentNodeId) ?? [];
 
 		// Handle Decision nodes (branching)
 		if (node.type === "Decision") {
@@ -391,23 +460,42 @@ function traverseBranch(
 				(e: WorkflowEdge) => e.fromPort === "bottom",
 			);
 
+			// Detect convergence point so both branches stop before it and we
+			// continue from it after the if/else block.
+			const convergenceNodeId =
+				topEdge && bottomEdge
+					? findConvergenceNode(topEdge.to, bottomEdge.to, ctx.outgoingMap)
+					: null;
+
+			// Effective stop boundary for sub-branches: prefer the inner
+			// convergence, but never go past the outer stopAtNodeId.
+			const innerStop = convergenceNodeId ?? stopAtNodeId;
+
 			code += `${indent}// Decision: ${node.title}\n`;
 			code += `${indent}if (${condition}) {\n`;
 
-			// Generate true branch
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "  ", ctx);
+				code += trimTrailingBlankLines(
+					traverseBranch(topEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}} else {\n`;
 
-			// Generate false branch
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "  ", ctx);
+				code += trimTrailingBlankLines(
+					traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}}\n\n`;
-			break; // Decision handled, stop linear traversal
+
+			if (convergenceNodeId) {
+				// Continue linear traversal from the convergence node
+				currentNodeId = convergenceNodeId;
+			} else {
+				break;
+			}
 		}
 		// Handle Challenge nodes (branching based on acceptance)
 		else if (node.type === "Challenge" && outgoing.length === 2) {
@@ -417,46 +505,54 @@ function traverseBranch(
 				(e: WorkflowEdge) => e.fromPort === "bottom",
 			);
 
-			// Generate challenge step first
+			// Detect convergence point
+			const convergenceNodeId =
+				topEdge && bottomEdge
+					? findConvergenceNode(topEdge.to, bottomEdge.to, ctx.outgoingMap)
+					: null;
+
+			const innerStop = convergenceNodeId ?? stopAtNodeId;
+
+			// Generate the waitForEvent step first
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			code += `${indent}if (${varName}.accepted) {\n`;
+			code += `${indent}if (${varName}.payload.accepted) {\n`;
 
-			// Generate accepted branch
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
-				code += traverseBranch(topEdge.to, indent + "  ", ctx);
+				code += trimTrailingBlankLines(
+					traverseBranch(topEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}} else {\n`;
 
-			// Generate rejected branch
 			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
-				code += traverseBranch(bottomEdge.to, indent + "  ", ctx);
+				code += trimTrailingBlankLines(
+					traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop),
+				);
 			}
 
 			code += `${indent}}\n\n`;
-			break; // Challenge handled, stop linear traversal
+
+			if (convergenceNodeId) {
+				currentNodeId = convergenceNodeId;
+			} else {
+				break;
+			}
 		}
 		// Linear flow
 		else {
-			// Generate code for current node
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			// Handle multiple outgoing edges (shouldn't happen for non-branching nodes)
 			if (outgoing.length > 1) {
 				ctx.warnings.push(
 					`Node "${node.title}" has multiple outgoing edges but is not a Decision or Challenge node`,
 				);
 			}
 
-			// Move to next node
-			if (outgoing.length >= 1) {
-				currentNodeId = outgoing[0].to;
-			} else {
-				currentNodeId = null;
-			}
+			currentNodeId = outgoing.length >= 1 ? outgoing[0].to : null;
 		}
 	}
 
@@ -528,22 +624,22 @@ export function generateWorkflowCode(
 
 	// Generate imports
 	if (includeImports) {
-		code += `import { WorkflowEntrypoint, WorkflowEvent, WorkflowStep } from 'cloudflare:workers';\n\n`;
+		code += `import {\n\tWorkflowEntrypoint,\n\tWorkflowEvent,\n\tWorkflowStep,\n} from "cloudflare:workers";\n\n`;
 	}
 
 	// Generate environment interface
-	code += `interface Env {\n`;
-	code += `  // Add your bindings here\n`;
-	code += `  FORMS?: any;\n`;
-	code += `  NOTIFICATIONS?: any;\n`;
-	code += `  FLAGS?: any;\n`;
-	code += `  AI?: any;\n`;
+	// Use WorkflowEnv (not Env) to avoid clashing with the global Env type
+	// generated by `wrangler types` (worker-configuration.d.ts).
+	code += `interface WorkflowEnv {\n`;
+	code += `\tFORMS?: unknown;\n`;
+	code += `\tNOTIFICATIONS?: unknown;\n`;
+	code += `\tFLAGS?: unknown;\n`;
+	code += `\tAI?: unknown;\n`;
 	code += `}\n\n`;
 
 	// Generate workflow params interface
 	code += `interface WorkflowParams {\n`;
-	code += `  // Define your workflow input parameters\n`;
-	code += `  [key: string]: unknown;\n`;
+	code += `\t[key: string]: unknown;\n`;
 	code += `}\n\n`;
 
 	// Add metadata as comments
@@ -551,10 +647,10 @@ export function generateWorkflowCode(
 		code += `/**\n`;
 		code += ` * ${metadata.name || "Generated Workflow"}\n`;
 		if (metadata.description) {
-			code += ` * \n`;
+			code += ` *\n`;
 			code += ` * ${metadata.description}\n`;
 		}
-		code += ` * \n`;
+		code += ` *\n`;
 		code += ` * Version: ${metadata.version || "1.0.0"}\n`;
 		if (metadata.author) {
 			code += ` * Author: ${metadata.author}\n`;
@@ -563,22 +659,33 @@ export function generateWorkflowCode(
 		code += ` */\n`;
 	}
 
-	// Generate class
-	code += `export class ${className} extends WorkflowEntrypoint<Env, WorkflowParams> {\n`;
-	code += `  async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep): Promise<unknown> {\n`;
+	// Generate class - use multi-line generic only when line would exceed 80 chars
+	// Single-line: "export class X extends WorkflowEntrypoint<WorkflowEnv, WorkflowParams> {"
+	// That's 71 chars + className.length. If > 80, use multi-line.
+	const singleLineClassDecl = `export class ${className} extends WorkflowEntrypoint<WorkflowEnv, WorkflowParams> {\n`;
+	if (singleLineClassDecl.length - 1 <= 80) {
+		code += singleLineClassDecl;
+	} else {
+		code += `export class ${className} extends WorkflowEntrypoint<\n`;
+		code += `\tWorkflowEnv,\n`;
+		code += `\tWorkflowParams\n`;
+		code += `> {\n`;
+	}
+	code += `\tasync run(\n\t\tevent: WorkflowEvent<WorkflowParams>,\n\t\tstep: WorkflowStep,\n\t): Promise<unknown> {\n`;
 
-	// Traverse and generate step code
+	// Traverse and generate step code (2 tabs = class body + method body)
 	const { code: stepsCode, warnings: traverseWarnings } = traverseAndGenerate(
 		startNode,
 		nodes,
 		edges,
-		"    ",
+		"\t\t",
 	);
-	code += stepsCode;
+	// Trim trailing blank lines so Prettier doesn't flag a blank line before `}`
+	code += trimTrailingBlankLines(stepsCode);
 	warnings.push(...traverseWarnings);
 
 	// Close class
-	code += `  }\n`;
+	code += `\t}\n`;
 	code += `}\n`;
 
 	return { code, warnings };

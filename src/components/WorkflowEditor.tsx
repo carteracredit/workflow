@@ -40,7 +40,7 @@ import {
 	createWorkflow,
 	updateWorkflow as updateWorkflowApi,
 } from "@/lib/workflow-api/workflows";
-import { ApiError } from "@/lib/workflow-api/http";
+import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 
 const STORAGE_KEY = "cartera-workflow-state";
 const WORKFLOW_API_ID_KEY = "cartera-workflow-api-id";
@@ -562,10 +562,13 @@ export function WorkflowEditor() {
 				toast.error("Acceso denegado", {
 					description: "Solo los administradores pueden guardar workflows.",
 				});
+			} else if (error instanceof ApiError && error.status === 409) {
+				toast.error("Nombre duplicado", {
+					description: extractApiErrorMessage(error),
+				});
 			} else {
 				toast.error("Error al guardar", {
-					description:
-						error instanceof Error ? error.message : "Error desconocido.",
+					description: extractApiErrorMessage(error),
 				});
 			}
 		}

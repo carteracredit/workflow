@@ -32,7 +32,7 @@ import {
 } from "@/lib/workflow/code-generator";
 import { publishWorkflow } from "@/lib/workflow-api/workflows";
 import type { PublishWorkflowResponse } from "@/lib/workflow-api/types";
-import { ApiError } from "@/lib/workflow-api/http";
+import { extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { toast } from "sonner";
 
 export interface PublishModalProps {
@@ -283,12 +283,7 @@ export function PublishModal({
 				description: `Deployment iniciado. GitHub Actions desplegará a Cloudflare automáticamente.`,
 			});
 		} catch (err) {
-			const msg =
-				err instanceof ApiError
-					? `Error ${err.status}: ${err.message}`
-					: err instanceof Error
-						? err.message
-						: "Error desconocido";
+			const msg = extractApiErrorMessage(err);
 			setDeployError(msg);
 			setDeployStatus("error");
 			toast.error("Error al publicar", { description: msg });

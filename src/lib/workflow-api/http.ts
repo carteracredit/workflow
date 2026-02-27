@@ -10,6 +10,46 @@ export class ApiError extends Error {
 	}
 }
 
+/**
+ * Extracts a human-readable error message from any error.
+ *
+ * Handles both response formats from workflow-svc:
+ *  - Chanfana endpoints: `{ success: false, errors: [{ code, message }] }`
+ *  - Publish endpoint:   `{ success: false, error: string, details?: string }`
+ */
+export function extractApiErrorMessage(error: unknown): string {
+	if (error instanceof ApiError) {
+		const body = error.body;
+		if (body && typeof body === "object") {
+			// Chanfana format: { success: false, errors: [{ code, message }] }
+			if (
+				"errors" in body &&
+				Array.isArray((body as { errors: unknown[] }).errors)
+			) {
+				const errors = (body as { errors: Array<{ message?: string }> }).errors;
+				if (errors.length > 0 && errors[0].message) {
+					return errors[0].message;
+				}
+			}
+			// Publish/custom endpoint format: { success: false, error: string, details?: string }
+			if ("error" in body) {
+				const { error: msg, details } = body as {
+					error?: string;
+					details?: string;
+				};
+				if (msg) {
+					return details ? `${msg}: ${details}` : msg;
+				}
+			}
+		}
+		return error.message;
+	}
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return "Error desconocido";
+}
+
 export interface FetchJsonOptions extends RequestInit {
 	/**
 	 * JWT token to include in Authorization header.
