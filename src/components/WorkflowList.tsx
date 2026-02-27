@@ -284,23 +284,47 @@ export function WorkflowList() {
 	};
 
 	const handleArchive = async (wf: Workflow) => {
-		if (!token) return;
+		if (!token) {
+			toast.error("No autenticado");
+			return;
+		}
 		const newStatus = wf.status === "archived" ? "draft" : "archived";
 		try {
-			await updateWorkflow(wf.id, { status: newStatus }, { jwt: token });
+			// PUT requires all non-optional fields — send the full workflow object
+			// with only status changed to avoid validation errors.
+			await updateWorkflow(
+				wf.id,
+				{
+					name: wf.name,
+					slug: wf.slug,
+					description: wf.description,
+					status: newStatus,
+					class_name: wf.class_name,
+					current_major_version: wf.current_major_version,
+					...(wf.github_repo_url != null && {
+						github_repo_url: wf.github_repo_url,
+					}),
+				},
+				{ jwt: token },
+			);
 			toast.success(
 				newStatus === "archived"
 					? `"${wf.name}" archivado`
 					: `"${wf.name}" restaurado como borrador`,
 			);
 			mutate();
-		} catch {
-			toast.error("Error al actualizar el estado del workflow");
+		} catch (err) {
+			toast.error("Error al actualizar el estado del workflow", {
+				description: extractApiErrorMessage(err),
+			});
 		}
 	};
 
 	const handleDelete = async (wf: Workflow) => {
-		if (!token) return;
+		if (!token) {
+			toast.error("No autenticado");
+			return;
+		}
 		if (!confirm(`¿Eliminar "${wf.name}"? Esta acción no se puede deshacer.`))
 			return;
 		setDeletingId(wf.id);

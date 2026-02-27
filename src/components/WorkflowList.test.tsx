@@ -565,7 +565,7 @@ describe("WorkflowList – archivar y restaurar", () => {
 		await waitFor(() => {
 			expect(mockUpdateWorkflow).toHaveBeenCalledWith(
 				1,
-				{ status: "archived" },
+				expect.objectContaining({ status: "archived", name: "WF1" }),
 				{ jwt: "test-jwt" },
 			);
 		});
@@ -588,7 +588,7 @@ describe("WorkflowList – archivar y restaurar", () => {
 		await waitFor(() => {
 			expect(mockUpdateWorkflow).toHaveBeenCalledWith(
 				2,
-				{ status: "draft" },
+				expect.objectContaining({ status: "draft", name: "WF2" }),
 				{ jwt: "test-jwt" },
 			);
 		});
@@ -614,6 +614,7 @@ describe("WorkflowList – archivar y restaurar", () => {
 		await waitFor(() => {
 			expect(toast.error).toHaveBeenCalledWith(
 				"Error al actualizar el estado del workflow",
+				expect.any(Object),
 			);
 		});
 	});
