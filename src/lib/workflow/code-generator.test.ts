@@ -1317,4 +1317,80 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(msgIdx).toBeGreaterThan(joinIdx);
 		expect(returnIdx).toBeGreaterThan(msgIdx);
 	});
+
+	// ── Deterministic edge order (issue: delete+recreate edge) ──────────────
+
+	it("produces identical code when edges are re-ordered (simulating delete+recreate)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Decisión",
+				config: { condition: "cond" },
+			}),
+			createNode({
+				id: "msg-a",
+				type: "Message",
+				title: "Mensaje A",
+				config: { type: "email" },
+			}),
+			createNode({
+				id: "msg-b",
+				type: "Message",
+				title: "Mensaje B",
+				config: { type: "email" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edgesOriginal: WorkflowEdge[] = [
+			createEdge("start", "decision", { id: "e1" }),
+			createEdge("decision", "msg-a", { id: "e2", fromPort: "top" }),
+			createEdge("decision", "msg-b", { id: "e3", fromPort: "bottom" }),
+			createEdge("msg-a", "end", { id: "e4" }),
+			createEdge("msg-b", "end", { id: "e5" }),
+		];
+
+		const edgesReordered: WorkflowEdge[] = [
+			createEdge("start", "decision", { id: "e1" }),
+			createEdge("decision", "msg-b", { id: "e3", fromPort: "bottom" }),
+			createEdge("msg-b", "end", { id: "new-e4" }),
+			createEdge("decision", "msg-a", { id: "new-e2", fromPort: "top" }),
+			createEdge("msg-a", "end", { id: "new-e5" }),
+		];
+
+		const resultOriginal = generateWorkflowCode(nodes, edgesOriginal);
+		const resultReordered = generateWorkflowCode(nodes, edgesReordered);
+
+		expect(resultOriginal.code).toBe(resultReordered.code);
+	});
+
+	it("produces identical code regardless of edge ID changes", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Formulario",
+				roles: [],
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edgesV1: WorkflowEdge[] = [
+			createEdge("start", "form", { id: "edge-1000" }),
+			createEdge("form", "end", { id: "edge-2000" }),
+		];
+
+		const edgesV2: WorkflowEdge[] = [
+			createEdge("start", "form", { id: "edge-9999999" }),
+			createEdge("form", "end", { id: "edge-8888888" }),
+		];
+
+		const resultV1 = generateWorkflowCode(nodes, edgesV1);
+		const resultV2 = generateWorkflowCode(nodes, edgesV2);
+
+		expect(resultV1.code).toBe(resultV2.code);
+	});
 });

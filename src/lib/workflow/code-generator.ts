@@ -93,16 +93,36 @@ function escapeString(str: string): string {
 }
 
 /**
- * Build adjacency maps for graph traversal
+ * Comparator for deterministic edge ordering.
+ * Edges are sorted by (from, to, fromPort, toPort) so that deleting and
+ * re-creating an equivalent edge yields the same generated code.
+ */
+function compareEdges(a: WorkflowEdge, b: WorkflowEdge): number {
+	if (a.from !== b.from) return a.from.localeCompare(b.from);
+	if (a.to !== b.to) return a.to.localeCompare(b.to);
+	const aFromPort = a.fromPort ?? "";
+	const bFromPort = b.fromPort ?? "";
+	if (aFromPort !== bFromPort) return aFromPort.localeCompare(bFromPort);
+	const aToPort = a.toPort ?? "";
+	const bToPort = b.toPort ?? "";
+	return aToPort.localeCompare(bToPort);
+}
+
+/**
+ * Build adjacency maps for graph traversal.
+ * Edges are sorted deterministically so that re-ordering the input array
+ * (e.g. after deleting and re-adding an edge) does not change the output.
  */
 function buildAdjacencyMaps(edges: WorkflowEdge[]): {
 	outgoingMap: Map<string, WorkflowEdge[]>;
 	incomingMap: Map<string, WorkflowEdge[]>;
 } {
+	const sortedEdges = [...edges].sort(compareEdges);
+
 	const outgoingMap = new Map<string, WorkflowEdge[]>();
 	const incomingMap = new Map<string, WorkflowEdge[]>();
 
-	for (const edge of edges) {
+	for (const edge of sortedEdges) {
 		if (!outgoingMap.has(edge.from)) {
 			outgoingMap.set(edge.from, []);
 		}

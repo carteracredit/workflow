@@ -30,6 +30,7 @@ import {
 	type TranspilationPhase,
 	type TranspilationResult,
 } from "@/lib/workflow/code-generator";
+import { formatGeneratedCode } from "@/lib/workflow/format-code";
 import { publishWorkflow } from "@/lib/workflow-api/workflows";
 import type { PublishWorkflowDeployedResponse } from "@/lib/workflow-api/types";
 import { extractApiErrorMessage } from "@/lib/workflow-api/http";
@@ -247,7 +248,8 @@ export function PublishModal({
 				return;
 			}
 
-			generatedCode = result.code;
+			// Format with Prettier so the deployed file passes format:check in CI
+			generatedCode = await formatGeneratedCode(result.code);
 		} catch (err) {
 			toast.error("Error inesperado durante la transpilación", {
 				description: err instanceof Error ? err.message : "Error desconocido",
