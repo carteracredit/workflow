@@ -51,7 +51,7 @@ const LEGACY_STORAGE_KEY = "cartera-workflow-state";
 const LEGACY_WORKFLOW_API_ID_KEY = "cartera-workflow-api-id";
 
 // Per-workflow draft key for multi-workflow mode
-const getDraftKey = (id: number) => `cartera-workflow-draft-${id}`;
+const getDraftKey = (id: string) => `cartera-workflow-draft-${id}`;
 // Keep old STORAGE_KEY alias so existing localStorage still loads
 const STORAGE_KEY = LEGACY_STORAGE_KEY;
 const WORKFLOW_API_ID_KEY = LEGACY_WORKFLOW_API_ID_KEY;
@@ -201,7 +201,7 @@ type HistoryChange = Partial<WorkflowState> & {
 
 interface WorkflowEditorProps {
 	/** If provided, load this workflow from the API. */
-	workflowId?: number;
+	workflowId?: string;
 }
 
 function buildDefinitionJson(
@@ -243,14 +243,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 
 	// When workflowId prop is given, it is the authoritative API ID.
 	// Otherwise fall back to legacy localStorage key.
-	const [workflowApiId, setWorkflowApiId] = useState<number | null>(() => {
+	const [workflowApiId, setWorkflowApiId] = useState<string | null>(() => {
 		if (workflowId !== undefined) return workflowId;
 		if (typeof window !== "undefined") {
 			const saved = localStorage.getItem(WORKFLOW_API_ID_KEY);
-			if (saved) {
-				const parsed = Number.parseInt(saved, 10);
-				return Number.isNaN(parsed) ? null : parsed;
-			}
+			if (saved) return saved;
 		}
 		return null;
 	});

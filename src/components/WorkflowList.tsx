@@ -114,7 +114,7 @@ function formatRelativeDate(dateStr: string): string {
 interface CreateWorkflowDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onCreated: (id: number) => void;
+	onCreated: (id: string) => void;
 	apiToken: string | null;
 }
 
@@ -247,7 +247,7 @@ export function WorkflowList() {
 	const [search, setSearch] = useState("");
 	const [activeTab, setActiveTab] = useState("all");
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
-	const [deletingId, setDeletingId] = useState<number | null>(null);
+	const [deletingId, setDeletingId] = useState<string | null>(null);
 
 	const { workflows, isLoading, error, mutate } = useWorkflows();
 
@@ -273,11 +273,11 @@ export function WorkflowList() {
 		};
 	}, [workflows]);
 
-	const handleCreated = (id: number) => {
+	const handleCreated = (id: string) => {
 		router.push(`/editor/${id}`);
 	};
 
-	const handleEdit = (id: number) => {
+	const handleEdit = (id: string) => {
 		router.push(`/editor/${id}`);
 	};
 

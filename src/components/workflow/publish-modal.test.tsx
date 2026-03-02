@@ -71,7 +71,7 @@ const createEdge = (
 
 // Default props helper to avoid repetition
 const defaultProps = {
-	workflowApiId: 1,
+	workflowApiId: "wf-uuid-001",
 	onSave: vi.fn().mockResolvedValue(undefined),
 	apiToken: "test-jwt-token",
 	onClose: vi.fn(),

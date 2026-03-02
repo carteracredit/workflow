@@ -10,8 +10,8 @@ import { ApiError } from "./http";
 const BASE_URL = "https://workflow-svc.carteracredit.workers.dev";
 
 const mockDeployment = {
-	id: 1,
-	workflow_id: 1,
+	id: "dep-uuid-001",
+	workflow_id: "dep-uuid-001",
 	major_version: 1,
 	semver: "1.0.0",
 	environment: "development" as const,
@@ -85,7 +85,7 @@ describe("deployments API functions", () => {
 			mockFetch({ success: true, result: mockDeployment }, 201);
 
 			const payload = {
-				workflow_id: 1,
+				workflow_id: "dep-uuid-001",
 				major_version: 1,
 				semver: "1.0.0",
 				environment: "development" as const,
@@ -107,10 +107,10 @@ describe("deployments API functions", () => {
 		it("fetches deployment by ID from correct URL", async () => {
 			mockFetch({ success: true, result: mockDeployment });
 
-			const result = await getDeployment(1);
+			const result = await getDeployment("dep-uuid-001");
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-				`${BASE_URL}/workflow-deployments/1`,
+				`${BASE_URL}/workflow-deployments/dep-uuid-001`,
 				expect.any(Object),
 			);
 			expect(result).toEqual(mockDeployment);
@@ -119,7 +119,7 @@ describe("deployments API functions", () => {
 		it("throws ApiError on 404", async () => {
 			mockFetch({ success: false, errors: [{ message: "Not Found" }] }, 404);
 
-			await expect(getDeployment(9999)).rejects.toThrow(ApiError);
+			await expect(getDeployment("dep-uuid-404")).rejects.toThrow(ApiError);
 		});
 	});
 
@@ -128,10 +128,12 @@ describe("deployments API functions", () => {
 			const updated = { ...mockDeployment, status: "deprecated" as const };
 			mockFetch({ success: true, result: updated });
 
-			const result = await updateDeployment(1, { status: "deprecated" });
+			const result = await updateDeployment("dep-uuid-001", {
+				status: "deprecated",
+			});
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-				`${BASE_URL}/workflow-deployments/1`,
+				`${BASE_URL}/workflow-deployments/dep-uuid-001`,
 				expect.objectContaining({ method: "PUT" }),
 			);
 			expect(result.status).toBe("deprecated");
@@ -142,7 +144,9 @@ describe("deployments API functions", () => {
 			const updated = { ...mockDeployment, deployed_at: timestamp };
 			mockFetch({ success: true, result: updated });
 
-			const result = await updateDeployment(1, { deployed_at: timestamp });
+			const result = await updateDeployment("dep-uuid-001", {
+				deployed_at: timestamp,
+			});
 
 			expect(result.deployed_at).toBe(timestamp);
 		});

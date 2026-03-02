@@ -61,7 +61,7 @@ export async function getWorkflowsAction(
 }
 
 export async function getWorkflowAction(
-	id: number,
+	id: string,
 ): Promise<ApiResult<Workflow>> {
 	try {
 		await requireAdminSession();
@@ -93,7 +93,7 @@ export async function createWorkflowAction(
 }
 
 export async function updateWorkflowAction(
-	id: number,
+	id: string,
 	payload: UpdateWorkflowPayload,
 ): Promise<ApiResult<Workflow>> {
 	try {
@@ -110,8 +110,8 @@ export async function updateWorkflowAction(
 }
 
 export async function deleteWorkflowAction(
-	id: number,
-): Promise<ApiResult<{ id: number }>> {
+	id: string,
+): Promise<ApiResult<{ id: string }>> {
 	try {
 		await requireAdminSession();
 		const jwt = await getJwt();
@@ -144,7 +144,7 @@ export async function getDeploymentsAction(
 }
 
 export async function getDeploymentAction(
-	id: number,
+	id: string,
 ): Promise<ApiResult<WorkflowDeployment>> {
 	try {
 		await requireAdminSession();
@@ -176,7 +176,7 @@ export async function createDeploymentAction(
 }
 
 export async function updateDeploymentAction(
-	id: number,
+	id: string,
 	payload: UpdateWorkflowDeploymentPayload,
 ): Promise<ApiResult<WorkflowDeployment>> {
 	try {

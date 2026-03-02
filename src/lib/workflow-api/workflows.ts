@@ -71,7 +71,7 @@ export async function createWorkflow(
  * Gets a single workflow by ID.
  */
 export async function getWorkflow(
-	id: number,
+	id: string,
 	options?: ApiCallOptions,
 ): Promise<Workflow> {
 	const baseUrl = getWorkflowServiceUrl();
@@ -88,7 +88,7 @@ export async function getWorkflow(
  * Updates an existing workflow by ID.
  */
 export async function updateWorkflow(
-	id: number,
+	id: string,
 	payload: UpdateWorkflowPayload,
 	options?: ApiCallOptions,
 ): Promise<Workflow> {
@@ -117,7 +117,7 @@ export async function updateWorkflow(
  * Returns a skipped response when no code changes are detected.
  */
 export async function publishWorkflow(
-	id: number,
+	id: string,
 	payload: {
 		code: string;
 		environment: "development" | "production";
@@ -144,12 +144,12 @@ export async function publishWorkflow(
  * Deletes a workflow by ID.
  */
 export async function deleteWorkflow(
-	id: number,
+	id: string,
 	options?: ApiCallOptions,
-): Promise<{ id: number }> {
+): Promise<{ id: string }> {
 	const baseUrl = getWorkflowServiceUrl();
 
-	const { json } = await fetchJson<ApiResponse<{ id: number }>>(
+	const { json } = await fetchJson<ApiResponse<{ id: string }>>(
 		`${baseUrl}/workflows/${id}`,
 		{
 			method: "DELETE",
@@ -164,7 +164,7 @@ export async function deleteWorkflow(
  * Lists all published versions of a workflow.
  */
 export async function listWorkflowVersions(
-	workflowId: number,
+	workflowId: string,
 	options?: ApiCallOptions,
 ): Promise<WorkflowVersion[]> {
 	const baseUrl = getWorkflowServiceUrl();

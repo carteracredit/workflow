@@ -78,7 +78,7 @@ const TODAY = new Date().toISOString();
 
 function makeWorkflow(overrides: Partial<Workflow> = {}): Workflow {
 	return {
-		id: 1,
+		id: "wf-uuid-default",
 		name: "Aprobación de Crédito",
 		slug: "aprobacion-de-credito",
 		description: "Flujo principal de aprobación",
@@ -159,8 +159,8 @@ describe("WorkflowList – estados de carga y error", () => {
 describe("WorkflowList – renderización con datos", () => {
 	it("muestra el nombre de los workflows en la tabla", () => {
 		makeHooksReturn([
-			makeWorkflow({ id: 1, name: "Alpha", status: "published" }),
-			makeWorkflow({ id: 2, name: "Beta", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "Alpha", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-002", name: "Beta", status: "draft" }),
 		]);
 		render(<WorkflowList />);
 		expect(screen.getByText("Alpha")).toBeInTheDocument();
@@ -169,9 +169,9 @@ describe("WorkflowList – renderización con datos", () => {
 
 	it("muestra el badge de estado correcto", () => {
 		makeHooksReturn([
-			makeWorkflow({ id: 1, name: "Alpha", status: "published" }),
-			makeWorkflow({ id: 2, name: "Beta", status: "draft" }),
-			makeWorkflow({ id: 3, name: "Gamma", status: "archived" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "Alpha", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-002", name: "Beta", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-003", name: "Gamma", status: "archived" }),
 		]);
 		render(<WorkflowList />);
 		expect(screen.getByText("Publicado")).toBeInTheDocument();
@@ -213,10 +213,10 @@ describe("WorkflowList – renderización con datos", () => {
 describe("WorkflowList – chips de estadísticas", () => {
 	it("muestra conteos correctos por estado en los chips", () => {
 		makeHooksReturn([
-			makeWorkflow({ id: 1, status: "published" }),
-			makeWorkflow({ id: 2, status: "published" }),
-			makeWorkflow({ id: 3, status: "draft" }),
-			makeWorkflow({ id: 4, status: "archived" }),
+			makeWorkflow({ id: "wf-uuid-001", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-002", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-003", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-004", status: "archived" }),
 		]);
 		render(<WorkflowList />);
 
@@ -242,8 +242,8 @@ describe("WorkflowList – chips de estadísticas", () => {
 
 	it("los chips son clicables y actúan como filtro de estado", () => {
 		const workflows: Workflow[] = [
-			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
-			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "Pub", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-002", name: "Draft", status: "draft" }),
 		];
 		makeHooksReturn(workflows);
 		render(<WorkflowList />);
@@ -256,8 +256,8 @@ describe("WorkflowList – chips de estadísticas", () => {
 
 	it("chip Total muestra todos los workflows", () => {
 		const workflows: Workflow[] = [
-			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
-			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "Pub", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-002", name: "Draft", status: "draft" }),
 		];
 		makeHooksReturn(workflows);
 		render(<WorkflowList />);
@@ -277,13 +277,17 @@ describe("WorkflowList – chips de estadísticas", () => {
 describe("WorkflowList – búsqueda y filtrado", () => {
 	const WORKFLOWS: Workflow[] = [
 		makeWorkflow({
-			id: 1,
+			id: "wf-uuid-001",
 			name: "Crédito Personal",
 			description: "Para personas",
 		}),
-		makeWorkflow({ id: 2, name: "Hipoteca", description: "Inmuebles" }),
 		makeWorkflow({
-			id: 3,
+			id: "wf-uuid-002",
+			name: "Hipoteca",
+			description: "Inmuebles",
+		}),
+		makeWorkflow({
+			id: "wf-uuid-003",
 			name: "Garantía",
 			description: "Proceso de crédito",
 		}),
@@ -331,8 +335,8 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 
 	it("filtra por estado al hacer clic en chip de estado", async () => {
 		const workflows: Workflow[] = [
-			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
-			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "Pub", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-002", name: "Draft", status: "draft" }),
 		];
 		makeHooksReturn(workflows);
 		render(<WorkflowList />);
@@ -345,8 +349,8 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 
 	it("chip Total vuelve a mostrar todos los workflows", async () => {
 		const workflows: Workflow[] = [
-			makeWorkflow({ id: 1, name: "Pub", status: "published" }),
-			makeWorkflow({ id: 2, name: "Draft", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "Pub", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-002", name: "Draft", status: "draft" }),
 		];
 		makeHooksReturn(workflows);
 		render(<WorkflowList />);
@@ -365,12 +369,12 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 
 describe("WorkflowList – navegación", () => {
 	it("navega al editor cuando se hace clic en una fila", async () => {
-		makeHooksReturn([makeWorkflow({ id: 42, name: "Click Me" })]);
+		makeHooksReturn([makeWorkflow({ id: "wf-uuid-042", name: "Click Me" })]);
 		render(<WorkflowList />);
 
 		fireEvent.click(screen.getByText("Click Me"));
 
-		expect(mockPush).toHaveBeenCalledWith("/editor/42");
+		expect(mockPush).toHaveBeenCalledWith("/editor/wf-uuid-042");
 	});
 });
 
@@ -411,7 +415,10 @@ describe("WorkflowList – diálogo de creación", () => {
 
 	it("crea el workflow y navega al editor", async () => {
 		makeHooksReturn([]);
-		mockCreateWorkflow.mockResolvedValue({ id: 99, name: "Nuevo WF" });
+		mockCreateWorkflow.mockResolvedValue({
+			id: "wf-uuid-099",
+			name: "Nuevo WF",
+		});
 		render(<WorkflowList />);
 
 		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
@@ -436,13 +443,16 @@ describe("WorkflowList – diálogo de creación", () => {
 		>;
 		expect(payload).not.toHaveProperty("definition");
 		await waitFor(() => {
-			expect(mockPush).toHaveBeenCalledWith("/editor/99");
+			expect(mockPush).toHaveBeenCalledWith("/editor/wf-uuid-099");
 		});
 	});
 
 	it("incluye la descripción cuando se proporciona", async () => {
 		makeHooksReturn([]);
-		mockCreateWorkflow.mockResolvedValue({ id: 10, name: "WF con desc" });
+		mockCreateWorkflow.mockResolvedValue({
+			id: "wf-uuid-010",
+			name: "WF con desc",
+		});
 		render(<WorkflowList />);
 
 		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
@@ -561,7 +571,7 @@ describe("WorkflowList – archivar y restaurar", () => {
 	it("archiva un workflow publicado", async () => {
 		const { toast } = await import("sonner");
 		makeHooksReturn([
-			makeWorkflow({ id: 1, name: "WF1", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "WF1", status: "published" }),
 		]);
 		mockUpdateWorkflow.mockResolvedValue({});
 		render(<WorkflowList />);
@@ -572,7 +582,7 @@ describe("WorkflowList – archivar y restaurar", () => {
 
 		await waitFor(() => {
 			expect(mockUpdateWorkflow).toHaveBeenCalledWith(
-				1,
+				"wf-uuid-001",
 				expect.objectContaining({ status: "archived", name: "WF1" }),
 				{ jwt: "test-jwt" },
 			);
@@ -585,7 +595,9 @@ describe("WorkflowList – archivar y restaurar", () => {
 
 	it("restaura un workflow archivado a borrador", async () => {
 		const { toast } = await import("sonner");
-		makeHooksReturn([makeWorkflow({ id: 2, name: "WF2", status: "archived" })]);
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-uuid-002", name: "WF2", status: "archived" }),
+		]);
 		mockUpdateWorkflow.mockResolvedValue({});
 		render(<WorkflowList />);
 
@@ -595,7 +607,7 @@ describe("WorkflowList – archivar y restaurar", () => {
 
 		await waitFor(() => {
 			expect(mockUpdateWorkflow).toHaveBeenCalledWith(
-				2,
+				"wf-uuid-002",
 				expect.objectContaining({ status: "draft", name: "WF2" }),
 				{ jwt: "test-jwt" },
 			);
@@ -610,7 +622,7 @@ describe("WorkflowList – archivar y restaurar", () => {
 	it("muestra error toast cuando falla la actualización de estado", async () => {
 		const { toast } = await import("sonner");
 		makeHooksReturn([
-			makeWorkflow({ id: 1, name: "WF1", status: "published" }),
+			makeWorkflow({ id: "wf-uuid-001", name: "WF1", status: "published" }),
 		]);
 		mockUpdateWorkflow.mockRejectedValue(new Error("error"));
 		render(<WorkflowList />);
@@ -642,7 +654,9 @@ describe("WorkflowList – eliminar", () => {
 
 	it("no elimina si el usuario cancela el confirm", async () => {
 		vi.spyOn(window, "confirm").mockReturnValue(false);
-		makeHooksReturn([makeWorkflow({ id: 1, name: "WFDel", status: "draft" })]);
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-uuid-001", name: "WFDel", status: "draft" }),
+		]);
 		render(<WorkflowList />);
 
 		await openDropdown("WFDel");
@@ -655,7 +669,9 @@ describe("WorkflowList – eliminar", () => {
 	it("elimina el workflow cuando el usuario confirma", async () => {
 		const { toast } = await import("sonner");
 		vi.spyOn(window, "confirm").mockReturnValue(true);
-		makeHooksReturn([makeWorkflow({ id: 7, name: "WFDel2", status: "draft" })]);
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-uuid-007", name: "WFDel2", status: "draft" }),
+		]);
 		mockDeleteWorkflow.mockResolvedValue({});
 		render(<WorkflowList />);
 
@@ -664,7 +680,9 @@ describe("WorkflowList – eliminar", () => {
 		fireEvent.click(deleteBtn);
 
 		await waitFor(() => {
-			expect(mockDeleteWorkflow).toHaveBeenCalledWith(7, { jwt: "test-jwt" });
+			expect(mockDeleteWorkflow).toHaveBeenCalledWith("wf-uuid-007", {
+				jwt: "test-jwt",
+			});
 		});
 		await waitFor(() => {
 			expect(toast.success).toHaveBeenCalledWith('"WFDel2" eliminado');
@@ -676,7 +694,7 @@ describe("WorkflowList – eliminar", () => {
 		const { toast } = await import("sonner");
 		vi.spyOn(window, "confirm").mockReturnValue(true);
 		makeHooksReturn([
-			makeWorkflow({ id: 8, name: "WFDelErr", status: "draft" }),
+			makeWorkflow({ id: "wf-uuid-008", name: "WFDelErr", status: "draft" }),
 		]);
 		mockDeleteWorkflow.mockRejectedValue(new Error("delete failed"));
 		render(<WorkflowList />);
@@ -701,7 +719,7 @@ describe("WorkflowList – eliminar", () => {
 describe("WorkflowList – editar desde dropdown", () => {
 	it("navega al editor desde la opción Editar del dropdown", async () => {
 		const user = userEvent.setup();
-		makeHooksReturn([makeWorkflow({ id: 33, name: "WFEdit" })]);
+		makeHooksReturn([makeWorkflow({ id: "wf-uuid-033", name: "WFEdit" })]);
 		render(<WorkflowList />);
 
 		const row = screen.getByText("WFEdit").closest("tr")!;
@@ -711,6 +729,6 @@ describe("WorkflowList – editar desde dropdown", () => {
 		const editBtn = await screen.findByText("Editar");
 		fireEvent.click(editBtn);
 
-		expect(mockPush).toHaveBeenCalledWith("/editor/33");
+		expect(mockPush).toHaveBeenCalledWith("/editor/wf-uuid-033");
 	});
 });

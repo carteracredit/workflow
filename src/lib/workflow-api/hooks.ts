@@ -22,14 +22,14 @@ function workflowsKey(
 	return url.toString();
 }
 
-function workflowKey(jwt: string | null, id: number | null): string | null {
+function workflowKey(jwt: string | null, id: string | null): string | null {
 	if (!jwt || !id) return null;
 	return `${getWorkflowServiceUrl()}/workflows/${id}`;
 }
 
 function workflowVersionsKey(
 	jwt: string | null,
-	workflowId: number | null,
+	workflowId: string | null,
 ): string | null {
 	if (!jwt || !workflowId) return null;
 	return `${getWorkflowServiceUrl()}/workflow-versions?workflow_id=${workflowId}`;
@@ -71,7 +71,7 @@ export function useWorkflows(params?: { search?: string; status?: string }) {
 /**
  * Hook to load a single workflow by ID.
  */
-export function useWorkflow(id: number | null) {
+export function useWorkflow(id: string | null) {
 	const { token } = useWorkflowApiToken();
 	const key = workflowKey(token, id);
 
@@ -91,7 +91,7 @@ export function useWorkflow(id: number | null) {
 /**
  * Hook to list all published versions of a workflow.
  */
-export function useWorkflowVersions(workflowId: number | null) {
+export function useWorkflowVersions(workflowId: string | null) {
 	const { token } = useWorkflowApiToken();
 	const key = workflowVersionsKey(token, workflowId);
 

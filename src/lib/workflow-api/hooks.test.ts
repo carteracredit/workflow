@@ -123,7 +123,7 @@ describe("useWorkflows", () => {
 	});
 
 	it("returns workflows when SWR provides data", () => {
-		const workflows = [{ id: 1, name: "Test" }] as Workflow[];
+		const workflows = [{ id: "wf-uuid-001", name: "Test" }] as Workflow[];
 		withToken("my-token");
 		mockSWRReturn<Workflow[]>(workflows);
 
@@ -158,7 +158,7 @@ describe("useWorkflow", () => {
 		withToken(null);
 		mockSWRReturn<Workflow>(undefined);
 
-		renderHook(() => useWorkflow(1));
+		renderHook(() => useWorkflow("wf-uuid-001"));
 
 		expect(mockUseSWR).toHaveBeenCalledWith(null, expect.any(Function));
 	});
@@ -176,27 +176,27 @@ describe("useWorkflow", () => {
 		withToken("my-token");
 		mockSWRReturn<Workflow>(undefined);
 
-		renderHook(() => useWorkflow(42));
+		renderHook(() => useWorkflow("wf-uuid-042"));
 
 		const key = mockUseSWR.mock.calls[0][0] as string;
-		expect(key).toBe(`${BASE}/workflows/42`);
+		expect(key).toBe(`${BASE}/workflows/wf-uuid-042`);
 	});
 
 	it("returns null when data is undefined", () => {
 		withToken("my-token");
 		mockSWRReturn<Workflow>(undefined);
 
-		const { result } = renderHook(() => useWorkflow(1));
+		const { result } = renderHook(() => useWorkflow("wf-uuid-001"));
 
 		expect(result.current.workflow).toBeNull();
 	});
 
 	it("returns workflow object when SWR provides data", () => {
-		const workflow = { id: 5, name: "Credit App" } as Workflow;
+		const workflow = { id: "wf-uuid-005", name: "Credit App" } as Workflow;
 		withToken("my-token");
 		mockSWRReturn<Workflow>(workflow);
 
-		const { result } = renderHook(() => useWorkflow(5));
+		const { result } = renderHook(() => useWorkflow("wf-uuid-005"));
 
 		expect(result.current.workflow).toEqual(workflow);
 	});
@@ -206,7 +206,7 @@ describe("useWorkflow", () => {
 		const err = new Error("not found");
 		mockSWRReturn<Workflow>(undefined, { error: err, isLoading: false });
 
-		const { result } = renderHook(() => useWorkflow(99));
+		const { result } = renderHook(() => useWorkflow("wf-uuid-099"));
 
 		expect(result.current.error).toBe(err);
 		expect(result.current.isLoading).toBe(false);
@@ -219,7 +219,7 @@ describe("useWorkflowVersions", () => {
 		withToken(null);
 		mockSWRReturn<WorkflowVersion[]>(undefined);
 
-		renderHook(() => useWorkflowVersions(1));
+		renderHook(() => useWorkflowVersions("wf-uuid-001"));
 
 		expect(mockUseSWR).toHaveBeenCalledWith(null, expect.any(Function));
 	});
@@ -237,28 +237,28 @@ describe("useWorkflowVersions", () => {
 		withToken("my-token");
 		mockSWRReturn<WorkflowVersion[]>(undefined);
 
-		renderHook(() => useWorkflowVersions(7));
+		renderHook(() => useWorkflowVersions("wf-uuid-007"));
 
 		const key = mockUseSWR.mock.calls[0][0] as string;
 		expect(key).toContain(`${BASE}/workflow-versions`);
-		expect(key).toContain("workflow_id=7");
+		expect(key).toContain("workflow_id=wf-uuid-007");
 	});
 
 	it("returns empty array when data is undefined", () => {
 		withToken("my-token");
 		mockSWRReturn<WorkflowVersion[]>(undefined);
 
-		const { result } = renderHook(() => useWorkflowVersions(1));
+		const { result } = renderHook(() => useWorkflowVersions("wf-uuid-001"));
 
 		expect(result.current.versions).toEqual([]);
 	});
 
 	it("returns versions array when SWR provides data", () => {
-		const versions = [{ id: 1, version: 1 }] as WorkflowVersion[];
+		const versions = [{ id: "ver-uuid-001", version: 1 }] as WorkflowVersion[];
 		withToken("my-token");
 		mockSWRReturn<WorkflowVersion[]>(versions);
 
-		const { result } = renderHook(() => useWorkflowVersions(3));
+		const { result } = renderHook(() => useWorkflowVersions("wf-uuid-003"));
 
 		expect(result.current.versions).toEqual(versions);
 	});

@@ -46,7 +46,7 @@ export interface PublishModalProps {
 	/** Current canvas pan offset — included in the definition snapshot */
 	pan?: { x: number; y: number };
 	/** API id of the saved workflow in workflow-svc (null = not yet saved) */
-	workflowApiId: number | null;
+	workflowApiId: string | null;
 	/** Callback to save the workflow first if workflowApiId is null */
 	onSave: () => Promise<void>;
 	/** JWT token for authenticated API calls */
@@ -272,10 +272,7 @@ export function PublishModal({
 		let currentWorkflowId = workflowApiId;
 		if (!currentWorkflowId && typeof window !== "undefined") {
 			const saved = localStorage.getItem("cartera-workflow-api-id");
-			if (saved) {
-				const parsed = Number.parseInt(saved, 10);
-				if (!Number.isNaN(parsed)) currentWorkflowId = parsed;
-			}
+			if (saved) currentWorkflowId = saved;
 		}
 
 		if (!currentWorkflowId) {

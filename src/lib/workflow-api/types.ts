@@ -2,7 +2,7 @@
  * Workflow entity as returned by workflow-svc
  */
 export interface Workflow {
-	id: number;
+	id: string;
 	name: string;
 	slug: string;
 	description: string;
@@ -39,8 +39,8 @@ export type UpdateWorkflowPayload = Partial<CreateWorkflowPayload>;
  * Workflow deployment entity as returned by workflow-svc
  */
 export interface WorkflowDeployment {
-	id: number;
-	workflow_id: number;
+	id: string;
+	workflow_id: string;
 	major_version: number;
 	semver: string;
 	environment: "development" | "production";
@@ -55,8 +55,8 @@ export interface WorkflowDeployment {
  * Workflow version snapshot as returned by workflow-svc
  */
 export interface WorkflowVersion {
-	id: number;
-	workflow_id: number;
+	id: string;
+	workflow_id: string;
 	version: number;
 	definition: string;
 	code_checksum: string;
@@ -68,7 +68,7 @@ export interface WorkflowVersion {
  * Payload for creating a new workflow deployment
  */
 export interface CreateWorkflowDeploymentPayload {
-	workflow_id: number;
+	workflow_id: string;
 	major_version: number;
 	semver: string;
 	environment: "development" | "production";
