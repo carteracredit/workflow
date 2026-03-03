@@ -84,11 +84,11 @@ interface SemanticRule {
  */
 const SEMANTIC_RULES: SemanticRule[] = [
 	{
-		// `const x;` or `const x: Type;`  — const without initializer
+		// `const x`, `const x;`, `const x: Type`, `const x: Type;`
 		// ESBuild error: "The constant 'X' must be initialized"
-		// We match `const` declarations that end in `;` but do NOT contain `=`.
-		// [^=;]+ captures the variable name/type but stops before `;` or `=`.
-		pattern: /^const\s+[^=;]+;$/,
+		// Matches any `const` declaration without `=` (with or without trailing `;`).
+		// Prettier auto-adds `;` during formatting, so the user may omit it.
+		pattern: /^const\s+[^=;]+;?$/,
 		message:
 			"Las constantes deben tener un valor asignado (ej. `const x = 0;` en lugar de `const x;`)",
 	},

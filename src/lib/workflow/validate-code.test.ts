@@ -142,14 +142,33 @@ describe("validateTransformCode – ESBuild semantic rules", () => {
 		expect(result.error).toMatch(/constante|const|asignado/i);
 	});
 
+	it("should reject `const x` without initializer AND without semicolon", async () => {
+		const result = await validateTransformCode("const newVariable");
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/constante|const|asignado/i);
+	});
+
 	it("should reject `const x;` with type annotation and no initializer", async () => {
 		const result = await validateTransformCode("const myVar: string;");
+		expect(result.valid).toBe(false);
+	});
+
+	it("should reject `const x: Type` with type annotation, no initializer, no semicolon", async () => {
+		const result = await validateTransformCode("const myVar: string");
 		expect(result.valid).toBe(false);
 	});
 
 	it("should reject const without initializer in multi-line code", async () => {
 		const result = await validateTransformCode(
 			`const a = 1;\nconst b;\nreturn a;`,
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toContain("Línea 2");
+	});
+
+	it("should reject const without initializer or semicolon in multi-line code", async () => {
+		const result = await validateTransformCode(
+			`const a = 1;\nconst b\nreturn a;`,
 		);
 		expect(result.valid).toBe(false);
 		expect(result.error).toContain("Línea 2");
