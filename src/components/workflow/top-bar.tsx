@@ -197,6 +197,8 @@ interface TopBarProps {
 	onBack?: () => void;
 	/** Current workflow lifecycle status (draft / published / archived) */
 	workflowStatus?: "draft" | "published" | "archived";
+	/** Authoritative major version from the API — overrides metadata.version display */
+	currentMajorVersion?: number;
 	paletteProps?: {
 		onAddNode: (node: WorkflowNode) => void;
 		zoom: number;
@@ -225,17 +227,22 @@ export function TopBar({
 	workflowMetadata,
 	onBack,
 	workflowStatus,
+	currentMajorVersion,
 	paletteProps,
 }: TopBarProps) {
 	const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
 	const displayVersion = (() => {
+		// Use the authoritative API version when available
+		if (currentMajorVersion !== undefined && currentMajorVersion >= 1) {
+			return `v${currentMajorVersion}`;
+		}
+		// Fall back to parsing metadata.version (legacy / unsaved workflows)
 		const match = workflowMetadata.version.match(/(\d+)/);
 		if (!match) return "v1";
 		const parsed = Number.parseInt(match[1], 10);
 		if (Number.isNaN(parsed) || parsed < 1) return "v1";
-		const clamped = Math.min(parsed, 3);
-		return `v${clamped}`;
+		return `v${parsed}`;
 	})();
 
 	return (

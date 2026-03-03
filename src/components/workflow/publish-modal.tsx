@@ -52,8 +52,8 @@ export interface PublishModalProps {
 	/** JWT token for authenticated API calls */
 	apiToken: string | null;
 	onClose: () => void;
-	/** Called with the new status when publish completes successfully */
-	onPublished?: (status: "published") => void;
+	/** Called with the new status and version when publish completes successfully */
+	onPublished?: (status: "published", majorVersion?: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +313,9 @@ export function PublishModal({
 			} else {
 				setDeployResult(result as PublishWorkflowDeployedResponse);
 				setDeployStatus("done");
-				onPublished?.("published");
+				const deployedVersion = (result as PublishWorkflowDeployedResponse)
+					.version;
+				onPublished?.("published", deployedVersion ?? undefined);
 				toast.success("Workflow publicado", {
 					description: `Deployment iniciado. GitHub Actions desplegará a Cloudflare automáticamente.`,
 				});
