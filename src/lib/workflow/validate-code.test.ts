@@ -130,3 +130,53 @@ describe("validateConditionExpression", () => {
 		expect(result.error).toBe("La condición no puede estar vacía");
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ESBuild semantic checks (patterns Prettier accepts but Cloudflare rejects)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateTransformCode – ESBuild semantic rules", () => {
+	it("should reject `const x;` without initializer (the reported bug)", async () => {
+		const result = await validateTransformCode("const newVariable;");
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/constante|const|asignado/i);
+	});
+
+	it("should reject `const x;` with type annotation and no initializer", async () => {
+		const result = await validateTransformCode("const myVar: string;");
+		expect(result.valid).toBe(false);
+	});
+
+	it("should reject const without initializer in multi-line code", async () => {
+		const result = await validateTransformCode(
+			`const a = 1;\nconst b;\nreturn a;`,
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toContain("Línea 2");
+	});
+
+	it("should accept `const x = value;` with initializer", async () => {
+		const result = await validateTransformCode("const x = 5;");
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept `const x: number = value;` with type and initializer", async () => {
+		const result = await validateTransformCode("const x: number = 42;");
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept `const obj = { key: 'value' };`", async () => {
+		const result = await validateTransformCode("const obj = { key: 'value' };");
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept `const arr = [1, 2, 3];`", async () => {
+		const result = await validateTransformCode("const arr = [1, 2, 3];");
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept `let x;` (let without initializer is valid in ESBuild)", async () => {
+		const result = await validateTransformCode("let x;");
+		expect(result.valid).toBe(true);
+	});
+});

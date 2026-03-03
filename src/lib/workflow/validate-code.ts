@@ -3,6 +3,10 @@
  * (Transform, Decision) before it gets embedded into the generated Cloudflare
  * Worker. Uses Prettier's standalone TypeScript parser – the same one used by
  * format-code.ts – so no extra dependencies are needed.
+ *
+ * On top of Prettier's syntax check we run a set of semantic rules that match
+ * what ESBuild (used internally by Wrangler) rejects at build time even though
+ * the TypeScript compiler/Prettier considers the code syntactically valid.
  */
 
 export interface CodeValidationResult {
@@ -33,6 +37,10 @@ export async function validateTransformCode(
 		};
 	}
 
+	// Run semantic checks first (fast, synchronous)
+	const semantic = runSemanticChecks(code);
+	if (!semantic.valid) return semantic;
+
 	const wrapped = `async function __validate() {\n${code}\n}`;
 	return parseTypeScript(wrapped);
 }
@@ -57,6 +65,62 @@ export async function validateConditionExpression(
 
 	const wrapped = `if (${condition}) {}`;
 	return parseTypeScript(wrapped);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Semantic checks – patterns that Prettier accepts but ESBuild/Wrangler rejects
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SemanticRule {
+	/** Regex applied to individual lines (trimmed) */
+	pattern: RegExp;
+	/** Human-readable error in Spanish */
+	message: string;
+}
+
+/**
+ * Rules that match patterns ESBuild rejects at build time.
+ * Applied line by line so we can include the offending line number.
+ */
+const SEMANTIC_RULES: SemanticRule[] = [
+	{
+		// `const x;` or `const x: Type;`  — const without initializer
+		// ESBuild error: "The constant 'X' must be initialized"
+		// We match `const` declarations that end in `;` but do NOT contain `=`
+		// which would indicate an assignment/initializer.
+		pattern: /^const\s+(?:[^=]+);$/,
+		message:
+			"Las constantes deben tener un valor asignado (ej. `const x = 0;` en lugar de `const x;`)",
+	},
+];
+
+/**
+ * Runs synchronous semantic checks against the raw user code.
+ * Returns on the first error found.
+ */
+function runSemanticChecks(code: string): CodeValidationResult {
+	const lines = code.split("\n");
+
+	for (let i = 0; i < lines.length; i++) {
+		const trimmed = lines[i].trim();
+
+		// Skip blank lines and comments
+		if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("*")) {
+			continue;
+		}
+
+		for (const rule of SEMANTIC_RULES) {
+			if (rule.pattern.test(trimmed)) {
+				const lineNum = i + 1;
+				return {
+					valid: false,
+					error: `Línea ${lineNum}: ${rule.message}`,
+				};
+			}
+		}
+	}
+
+	return { valid: true };
 }
 
 /**
