@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
+import type { WorkflowNode, WorkflowEdge, Flag } from "@/lib/workflow/types";
 import {
 	Dialog,
 	DialogContent,
@@ -14,9 +14,13 @@ import { Download, Upload } from "lucide-react";
 
 interface JSONModalProps {
 	mode: "export" | "import";
-	workflow: { nodes: WorkflowNode[]; edges: WorkflowEdge[] };
+	workflow: { nodes: WorkflowNode[]; edges: WorkflowEdge[]; flags: Flag[] };
 	onClose: () => void;
-	onImport: (data: { nodes: WorkflowNode[]; edges: WorkflowEdge[] }) => void;
+	onImport: (data: {
+		nodes: WorkflowNode[];
+		edges: WorkflowEdge[];
+		flags: Flag[];
+	}) => void;
 }
 
 export function JSONModal({
@@ -51,7 +55,10 @@ export function JSONModal({
 				throw new Error('Formato inválido: falta el array "edges"');
 			}
 
-			onImport({ nodes: data.nodes, edges: data.edges });
+			// flags is optional for backwards compatibility with older exports
+			const flags: Flag[] = Array.isArray(data.flags) ? data.flags : [];
+
+			onImport({ nodes: data.nodes, edges: data.edges, flags });
 			setError(null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Error al parsear JSON");

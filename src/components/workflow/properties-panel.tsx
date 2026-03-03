@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type {
 	WorkflowNode,
 	WorkflowEdge,
@@ -44,6 +44,10 @@ import {
 	MAX_CHALLENGE_RETRIES,
 	DEFAULT_CHALLENGE_RETRY_CONFIG,
 } from "@/lib/workflow/types";
+import {
+	validateTransformCode,
+	validateConditionExpression,
+} from "@/lib/workflow/validate-code";
 
 interface PropertiesPanelProps {
 	selectedNodes: WorkflowNode[];
@@ -152,6 +156,75 @@ export function PropertiesPanel({
 		(selectedNodes.length > 0 && selectedEdges.length > 0);
 	// Estado local para el input de maxRetries del nodo API
 	const [apiMaxRetriesInput, setApiMaxRetriesInput] = useState<string>("");
+
+	// Estado para validacion de codigo Transform
+	const [transformValidating, setTransformValidating] =
+		useState<boolean>(false);
+	const [transformValidationResult, setTransformValidationResult] = useState<{
+		valid: boolean;
+		error?: string;
+	} | null>(null);
+
+	// Limpiar resultado de validacion cuando cambia el nodo seleccionado o su codigo
+	useEffect(() => {
+		setTransformValidationResult(null);
+	}, [selectedNode?.id, selectedNode?.config?.code]);
+
+	const handleValidateTransformCode = useCallback(async () => {
+		const code = (selectedNode?.config?.code as string) || "";
+		setTransformValidating(true);
+		setTransformValidationResult(null);
+		const result = await validateTransformCode(code);
+		setTransformValidating(false);
+		setTransformValidationResult(result);
+	}, [selectedNode?.config?.code]);
+
+	// Estado para modal de mock del nodo API
+	const [showApiMock, setShowApiMock] = useState<boolean>(false);
+	const [apiMockResponse, setApiMockResponse] = useState<string>("");
+	const [apiMockSimulated, setApiMockSimulated] = useState<boolean>(false);
+	const [apiMockError, setApiMockError] = useState<string | null>(null);
+
+	// Limpiar estado mock cuando cambia el nodo seleccionado
+	useEffect(() => {
+		setShowApiMock(false);
+		setApiMockSimulated(false);
+		setApiMockError(null);
+	}, [selectedNode?.id]);
+
+	const handleOpenApiMock = useCallback(() => {
+		const savedMock = (selectedNode?.config?.mockResponse as string) || "";
+		setApiMockResponse(
+			savedMock ||
+				JSON.stringify(
+					{ success: true, data: { example: "response" } },
+					null,
+					2,
+				),
+		);
+		setApiMockSimulated(false);
+		setApiMockError(null);
+		setShowApiMock(true);
+	}, [selectedNode?.config?.mockResponse]);
+
+	const handleSimulateMock = useCallback(() => {
+		try {
+			JSON.parse(apiMockResponse);
+			setApiMockError(null);
+			setApiMockSimulated(true);
+			if (selectedNode) {
+				onUpdateNode(selectedNode.id, {
+					config: {
+						...selectedNode.config,
+						mockResponse: apiMockResponse,
+					},
+				});
+			}
+		} catch {
+			setApiMockError("El JSON de la respuesta mock no es válido");
+			setApiMockSimulated(false);
+		}
+	}, [apiMockResponse, selectedNode, onUpdateNode]);
 
 	// Sincronizar el estado local con el valor del nodo cuando cambia
 	useEffect(() => {
@@ -861,18 +934,74 @@ export function PropertiesPanel({
 							<Textarea
 								id="transform-code"
 								value={(selectedNode.config.code as string) || ""}
-								onChange={(e) =>
+								onChange={(e) => {
 									onUpdateNode(selectedNode.id, {
 										config: { ...selectedNode.config, code: e.target.value },
-									})
-								}
+									});
+								}}
 								placeholder="// Transformar datos aquí"
 								rows={6}
 								className="font-mono text-xs"
 							/>
-							<Button size="sm" variant="secondary" className="w-full">
-								Validar Código
+							<Button
+								size="sm"
+								variant="secondary"
+								className="w-full"
+								onClick={handleValidateTransformCode}
+								disabled={
+									transformValidating ||
+									!(selectedNode.config.code as string)?.trim()
+								}
+							>
+								{transformValidating ? (
+									<span className="flex items-center gap-2">
+										<svg
+											className="h-3 w-3 animate-spin"
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+										>
+											<circle
+												className="opacity-25"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												strokeWidth="4"
+											/>
+											<path
+												className="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+											/>
+										</svg>
+										Validando...
+									</span>
+								) : (
+									"Validar Código"
+								)}
 							</Button>
+							{transformValidationResult !== null && (
+								<div
+									className={cn(
+										"rounded-md p-3 text-xs",
+										transformValidationResult.valid
+											? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+											: "bg-destructive/10 text-destructive",
+									)}
+								>
+									{transformValidationResult.valid ? (
+										<span className="font-medium">
+											✓ Código válido — sin errores de sintaxis
+										</span>
+									) : (
+										<>
+											<p className="font-medium">✗ Error de sintaxis</p>
+											<p className="mt-1">{transformValidationResult.error}</p>
+										</>
+									)}
+								</div>
+							)}
 						</div>
 					)}
 
@@ -942,9 +1071,88 @@ export function PropertiesPanel({
 										/>
 									</div>
 
-									<Button size="sm" variant="secondary" className="w-full">
+									<Button
+										size="sm"
+										variant="secondary"
+										className="w-full"
+										onClick={handleOpenApiMock}
+									>
 										Probar con Mock
 									</Button>
+
+									{showApiMock && (
+										<div className="rounded-md border border-border bg-muted/40 p-3 space-y-3">
+											<div className="space-y-1">
+												<p className="text-xs font-medium">
+													Preview del Request
+												</p>
+												<div className="rounded-md bg-muted px-3 py-2 font-mono text-xs">
+													<span className="text-blue-400">
+														{(selectedNode.config.method as string) || "GET"}
+													</span>{" "}
+													<span className="text-muted-foreground break-all">
+														{(selectedNode.config.url as string) ||
+															"/api/endpoint"}
+													</span>
+												</div>
+											</div>
+
+											<div className="space-y-1">
+												<label className="text-xs font-medium">
+													Respuesta Mock (JSON)
+												</label>
+												<Textarea
+													value={apiMockResponse}
+													onChange={(e) => {
+														setApiMockResponse(e.target.value);
+														setApiMockSimulated(false);
+														setApiMockError(null);
+													}}
+													rows={4}
+													className="font-mono text-xs resize-none"
+													placeholder='{"success": true}'
+												/>
+											</div>
+
+											{apiMockError && (
+												<p className="text-xs text-destructive">
+													{apiMockError}
+												</p>
+											)}
+
+											{apiMockSimulated && !apiMockError && (
+												<div className="rounded-md bg-emerald-500/15 p-2">
+													<p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+														✓ Simulación exitosa
+													</p>
+													<p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+														Respuesta mock guardada en la configuración
+													</p>
+												</div>
+											)}
+
+											<div className="flex gap-2">
+												<Button
+													size="sm"
+													variant="outline"
+													className="flex-1"
+													onClick={() => {
+														setShowApiMock(false);
+														setApiMockSimulated(false);
+													}}
+												>
+													Cerrar
+												</Button>
+												<Button
+													size="sm"
+													className="flex-1"
+													onClick={handleSimulateMock}
+												>
+													Simular respuesta
+												</Button>
+											</div>
+										</div>
+									)}
 
 									{/* Separador */}
 									<div className="border-t border-border pt-4">

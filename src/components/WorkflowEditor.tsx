@@ -26,7 +26,7 @@ import type {
 	Flag,
 } from "@/lib/workflow/types";
 import { STALE_SUPPORTED_NODE_TYPES } from "@/lib/workflow/types";
-import { validateWorkflow } from "@/lib/workflow/validation";
+import { validateWorkflowWithSyntax } from "@/lib/workflow/validation";
 import { EXAMPLE_WORKFLOWS } from "@/lib/example-workflows";
 import {
 	canRedoHistory,
@@ -672,8 +672,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		});
 	}, [setWorkflowState]);
 
-	const handleValidate = useCallback(() => {
-		const errors = validateWorkflow(workflowState.nodes, workflowState.edges);
+	const handleValidate = useCallback(async () => {
+		const errors = await validateWorkflowWithSyntax(
+			workflowState.nodes,
+			workflowState.edges,
+			workflowState.flags,
+		);
 		setValidationErrors(errors);
 		const isValid = errors.length === 0;
 		setLastValidationErrorCount(errors.length);
@@ -805,8 +809,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		setShowJSON(true);
 	}, []);
 
-	const handlePublish = useCallback(() => {
-		const isValid = handleValidate();
+	const handlePublish = useCallback(async () => {
+		const isValid = await handleValidate();
 		if (isValid) {
 			setShowPublish(true);
 		}
@@ -865,12 +869,45 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		}));
 	}, []);
 
-	const updateFlags = useCallback((flags: Flag[]) => {
-		setWorkflowState((prev) => ({
-			...prev,
-			flags,
-		}));
-	}, []);
+	const updateFlags = useCallback(
+		(newFlags: Flag[]) => {
+			setWorkflowState((prev) => {
+				// Build a set of still-valid {flagId, optionId} pairs so FlagChange
+				// nodes can be cleaned up when a flag or one of its options is removed.
+				const validPairs = new Set<string>();
+				for (const flag of newFlags) {
+					for (const option of flag.options) {
+						validPairs.add(`${flag.id}::${option.id}`);
+					}
+				}
+				const newFlagIds = new Set(newFlags.map((f) => f.id));
+
+				const cleanedNodes = prev.nodes.map((node) => {
+					if (node.type !== "FlagChange") return node;
+					const flagChanges =
+						(node.config.flagChanges as
+							| Array<{ flagId: string; optionId: string }>
+							| undefined) ?? [];
+
+					// Keep only changes that still point to an existing flag + option
+					const cleaned = flagChanges.filter(
+						(fc) =>
+							newFlagIds.has(fc.flagId) &&
+							validPairs.has(`${fc.flagId}::${fc.optionId}`),
+					);
+
+					if (cleaned.length === flagChanges.length) return node;
+					return {
+						...node,
+						config: { ...node.config, flagChanges: cleaned },
+					};
+				});
+
+				return { ...prev, flags: newFlags, nodes: cleanedNodes };
+			});
+		},
+		[setWorkflowState],
+	);
 
 	const hasMultipleSelections =
 		workflowState.selectedNodeIds.length +
@@ -1056,7 +1093,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			{showJSON && (
 				<JSONModal
 					mode={jsonMode}
-					workflow={{ nodes: workflowState.nodes, edges: workflowState.edges }}
+					workflow={{
+						nodes: workflowState.nodes,
+						edges: workflowState.edges,
+						flags: workflowState.flags,
+					}}
 					onClose={() => setShowJSON(false)}
 					onImport={(data) => {
 						// Migrar nodos legacy antes de importar
@@ -1067,6 +1108,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 							selectedNodeIds: [],
 							selectedEdgeIds: [],
 						}));
+						// Also restore flags from the imported JSON (backwards-compatible: defaults to [])
+						setWorkflowState((prev) => ({ ...prev, flags: data.flags }));
 						setShowJSON(false);
 						setValidationErrors([]);
 						setValidationStatus("idle");

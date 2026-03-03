@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateWorkflow } from "./validation";
+import { validateWorkflow, validateWorkflowWithSyntax } from "./validation";
 import {
 	createDefaultChallengeConfig,
 	type WorkflowNode,
@@ -873,5 +873,213 @@ describe("validateWorkflow", () => {
 				),
 			).toBe(true);
 		});
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateWorkflowWithSyntax tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+const makeNode = (
+	overrides: Partial<WorkflowNode> & {
+		id: string;
+		type: WorkflowNode["type"];
+	},
+): WorkflowNode => ({
+	title: overrides.type,
+	description: "",
+	roles: [],
+	config: {},
+	position: { x: 0, y: 0 },
+	groupId: null,
+	staleTimeout: null,
+	...overrides,
+});
+
+describe("validateWorkflowWithSyntax", () => {
+	it("should pass for a structurally valid workflow with valid Transform code", async () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "t",
+				type: "Transform",
+				title: "Calcular",
+				config: { code: "return { ok: true };" },
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "t", label: null },
+			{ id: "e2", from: "t", to: "end", label: null },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		expect(errors.filter((e) => e.severity === "error")).toHaveLength(0);
+	});
+
+	it("should add an error for Transform node with invalid code", async () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "t",
+				type: "Transform",
+				title: "Transformación 1",
+				config: { code: '"example":"example"' },
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "t", label: null },
+			{ id: "e2", from: "t", to: "end", label: null },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "t" &&
+					e.severity === "error" &&
+					e.message.includes("Transformación 1"),
+			),
+		).toBe(true);
+	});
+
+	it("should add a warning for Decision node with invalid condition", async () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "d",
+				type: "Decision",
+				title: "Decisión",
+				config: { condition: "amount >" },
+			}),
+			makeNode({ id: "end-yes", type: "End", title: "Aprobado" }),
+			makeNode({ id: "end-no", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "d", label: null },
+			{ id: "e2", from: "d", to: "end-yes", label: null, fromPort: "top" },
+			{ id: "e3", from: "d", to: "end-no", label: null, fromPort: "bottom" },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "d" &&
+					e.severity === "warning" &&
+					e.message.includes("Decisión"),
+			),
+		).toBe(true);
+	});
+
+	it("should include structural errors alongside syntax errors", async () => {
+		// No End node (structural error) + invalid Transform code (syntax error)
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "t",
+				type: "Transform",
+				title: "Bad",
+				config: { code: '{"bad": "json"}' },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "t", label: null },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		// Should have at least one structural error (no End) and one syntax error
+		expect(errors.some((e) => e.message.includes("finalización"))).toBe(true);
+		expect(errors.some((e) => e.nodeId === "t")).toBe(true);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateWorkflow – orphan flag references (Etapa 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateWorkflow – FlagChange orphan references", () => {
+	const flagA = {
+		id: "flag-a",
+		name: "Estado",
+		options: [
+			{ id: "opt-1", label: "Pendiente", color: "yellow-500" },
+			{ id: "opt-2", label: "Aprobado", color: "green-500" },
+		],
+	};
+
+	const baseNodes = (
+		flagChanges: Array<{ flagId: string; optionId: string }>,
+	) => [
+		makeNode({ id: "start", type: "Start", title: "Inicio" }),
+		makeNode({
+			id: "fc",
+			type: "FlagChange",
+			title: "Cambiar Estado",
+			config: { flagChanges },
+		}),
+		makeNode({ id: "end", type: "End", title: "Fin" }),
+	];
+
+	const baseEdges: WorkflowEdge[] = [
+		{ id: "e1", from: "start", to: "fc", label: null },
+		{ id: "e2", from: "fc", to: "end", label: null },
+	];
+
+	it("should pass when all flag references are valid", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-a", optionId: "opt-1" }]),
+			baseEdges,
+			[flagA],
+		);
+		const flagErrors = errors.filter((e) => e.nodeId === "fc");
+		expect(
+			flagErrors.filter((e) => e.message.includes("inexistente")),
+		).toHaveLength(0);
+	});
+
+	it("should report error when flagId does not exist in flags array", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-nonexistent", optionId: "opt-1" }]),
+			baseEdges,
+			[flagA],
+		);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "error" &&
+					e.message.includes("flag inexistente"),
+			),
+		).toBe(true);
+	});
+
+	it("should report error when optionId does not exist in the flag", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-a", optionId: "opt-nonexistent" }]),
+			baseEdges,
+			[flagA],
+		);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "error" &&
+					e.message.includes("opción inexistente"),
+			),
+		).toBe(true);
+	});
+
+	it("should not run flag validation when flags array is empty (backwards compat)", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-a", optionId: "opt-1" }]),
+			baseEdges,
+			// no flags passed = backwards compatible behaviour
+		);
+		const flagErrors = errors.filter(
+			(e) => e.nodeId === "fc" && e.message.includes("inexistente"),
+		);
+		expect(flagErrors).toHaveLength(0);
 	});
 });

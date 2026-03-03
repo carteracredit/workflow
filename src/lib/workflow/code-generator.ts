@@ -6,6 +6,10 @@ import type {
 	APIFailureHandling,
 } from "./types";
 import { slugify } from "../slugify";
+import {
+	validateTransformCode,
+	validateConditionExpression,
+} from "./validate-code";
 
 /**
  * Configuration for code generation
@@ -166,7 +170,12 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
  */
 function generateAPIStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const endpoint = (node.config.endpoint as string) || "/api/endpoint";
+	// Properties panel stores the URL as `config.url`; older nodes may still use
+	// `config.endpoint` – fall back gracefully for backwards compatibility.
+	const endpoint =
+		(node.config.url as string) ||
+		(node.config.endpoint as string) ||
+		"/api/endpoint";
 	const method = (node.config.method as string) || "POST";
 	const failureHandling = node.config.failureHandling as
 		| APIFailureHandling
@@ -758,6 +767,44 @@ export function validateForCodeGeneration(
 }
 
 /**
+ * Validate TypeScript syntax of Transform and Decision nodes.
+ * This is intentionally separate from validateForCodeGeneration (which is
+ * synchronous) because Prettier's parser loads dynamically.
+ */
+export async function validateNodeCodeSyntax(
+	nodes: WorkflowNode[],
+): Promise<{ valid: boolean; errors: string[] }> {
+	const errors: string[] = [];
+
+	const checks = nodes
+		.filter(
+			(n) =>
+				(n.type === "Transform" && (n.config.code as string)?.trim()) ||
+				(n.type === "Decision" && (n.config.condition as string)?.trim()),
+		)
+		.map(async (node) => {
+			if (node.type === "Transform") {
+				const result = await validateTransformCode(node.config.code as string);
+				if (!result.valid) {
+					errors.push(
+						`"${node.title}": código TypeScript inválido — ${result.error}`,
+					);
+				}
+			} else if (node.type === "Decision") {
+				const result = await validateConditionExpression(
+					node.config.condition as string,
+				);
+				if (!result.valid) {
+					errors.push(`"${node.title}": condición inválida — ${result.error}`);
+				}
+			}
+		});
+
+	await Promise.all(checks);
+	return { valid: errors.length === 0, errors };
+}
+
+/**
  * Phase status and logs for progress tracking
  */
 export interface TranspilationPhase {
@@ -847,9 +894,9 @@ export async function generateWorkflowCodeWithProgress(
 	updatePhase("validate", "running");
 	const phaseStart = Date.now();
 	const validation = validateForCodeGeneration(nodes, edges);
-	const validationDuration = Date.now() - phaseStart;
 
 	if (!validation.valid) {
+		const validationDuration = Date.now() - phaseStart;
 		updatePhase("validate", "error", [
 			`❌ Validación fallida con ${validation.errors.length} error(es):`,
 			...validation.errors.map((e) => `  • ${e}`),
@@ -861,6 +908,25 @@ export async function generateWorkflowCodeWithProgress(
 			totalDurationMs: Date.now() - startTime,
 			valid: false,
 			errors: validation.errors,
+		};
+	}
+
+	// Also validate TypeScript syntax of Transform and Decision nodes
+	const syntaxValidation = await validateNodeCodeSyntax(nodes);
+	const validationDuration = Date.now() - phaseStart;
+
+	if (!syntaxValidation.valid) {
+		updatePhase("validate", "error", [
+			`❌ Validación de sintaxis fallida con ${syntaxValidation.errors.length} error(es):`,
+			...syntaxValidation.errors.map((e) => `  • ${e}`),
+		]);
+		return {
+			code: "",
+			warnings: [],
+			phases,
+			totalDurationMs: Date.now() - startTime,
+			valid: false,
+			errors: syntaxValidation.errors,
 		};
 	}
 
