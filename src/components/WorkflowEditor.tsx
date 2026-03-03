@@ -44,8 +44,9 @@ import {
 	getWorkflow,
 	updateWorkflow as updateWorkflowApi,
 } from "@/lib/workflow-api/workflows";
+import { listFlags } from "@/lib/workflow-api/flags";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
-import type { Workflow } from "@/lib/workflow-api/types";
+import type { Workflow, WorkflowFlag } from "@/lib/workflow-api/types";
 
 // Legacy keys for backward compatibility (single-workflow editor mode)
 const LEGACY_STORAGE_KEY = "cartera-workflow-state";
@@ -324,8 +325,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		let cancelled = false;
 		setIsLoadingFromApi(true);
 
-		getWorkflow(workflowId, { jwt: apiToken })
-			.then((wf: Workflow) => {
+		Promise.all([
+			getWorkflow(workflowId, { jwt: apiToken }),
+			listFlags(workflowId, { jwt: apiToken }).catch(() => null),
+		])
+			.then(([wf, apiFlagsFull]: [Workflow, WorkflowFlag[] | null]) => {
 				if (cancelled) return;
 
 				setWorkflowStatus(wf.status ?? "draft");
@@ -341,6 +345,18 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					updatedAt: wf.updated_at,
 				};
 
+				// Flags from the workflow_flags table are the authoritative source.
+				// Map them to the lightweight Flag shape used in WorkflowState.
+				const apiFlags: Flag[] = (apiFlagsFull ?? []).map((f) => ({
+					id: f.id,
+					name: f.name,
+					options: f.options.map((o) => ({
+						id: o.id,
+						label: o.label,
+						color: o.color,
+					})),
+				}));
+
 				// Parse definition if available, otherwise keep current state
 				if (wf.definition) {
 					const parsed = parseDefinitionJson(wf.definition);
@@ -350,7 +366,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 								metadata,
 								nodes: parsed.nodes,
 								edges: parsed.edges,
-								flags: parsed.flags,
+								// API flags take priority over definition snapshot flags
+								flags: apiFlags.length > 0 ? apiFlags : parsed.flags,
 								zoom: parsed.zoom,
 								pan: parsed.pan,
 								selectedNodeIds: [],
@@ -361,13 +378,15 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						setWorkflowState((prev) => ({
 							...prev,
 							metadata,
+							flags: apiFlags,
 						}));
 					}
 				} else {
-					// No definition yet — just update the metadata
+					// No definition yet — just update the metadata and flags
 					setWorkflowState((prev) => ({
 						...prev,
 						metadata,
+						flags: apiFlags,
 					}));
 				}
 			})
@@ -904,10 +923,40 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					};
 				});
 
-				return { ...prev, flags: newFlags, nodes: cleanedNodes };
+				const nextState = { ...prev, flags: newFlags, nodes: cleanedNodes };
+
+				// Auto-save definition to the DB so flags persist across page reloads.
+				// We use the computed nextState (not stale closure) and fire-and-forget.
+				if (workflowApiId && apiToken) {
+					const definitionJson = buildDefinitionJson(
+						nextState.nodes,
+						nextState.edges,
+						newFlags,
+						nextState.zoom,
+						nextState.pan,
+					);
+					updateWorkflowApi(
+						workflowApiId,
+						{
+							name: prev.metadata.name || "Nuevo Flujo de Trabajo",
+							slug: slugify(prev.metadata.name || "nuevo-flujo-de-trabajo"),
+							description: prev.metadata.description || "",
+							class_name: toClassName(
+								prev.metadata.name || "GeneratedWorkflow",
+							),
+							current_major_version: extractMajorVersion(prev.metadata.version),
+							definition: definitionJson,
+						},
+						{ jwt: apiToken },
+					).catch((err) => {
+						console.error("[updateFlags] Failed to auto-save definition:", err);
+					});
+				}
+
+				return nextState;
 			});
 		},
-		[setWorkflowState],
+		[setWorkflowState, workflowApiId, apiToken],
 	);
 
 	const hasMultipleSelections =
