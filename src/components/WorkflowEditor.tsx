@@ -15,7 +15,6 @@ import { PreviewModal } from "./workflow/preview-modal";
 import { JSONModal } from "./workflow/json-modal";
 import { CodeModal } from "./workflow/code-modal";
 import { FlagManagerModal } from "./workflow/flag-manager-modal";
-import { FlagStatePanel } from "./workflow/flag-state-panel";
 import { PublishModal } from "./workflow/publish-modal";
 import { Toaster, toast } from "sonner";
 import type {
@@ -1093,17 +1092,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 								}
 							/>
 						)}
-
-						{workflowApiId &&
-							apiToken &&
-							workflowState.nodes.some((n) => n.type === "FlagChange") && (
-								<div className="absolute bottom-4 right-4 z-20 w-52">
-									<FlagStatePanel
-										workflowId={workflowApiId}
-										apiToken={apiToken}
-									/>
-								</div>
-							)}
 
 						<div
 							className={`absolute inset-y-0 left-0 z-30 flex w-80 transition-opacity duration-200 ${
