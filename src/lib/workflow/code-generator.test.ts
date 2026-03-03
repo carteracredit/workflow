@@ -505,7 +505,7 @@ describe("generateWorkflowCode with Join nodes", () => {
 });
 
 describe("generateWorkflowCode with FlagChange nodes", () => {
-	it("should generate FlagChange step code", () => {
+	it("should generate FlagChange step using service binding", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -530,8 +530,16 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("Flag Change: Update Status");
-		expect(result.code).toContain('flags.set("status", "approved")');
-		expect(result.code).toContain('flags.set("priority", "high")');
+		expect(result.code).toContain("WORKFLOW_SVC.fetch");
+		expect(result.code).toContain("batch-update-state");
+		expect(result.code).toContain('"status"');
+		expect(result.code).toContain('"approved"');
+		expect(result.code).toContain('"priority"');
+		expect(result.code).toContain('"high"');
+		expect(result.code).toContain("svcResponse.ok");
+		// Should NOT use old FLAGS pattern
+		expect(result.code).not.toContain("this.env.FLAGS");
+		expect(result.code).not.toContain("flags.set(");
 	});
 
 	it("should handle FlagChange with no flag changes", () => {
@@ -557,6 +565,53 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		expect(result.code).toContain(
 			"Configure flag changes in the workflow editor",
 		);
+	});
+
+	it("should generate WorkflowEnv with WORKFLOW_SVC and WORKFLOW_ID bindings", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("WORKFLOW_SVC: Fetcher");
+		expect(result.code).toContain("WORKFLOW_ID: string");
+		// Should NOT contain old bindings
+		expect(result.code).not.toContain("FLAGS?: unknown");
+		expect(result.code).not.toContain("FORMS?: unknown");
+	});
+
+	it("should produce stable checksum for FlagChange node (no formatting drift)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "flag",
+				type: "FlagChange",
+				title: "Update Status",
+				config: {
+					flagChanges: [
+						{ flagId: "status-flag-id", optionId: "approved-option-id" },
+					],
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "flag"),
+			createEdge("flag", "end"),
+		];
+
+		// Generate twice — must produce identical code (no timestamps, no random ids)
+		const result1 = generateWorkflowCode(nodes, edges, undefined, {
+			includeComments: false,
+		});
+		const result2 = generateWorkflowCode(nodes, edges, undefined, {
+			includeComments: false,
+		});
+
+		expect(result1.code).toBe(result2.code);
 	});
 });
 

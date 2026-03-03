@@ -126,3 +126,69 @@ export interface ApiResponse<T> {
 export interface ApiCallOptions {
 	jwt?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Flag types
+// ---------------------------------------------------------------------------
+
+/**
+ * A flag option (one of N possible values for a flag)
+ */
+export interface WorkflowFlagOption {
+	id: string;
+	label: string;
+	color: string;
+	sort_order: number;
+}
+
+/**
+ * Runtime state of a flag (which option is currently active)
+ */
+export interface WorkflowFlagState {
+	optionId: string;
+	updatedAt: string;
+	updatedByInstanceId: string | null;
+}
+
+/**
+ * A flag with its options and current runtime state as returned by workflow-svc
+ */
+export interface WorkflowFlag {
+	id: string;
+	workflow_id: string;
+	name: string;
+	sort_order: number;
+	created_at: string;
+	updated_at: string;
+	options: WorkflowFlagOption[];
+	currentState: WorkflowFlagState | null;
+}
+
+/**
+ * Payload for creating a flag
+ */
+export interface CreateFlagPayload {
+	id: string;
+	name: string;
+	options: Array<{
+		id: string;
+		label: string;
+		color: string;
+		sort_order?: number;
+	}>;
+	sort_order?: number;
+}
+
+/**
+ * Payload for updating a flag
+ */
+export interface UpdateFlagPayload {
+	name: string;
+	options: Array<{
+		id: string;
+		label: string;
+		color: string;
+		sort_order?: number;
+	}>;
+	sort_order?: number;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { Flag, FlagOption } from "@/lib/workflow/types";
 import {
 	Dialog,
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, Edit2, X, Check } from "lucide-react";
+import { Plus, Trash2, Edit2, X, Check, Loader2 } from "lucide-react";
 import {
 	validateFlag,
 	validateFlagsUnique,
@@ -23,14 +23,21 @@ import {
 import { ColorPicker } from "./color-picker";
 import { cn } from "@/lib/utils";
 import type { TailwindColor500 } from "@/lib/flag-manager";
+import { createFlag, updateFlag, deleteFlag } from "@/lib/workflow-api/flags";
+import { extractApiErrorMessage } from "@/lib/workflow-api/http";
+import { toast } from "sonner";
 
 interface FlagManagerModalProps {
+	workflowId: string;
+	apiToken: string;
 	flags: Flag[];
 	onClose: () => void;
 	onUpdateFlags: (flags: Flag[]) => void;
 }
 
 export function FlagManagerModal({
+	workflowId,
+	apiToken,
 	flags,
 	onClose,
 	onUpdateFlags,
@@ -38,6 +45,8 @@ export function FlagManagerModal({
 	const [editingFlag, setEditingFlag] = useState<Flag | null>(null);
 	const [isCreating, setIsCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [isSaving, setIsSaving] = useState(false);
+	const [deletingId, setDeletingId] = useState<string | null>(null);
 
 	const handleCreateFlag = () => {
 		setEditingFlag(createDefaultFlag());
@@ -54,13 +63,31 @@ export function FlagManagerModal({
 		setError(null);
 	};
 
-	const handleDeleteFlag = (flagId: string) => {
-		if (window.confirm("¿Estás seguro de que deseas eliminar este flag?")) {
-			onUpdateFlags(flags.filter((f) => f.id !== flagId));
-		}
-	};
+	const handleDeleteFlag = useCallback(
+		async (flagId: string) => {
+			const flag = flags.find((f) => f.id === flagId);
+			if (!flag) return;
 
-	const handleSaveFlag = () => {
+			// Check if nodes reference this flag
+			const confirmMsg = `¿Estás seguro de que deseas eliminar el flag "${flag.name}"? Esta acción no se puede deshacer.`;
+			if (!window.confirm(confirmMsg)) return;
+
+			setDeletingId(flagId);
+			try {
+				await deleteFlag(workflowId, flagId, { jwt: apiToken });
+				onUpdateFlags(flags.filter((f) => f.id !== flagId));
+				toast.success("Flag eliminado correctamente");
+			} catch (err) {
+				const msg = extractApiErrorMessage(err);
+				toast.error("Error al eliminar el flag", { description: msg });
+			} finally {
+				setDeletingId(null);
+			}
+		},
+		[workflowId, apiToken, flags, onUpdateFlags],
+	);
+
+	const handleSaveFlag = useCallback(async () => {
 		if (!editingFlag) return;
 
 		const validation = validateFlag(editingFlag);
@@ -69,7 +96,6 @@ export function FlagManagerModal({
 			return;
 		}
 
-		// Validar que no haya duplicados
 		const otherFlags = isCreating
 			? flags
 			: flags.filter((f) => f.id !== editingFlag.id);
@@ -80,18 +106,66 @@ export function FlagManagerModal({
 			return;
 		}
 
-		if (isCreating) {
-			onUpdateFlags([...flags, editingFlag]);
-		} else {
-			onUpdateFlags(
-				flags.map((f) => (f.id === editingFlag.id ? editingFlag : f)),
-			);
-		}
-
-		setEditingFlag(null);
-		setIsCreating(false);
+		setIsSaving(true);
 		setError(null);
-	};
+
+		try {
+			if (isCreating) {
+				const created = await createFlag(
+					workflowId,
+					{
+						id: editingFlag.id,
+						name: editingFlag.name,
+						options: editingFlag.options,
+					},
+					{ jwt: apiToken },
+				);
+				// Sync backend response (preserves sort_order, created_at, etc.)
+				const newFlag: Flag = {
+					id: created.id,
+					name: created.name,
+					options: created.options.map((opt) => ({
+						id: opt.id,
+						label: opt.label,
+						color: opt.color,
+					})),
+				};
+				onUpdateFlags([...flags, newFlag]);
+				toast.success("Flag creado correctamente");
+			} else {
+				const updated = await updateFlag(
+					workflowId,
+					editingFlag.id,
+					{
+						name: editingFlag.name,
+						options: editingFlag.options,
+					},
+					{ jwt: apiToken },
+				);
+				const updatedFlag: Flag = {
+					id: updated.id,
+					name: updated.name,
+					options: updated.options.map((opt) => ({
+						id: opt.id,
+						label: opt.label,
+						color: opt.color,
+					})),
+				};
+				onUpdateFlags(
+					flags.map((f) => (f.id === editingFlag.id ? updatedFlag : f)),
+				);
+				toast.success("Flag actualizado correctamente");
+			}
+
+			setEditingFlag(null);
+			setIsCreating(false);
+		} catch (err) {
+			const msg = extractApiErrorMessage(err);
+			setError(msg);
+		} finally {
+			setIsSaving(false);
+		}
+	}, [editingFlag, isCreating, flags, workflowId, apiToken, onUpdateFlags]);
 
 	const handleCancelEdit = () => {
 		setEditingFlag(null);
@@ -190,6 +264,7 @@ export function FlagManagerModal({
 															size="sm"
 															onClick={() => handleEditFlag(flag)}
 															className="h-8 w-8 p-0"
+															disabled={deletingId === flag.id}
 														>
 															<Edit2 className="h-4 w-4" />
 														</Button>
@@ -198,8 +273,13 @@ export function FlagManagerModal({
 															size="sm"
 															onClick={() => handleDeleteFlag(flag.id)}
 															className="h-8 w-8 p-0"
+															disabled={deletingId === flag.id}
 														>
-															<Trash2 className="h-4 w-4" />
+															{deletingId === flag.id ? (
+																<Loader2 className="h-4 w-4 animate-spin" />
+															) : (
+																<Trash2 className="h-4 w-4" />
+															)}
 														</Button>
 													</div>
 												</div>
@@ -245,12 +325,18 @@ export function FlagManagerModal({
 									}
 									placeholder="Ej: Prioridad, Estado, Categoría..."
 									className="w-full"
+									disabled={isSaving}
 								/>
 							</div>
 
 							<div className="flex justify-between items-center">
 								<Label className="text-sm font-medium">Opciones</Label>
-								<Button variant="outline" size="sm" onClick={handleAddOption}>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={handleAddOption}
+									disabled={isSaving}
+								>
 									<Plus className="h-4 w-4 mr-2" />
 									Agregar Opción
 								</Button>
@@ -282,6 +368,7 @@ export function FlagManagerModal({
 														}
 														placeholder={`Opción ${index + 1}`}
 														className="w-full"
+														disabled={isSaving}
 													/>
 												</div>
 												{editingFlag.options.length > 1 && (
@@ -290,6 +377,7 @@ export function FlagManagerModal({
 														size="sm"
 														onClick={() => handleRemoveOption(option.id)}
 														className="h-9 w-9 p-0 flex-shrink-0"
+														disabled={isSaving}
 													>
 														<X className="h-4 w-4" />
 													</Button>
@@ -308,11 +396,19 @@ export function FlagManagerModal({
 						)}
 
 						<div className="px-6 py-4 border-t flex justify-end gap-2 flex-shrink-0">
-							<Button variant="outline" onClick={handleCancelEdit}>
+							<Button
+								variant="outline"
+								onClick={handleCancelEdit}
+								disabled={isSaving}
+							>
 								Cancelar
 							</Button>
-							<Button onClick={handleSaveFlag}>
-								<Check className="h-4 w-4 mr-2" />
+							<Button onClick={handleSaveFlag} disabled={isSaving}>
+								{isSaving ? (
+									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+								) : (
+									<Check className="h-4 w-4 mr-2" />
+								)}
 								{isCreating ? "Crear" : "Guardar"}
 							</Button>
 						</div>

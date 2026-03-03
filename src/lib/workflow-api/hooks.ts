@@ -3,7 +3,12 @@
 import useSWR from "swr";
 import { fetchJson } from "./http";
 import { getWorkflowServiceUrl } from "./config";
-import type { Workflow, WorkflowVersion, ApiResponse } from "./types";
+import type {
+	Workflow,
+	WorkflowVersion,
+	ApiResponse,
+	WorkflowFlag,
+} from "./types";
 import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +38,14 @@ function workflowVersionsKey(
 ): string | null {
 	if (!jwt || !workflowId) return null;
 	return `${getWorkflowServiceUrl()}/workflow-versions?workflow_id=${workflowId}`;
+}
+
+function workflowFlagsKey(
+	jwt: string | null,
+	workflowId: string | null,
+): string | null {
+	if (!jwt || !workflowId) return null;
+	return `${getWorkflowServiceUrl()}/workflows/${workflowId}/flags`;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +115,28 @@ export function useWorkflowVersions(workflowId: string | null) {
 
 	return {
 		versions: data ?? [],
+		isLoading,
+		error,
+		mutate,
+	};
+}
+
+/**
+ * Hook to list flags for a workflow with their options and runtime state.
+ * Polls every 10 seconds to show up-to-date flag states.
+ */
+export function useWorkflowFlags(workflowId: string | null) {
+	const { token } = useWorkflowApiToken();
+	const key = workflowFlagsKey(token, workflowId);
+
+	const { data, error, isLoading, mutate } = useSWR<WorkflowFlag[]>(
+		key,
+		(url: string) => apiFetcher<WorkflowFlag[]>(url, token!),
+		{ refreshInterval: 10_000 },
+	);
+
+	return {
+		flags: data ?? [],
 		isLoading,
 		error,
 		mutate,

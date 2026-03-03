@@ -15,6 +15,7 @@ import { PreviewModal } from "./workflow/preview-modal";
 import { JSONModal } from "./workflow/json-modal";
 import { CodeModal } from "./workflow/code-modal";
 import { FlagManagerModal } from "./workflow/flag-manager-modal";
+import { FlagStatePanel } from "./workflow/flag-state-panel";
 import { PublishModal } from "./workflow/publish-modal";
 import { Toaster, toast } from "sonner";
 import type {
@@ -952,7 +953,15 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				onExportJSON={handleExportJSON}
 				onImportJSON={handleImportJSON}
 				onLoadExample={handleLoadExample}
-				onManageFlags={() => setShowFlagManager(true)}
+				onManageFlags={() => {
+					if (!workflowApiId) {
+						toast.warning(
+							"Guarda el workflow primero antes de gestionar flags.",
+						);
+						return;
+					}
+					setShowFlagManager(true);
+				}}
 				onToggleWorkflowProperties={() => {
 					setShowWorkflowProperties((prev) => {
 						const newValue = !prev;
@@ -1034,6 +1043,15 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 									updateWorkflow({ selectedNodeIds: nodeId ? [nodeId] : [] })
 								}
 							/>
+						)}
+
+						{workflowApiId && apiToken && workflowState.flags.length > 0 && (
+							<div className="absolute bottom-4 right-4 z-20 w-52">
+								<FlagStatePanel
+									workflowId={workflowApiId}
+									apiToken={apiToken}
+								/>
+							</div>
 						)}
 
 						<div
@@ -1118,8 +1136,10 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				/>
 			)}
 
-			{showFlagManager && (
+			{showFlagManager && workflowApiId && apiToken && (
 				<FlagManagerModal
+					workflowId={workflowApiId}
+					apiToken={apiToken}
 					flags={workflowState.flags}
 					onClose={() => setShowFlagManager(false)}
 					onUpdateFlags={updateFlags}
