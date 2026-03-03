@@ -86,9 +86,9 @@ const SEMANTIC_RULES: SemanticRule[] = [
 	{
 		// `const x;` or `const x: Type;`  — const without initializer
 		// ESBuild error: "The constant 'X' must be initialized"
-		// We match `const` declarations that end in `;` but do NOT contain `=`
-		// which would indicate an assignment/initializer.
-		pattern: /^const\s+(?:[^=]+);$/,
+		// We match `const` declarations that end in `;` but do NOT contain `=`.
+		// [^=;]+ captures the variable name/type but stops before `;` or `=`.
+		pattern: /^const\s+[^=;]+;$/,
 		message:
 			"Las constantes deben tener un valor asignado (ej. `const x = 0;` en lugar de `const x;`)",
 	},
