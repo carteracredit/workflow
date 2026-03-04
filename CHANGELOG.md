@@ -1,3 +1,25 @@
+# [1.0.0-rc.17](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.16...v1.0.0-rc.17) (2026-03-04)
+
+
+### Bug Fixes
+
+* enhance error handling and update workflow status management in WorkflowList ([0c9dc94](https://github.com/carteracredit/workflow/commit/0c9dc94d43eff8b9c226b27b0758a27cc534a49c))
+* prevent definition from being sent during workflow creation ([3af7828](https://github.com/carteracredit/workflow/commit/3af78285807fe64ed8a859ab754f0c9d8367aa06))
+* refine semantic validation for const declarations in TypeScript ([4b4e113](https://github.com/carteracredit/workflow/commit/4b4e113701fe3b3b08b5869a6a6b2c4bf0705781))
+
+
+### Features
+
+* add major version management in WorkflowEditor and PublishModal ([597cc6f](https://github.com/carteracredit/workflow/commit/597cc6fcff44528d111fb942b72742324bcba57a))
+* add Next.js router configuration to Home and WorkflowEditor stories ([24ddd29](https://github.com/carteracredit/workflow/commit/24ddd29366b6da4857bd16c618d04a68086d69ab))
+* enhance code generation and validation with semantic checks ([0748f8b](https://github.com/carteracredit/workflow/commit/0748f8bed7e36c31d72fd8aa7136fff23febdb94))
+* enhance workflow validation and JSON handling ([e0f4322](https://github.com/carteracredit/workflow/commit/e0f4322cb4e49cf6eecedc2e2ec1e7f280ba0b7d))
+* enhance WorkflowList component and Storybook configuration ([7d54835](https://github.com/carteracredit/workflow/commit/7d548359e3890454ea540258d2a6bc8b380c1798))
+* implement code formatting for generated TypeScript in publish modal ([7feb628](https://github.com/carteracredit/workflow/commit/7feb6283adf7b34217c3c0cb9b19eb795c262be0))
+* implement workflow list and editor pages ([e28643c](https://github.com/carteracredit/workflow/commit/e28643c1d7bd532aac1667ff807a7d1247165968))
+* integrate flag management and state display in WorkflowEditor ([b5ba2a2](https://github.com/carteracredit/workflow/commit/b5ba2a25b559a0f9bf1958751d6e0475c3ce1f14))
+* integrate flag retrieval and state management in WorkflowEditor ([37d3275](https://github.com/carteracredit/workflow/commit/37d32753565bb8b9896a8e42a022a982c0911d9d))
+
 # [1.0.0-rc.16](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.15...v1.0.0-rc.16) (2026-02-27)
 
 
