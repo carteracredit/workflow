@@ -86,10 +86,13 @@ const mockSession = {
 };
 
 const mockWorkflow = {
-	id: 1,
+	id: "wf-uuid-001",
 	name: "Test Workflow",
 	slug: "test-workflow",
 	description: "A test workflow",
+	status: "draft" as const,
+	definition: null,
+	published_code_checksum: null,
 	github_repo_url: "https://github.com/test/test-workflow",
 	class_name: "TestWorkflow",
 	current_major_version: 1,
@@ -98,8 +101,8 @@ const mockWorkflow = {
 };
 
 const mockDeployment = {
-	id: 1,
-	workflow_id: 1,
+	id: "dep-uuid-001",
+	workflow_id: "wf-uuid-001",
 	major_version: 1,
 	semver: "1.0.0",
 	environment: "development" as const,
@@ -184,10 +187,10 @@ describe("workflow-api server actions", () => {
 		it("returns a single workflow on success", async () => {
 			vi.mocked(getWorkflow).mockResolvedValue(mockWorkflow);
 
-			const result = await getWorkflowAction(1);
+			const result = await getWorkflowAction("wf-uuid-001");
 
 			expect(result).toEqual({ data: mockWorkflow, error: null });
-			expect(getWorkflow).toHaveBeenCalledWith(1, {
+			expect(getWorkflow).toHaveBeenCalledWith("wf-uuid-001", {
 				jwt: "test-jwt-token",
 			});
 		});
@@ -220,11 +223,13 @@ describe("workflow-api server actions", () => {
 			const updated = { ...mockWorkflow, name: "Updated" };
 			vi.mocked(updateWorkflow).mockResolvedValue(updated);
 
-			const result = await updateWorkflowAction(1, { name: "Updated" });
+			const result = await updateWorkflowAction("wf-uuid-001", {
+				name: "Updated",
+			});
 
 			expect(result).toEqual({ data: updated, error: null });
 			expect(updateWorkflow).toHaveBeenCalledWith(
-				1,
+				"wf-uuid-001",
 				{ name: "Updated" },
 				{ jwt: "test-jwt-token" },
 			);
@@ -233,12 +238,12 @@ describe("workflow-api server actions", () => {
 
 	describe("deleteWorkflowAction", () => {
 		it("deletes a workflow and returns the id", async () => {
-			vi.mocked(deleteWorkflow).mockResolvedValue({ id: 1 });
+			vi.mocked(deleteWorkflow).mockResolvedValue({ id: "wf-uuid-001" });
 
-			const result = await deleteWorkflowAction(1);
+			const result = await deleteWorkflowAction("wf-uuid-001");
 
-			expect(result).toEqual({ data: { id: 1 }, error: null });
-			expect(deleteWorkflow).toHaveBeenCalledWith(1, {
+			expect(result).toEqual({ data: { id: "wf-uuid-001" }, error: null });
+			expect(deleteWorkflow).toHaveBeenCalledWith("wf-uuid-001", {
 				jwt: "test-jwt-token",
 			});
 		});
@@ -262,7 +267,7 @@ describe("workflow-api server actions", () => {
 		it("returns a single deployment on success", async () => {
 			vi.mocked(getDeployment).mockResolvedValue(mockDeployment);
 
-			const result = await getDeploymentAction(1);
+			const result = await getDeploymentAction("dep-uuid-001");
 
 			expect(result).toEqual({ data: mockDeployment, error: null });
 		});
@@ -273,7 +278,7 @@ describe("workflow-api server actions", () => {
 			vi.mocked(createDeployment).mockResolvedValue(mockDeployment);
 
 			const payload = {
-				workflow_id: 1,
+				workflow_id: "wf-uuid-001",
 				major_version: 1,
 				semver: "1.0.0",
 				environment: "development" as const,
@@ -295,13 +300,13 @@ describe("workflow-api server actions", () => {
 			const updated = { ...mockDeployment, status: "deprecated" as const };
 			vi.mocked(updateDeployment).mockResolvedValue(updated);
 
-			const result = await updateDeploymentAction(1, {
+			const result = await updateDeploymentAction("dep-uuid-001", {
 				status: "deprecated",
 			});
 
 			expect(result).toEqual({ data: updated, error: null });
 			expect(updateDeployment).toHaveBeenCalledWith(
-				1,
+				"dep-uuid-001",
 				{ status: "deprecated" },
 				{ jwt: "test-jwt-token" },
 			);

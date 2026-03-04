@@ -9,6 +9,11 @@ const meta: Meta<typeof WorkflowEditor> = {
 		chromatic: {
 			delay: 2000,
 		},
+		nextjs: {
+			navigation: {
+				pathname: "/editor",
+			},
+		},
 	},
 };
 

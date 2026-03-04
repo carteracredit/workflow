@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
 	oneDark,
@@ -16,6 +16,7 @@ import {
 	generateWorkflowCode,
 	validateForCodeGeneration,
 } from "@/lib/workflow/code-generator";
+import { formatGeneratedCode } from "@/lib/workflow/format-code";
 import {
 	Dialog,
 	DialogContent,
@@ -42,18 +43,39 @@ interface CodeModalProps {
 export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 	const { resolvedTheme } = useTheme();
 	const [copied, setCopied] = useState(false);
+	const [formattedCode, setFormattedCode] = useState<string | null>(null);
 
 	// Validate workflow
 	const validation = validateForCodeGeneration(nodes, edges);
 
-	// Generate code
-	const { code, warnings } = generateWorkflowCode(nodes, edges, metadata, {
-		className: metadata?.name
-			? metadata.name.replace(/[^a-zA-Z0-9]/g, "") + "Workflow"
-			: "GeneratedWorkflow",
-		includeComments: true,
-		includeImports: true,
-	});
+	// Generate raw code synchronously (for immediate display)
+	const { code: rawCode, warnings } = generateWorkflowCode(
+		nodes,
+		edges,
+		metadata,
+		{
+			className: metadata?.name
+				? metadata.name.replace(/[^a-zA-Z0-9]/g, "") + "Workflow"
+				: "GeneratedWorkflow",
+			includeComments: true,
+			includeImports: true,
+		},
+	);
+
+	// Format code with Prettier asynchronously so the displayed code
+	// matches exactly what will be deployed via wrangler.
+	useEffect(() => {
+		let cancelled = false;
+		formatGeneratedCode(rawCode).then((formatted) => {
+			if (!cancelled) setFormattedCode(formatted);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [rawCode]);
+
+	// Use formatted code once ready, fall back to raw while loading
+	const code = formattedCode ?? rawCode;
 
 	const handleCopy = useCallback(async () => {
 		try {

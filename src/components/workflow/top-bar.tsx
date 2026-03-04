@@ -49,7 +49,9 @@ import {
 	User,
 	LogOut,
 	Keyboard,
+	ArrowLeft,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
 
@@ -191,12 +193,27 @@ interface TopBarProps {
 	onManageFlags: () => void;
 	onToggleWorkflowProperties: () => void;
 	workflowMetadata: WorkflowMetadata;
+	/** If provided, show a back-to-list button */
+	onBack?: () => void;
+	/** Current workflow lifecycle status (draft / published / archived) */
+	workflowStatus?: "draft" | "published" | "archived";
+	/** Authoritative major version from the API — overrides metadata.version display */
+	currentMajorVersion?: number;
 	paletteProps?: {
 		onAddNode: (node: WorkflowNode) => void;
 		zoom: number;
 		pan: { x: number; y: number };
 	};
 }
+
+const STATUS_BADGE_CONFIG: Record<
+	"draft" | "published" | "archived",
+	{ label: string; variant: "secondary" | "success" | "outline" }
+> = {
+	draft: { label: "Borrador", variant: "secondary" },
+	published: { label: "Publicado", variant: "success" },
+	archived: { label: "Archivado", variant: "outline" },
+};
 
 export function TopBar({
 	onNew,
@@ -208,22 +225,40 @@ export function TopBar({
 	onManageFlags,
 	onToggleWorkflowProperties,
 	workflowMetadata,
+	onBack,
+	workflowStatus,
+	currentMajorVersion,
 	paletteProps,
 }: TopBarProps) {
 	const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
 	const displayVersion = (() => {
+		// Use the authoritative API version when available
+		if (currentMajorVersion !== undefined && currentMajorVersion >= 1) {
+			return `v${currentMajorVersion}`;
+		}
+		// Fall back to parsing metadata.version (legacy / unsaved workflows)
 		const match = workflowMetadata.version.match(/(\d+)/);
 		if (!match) return "v1";
 		const parsed = Number.parseInt(match[1], 10);
 		if (Number.isNaN(parsed) || parsed < 1) return "v1";
-		const clamped = Math.min(parsed, 3);
-		return `v${clamped}`;
+		return `v${parsed}`;
 	})();
 
 	return (
 		<div className="relative z-50 border-b border-border bg-card/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/70">
 			<div className="flex items-center gap-3">
+				{onBack && (
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-8 w-8 flex-shrink-0"
+						onClick={onBack}
+						title="Volver a la lista"
+					>
+						<ArrowLeft className="h-4 w-4" />
+					</Button>
+				)}
 				<div className="min-w-0 flex-shrink-0">
 					<div className="flex flex-wrap items-center gap-2">
 						<img
@@ -240,6 +275,14 @@ export function TopBar({
 							<h1 className="truncate text-base font-semibold text-foreground">
 								{workflowMetadata.name || "Your Workflow"}
 							</h1>
+							{workflowStatus && (
+								<Badge
+									variant={STATUS_BADGE_CONFIG[workflowStatus].variant}
+									className="text-xs"
+								>
+									{STATUS_BADGE_CONFIG[workflowStatus].label}
+								</Badge>
+							)}
 							<Button
 								variant="ghost"
 								size="icon"

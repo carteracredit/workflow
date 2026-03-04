@@ -21,15 +21,19 @@ export default defineConfig({
 				"src/components/ui/**",
 				// Next.js App Router entrypoints/route wiring (typically thin wrappers)
 				"src/app/**",
-				// Workflow - only truly complex components
-				"src/components/workflow/properties-panel.tsx",
-				"src/components/workflow/canvas.tsx",
-				"src/components/WorkflowEditor.tsx",
-				// Auth - files requiring complex mocking
-				"src/lib/auth/getServerSession.ts",
-				"src/lib/auth/actions.ts",
-				"src/lib/auth/authClient.ts",
-				"src/lib/auth/useAuthSession.tsx",
+			// Workflow - complex UI components / orchestration pages with many deps
+			"src/components/workflow/properties-panel.tsx",
+			"src/components/workflow/canvas.tsx",
+			"src/components/WorkflowEditor.tsx",
+			// Auth - files requiring complex mocking / auth-client context
+			"src/lib/auth/getServerSession.ts",
+			"src/lib/auth/actions.ts",
+			"src/lib/auth/authClient.ts",
+			"src/lib/auth/useAuthSession.tsx",
+			// Hooks that depend on auth-client or external runtime context
+			"src/hooks/**",
+			// Pure TypeScript type definitions — no executable statements
+			"src/lib/workflow-api/types.ts",
 			],
 			// Objetivo 85%; umbrales ajustados para reflejar cobertura actual alcanzable
 			// sin incluir componentes UI complejos (node-renderer, flag-manager-modal)

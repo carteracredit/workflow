@@ -47,7 +47,7 @@ type Story = StoryObj<typeof meta>;
 export const ExportMode: Story = {
 	args: {
 		mode: "export",
-		workflow: { nodes: SAMPLE_NODES, edges: SAMPLE_EDGES },
+		workflow: { nodes: SAMPLE_NODES, edges: SAMPLE_EDGES, flags: [] },
 		onClose: () => {},
 		onImport: () => {},
 	},

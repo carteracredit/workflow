@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { TopBar } from "./workflow/top-bar";
 import {
 	Canvas,
@@ -24,7 +26,7 @@ import type {
 	Flag,
 } from "@/lib/workflow/types";
 import { STALE_SUPPORTED_NODE_TYPES } from "@/lib/workflow/types";
-import { validateWorkflow } from "@/lib/workflow/validation";
+import { validateWorkflowWithSyntax } from "@/lib/workflow/validation";
 import { EXAMPLE_WORKFLOWS } from "@/lib/example-workflows";
 import {
 	canRedoHistory,
@@ -38,12 +40,22 @@ import { slugify } from "@/lib/slugify";
 import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 import {
 	createWorkflow,
+	getWorkflow,
 	updateWorkflow as updateWorkflowApi,
 } from "@/lib/workflow-api/workflows";
+import { listFlags } from "@/lib/workflow-api/flags";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
+import type { Workflow, WorkflowFlag } from "@/lib/workflow-api/types";
 
-const STORAGE_KEY = "cartera-workflow-state";
-const WORKFLOW_API_ID_KEY = "cartera-workflow-api-id";
+// Legacy keys for backward compatibility (single-workflow editor mode)
+const LEGACY_STORAGE_KEY = "cartera-workflow-state";
+const LEGACY_WORKFLOW_API_ID_KEY = "cartera-workflow-api-id";
+
+// Per-workflow draft key for multi-workflow mode
+const getDraftKey = (id: string) => `cartera-workflow-draft-${id}`;
+// Keep old STORAGE_KEY alias so existing localStorage still loads
+const STORAGE_KEY = LEGACY_STORAGE_KEY;
+const WORKFLOW_API_ID_KEY = LEGACY_WORKFLOW_API_ID_KEY;
 
 /**
  * Derives a PascalCase class name from a workflow name.
@@ -188,29 +200,96 @@ type HistoryChange = Partial<WorkflowState> & {
 	recordHistory?: boolean;
 };
 
-export function WorkflowEditor() {
+interface WorkflowEditorProps {
+	/** If provided, load this workflow from the API. */
+	workflowId?: string;
+}
+
+function buildDefinitionJson(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+	flags: Flag[],
+	zoom: number,
+	pan: { x: number; y: number },
+): string {
+	return JSON.stringify({ nodes, edges, flags, zoom, pan });
+}
+
+function parseDefinitionJson(definition: string): {
+	nodes: WorkflowNode[];
+	edges: WorkflowEdge[];
+	flags: Flag[];
+	zoom: number;
+	pan: { x: number; y: number };
+} | null {
+	try {
+		const parsed = JSON.parse(definition);
+		return {
+			nodes: migrateLegacyNodes(parsed.nodes || []).map(
+				withDefaultStaleTimeout,
+			),
+			edges: parsed.edges || [],
+			flags: parsed.flags || [],
+			zoom: parsed.zoom ?? 1,
+			pan: parsed.pan || { ...DEFAULT_START_NODE_PAN },
+		};
+	} catch {
+		return null;
+	}
+}
+
+export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
+	const router = useRouter();
 	const { token: apiToken } = useWorkflowApiToken();
 
-	const [workflowApiId, setWorkflowApiId] = useState<number | null>(() => {
+	// When workflowId prop is given, it is the authoritative API ID.
+	// Otherwise fall back to legacy localStorage key.
+	const [workflowApiId, setWorkflowApiId] = useState<string | null>(() => {
+		if (workflowId !== undefined) return workflowId;
 		if (typeof window !== "undefined") {
 			const saved = localStorage.getItem(WORKFLOW_API_ID_KEY);
-			if (saved) {
-				const parsed = Number.parseInt(saved, 10);
-				return Number.isNaN(parsed) ? null : parsed;
-			}
+			if (saved) return saved;
 		}
 		return null;
 	});
 
+	const [workflowStatus, setWorkflowStatus] = useState<
+		"draft" | "published" | "archived"
+	>("draft");
+	const [currentMajorVersion, setCurrentMajorVersion] = useState<number>(1);
+	const [isLoadingFromApi, setIsLoadingFromApi] = useState(
+		workflowId !== undefined,
+	);
+
+	// Initial state — overridden by API load when workflowId is set
 	const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
+		// If editing an existing workflow, start with empty and load from API
+		if (workflowId !== undefined) {
+			// Try per-workflow draft first (unsaved local changes)
+			if (typeof window !== "undefined") {
+				const draft = localStorage.getItem(getDraftKey(workflowId));
+				if (draft) {
+					const parsed = parseDefinitionJson(draft);
+					if (parsed) {
+						return createHistoryEnabledState({
+							metadata: createDefaultMetadata(),
+							...parsed,
+							selectedNodeIds: [],
+							selectedEdgeIds: [],
+						});
+					}
+				}
+			}
+			return createEmptyWorkflowState();
+		}
+
+		// Legacy single-workflow mode: load from localStorage
 		if (typeof window !== "undefined") {
 			const saved = localStorage.getItem(STORAGE_KEY);
 			if (saved) {
 				try {
 					const parsed = JSON.parse(saved);
-					// Migrar nodos legacy (Status, Approve, ManualDecision)
 					const migratedNodes = migrateLegacyNodes(parsed.nodes || []);
-					// Migrate old single selection to new multi-selection arrays
 					const selectedNodeIds = parsed.selectedNodeIds
 						? parsed.selectedNodeIds
 						: parsed.selectedNodeId
@@ -232,12 +311,102 @@ export function WorkflowEditor() {
 						pan: parsed.pan || { ...DEFAULT_START_NODE_PAN },
 					});
 				} catch (e) {
-					console.error("[v0] Error loading from localStorage:", e);
+					console.error("[WorkflowEditor] Error loading from localStorage:", e);
 				}
 			}
 		}
 		return createEmptyWorkflowState();
 	});
+
+	// Load workflow from API when workflowId prop is set
+	useEffect(() => {
+		if (workflowId === undefined || !apiToken) return;
+
+		let cancelled = false;
+		setIsLoadingFromApi(true);
+
+		Promise.all([
+			getWorkflow(workflowId, { jwt: apiToken }),
+			listFlags(workflowId, { jwt: apiToken }).catch(() => null),
+		])
+			.then(([wf, apiFlagsFull]: [Workflow, WorkflowFlag[] | null]) => {
+				if (cancelled) return;
+
+				setWorkflowStatus(wf.status ?? "draft");
+				setCurrentMajorVersion(wf.current_major_version ?? 1);
+
+				// Build metadata from API data
+				const metadata: WorkflowMetadata = {
+					name: wf.name,
+					description: wf.description,
+					version: `${wf.current_major_version}.0.0`,
+					author: "",
+					tags: [],
+					createdAt: wf.created_at,
+					updatedAt: wf.updated_at,
+				};
+
+				// Flags from the workflow_flags table are the authoritative source.
+				// Map them to the lightweight Flag shape used in WorkflowState.
+				const apiFlags: Flag[] = (apiFlagsFull ?? []).map((f) => ({
+					id: f.id,
+					name: f.name,
+					options: f.options.map((o) => ({
+						id: o.id,
+						label: o.label,
+						color: o.color,
+					})),
+				}));
+
+				// Parse definition if available, otherwise keep current state
+				if (wf.definition) {
+					const parsed = parseDefinitionJson(wf.definition);
+					if (parsed) {
+						setWorkflowState(
+							createHistoryEnabledState({
+								metadata,
+								nodes: parsed.nodes,
+								edges: parsed.edges,
+								// API flags take priority over definition snapshot flags
+								flags: apiFlags.length > 0 ? apiFlags : parsed.flags,
+								zoom: parsed.zoom,
+								pan: parsed.pan,
+								selectedNodeIds: [],
+								selectedEdgeIds: [],
+							}),
+						);
+					} else {
+						setWorkflowState((prev) => ({
+							...prev,
+							metadata,
+							flags: apiFlags,
+						}));
+					}
+				} else {
+					// No definition yet — just update the metadata and flags
+					setWorkflowState((prev) => ({
+						...prev,
+						metadata,
+						flags: apiFlags,
+					}));
+				}
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				console.error("[WorkflowEditor] Failed to load from API:", err);
+				toast.error("No se pudo cargar el workflow", {
+					description: extractApiErrorMessage(err),
+				});
+			})
+			.finally(() => {
+				if (!cancelled) setIsLoadingFromApi(false);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [workflowId, apiToken]);
 
 	const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
 		[],
@@ -256,21 +425,37 @@ export function WorkflowEditor() {
 	const hasMountedRef = useRef(false);
 
 	useEffect(() => {
-		if (typeof window !== "undefined") {
-			const toSave = {
-				metadata: {
-					...workflowState.metadata,
-					updatedAt: new Date().toISOString(),
-				},
-				nodes: workflowState.nodes,
-				edges: workflowState.edges,
-				flags: workflowState.flags,
-				zoom: workflowState.zoom,
-				pan: workflowState.pan,
-			};
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+		if (typeof window !== "undefined" && !isLoadingFromApi) {
+			const definitionJson = buildDefinitionJson(
+				workflowState.nodes,
+				workflowState.edges,
+				workflowState.flags,
+				workflowState.zoom,
+				workflowState.pan,
+			);
+
+			if (workflowId !== undefined) {
+				// Per-workflow draft key for multi-workflow mode
+				localStorage.setItem(getDraftKey(workflowId), definitionJson);
+			} else {
+				// Legacy single-workflow key
+				const toSave = {
+					metadata: {
+						...workflowState.metadata,
+						updatedAt: new Date().toISOString(),
+					},
+					nodes: workflowState.nodes,
+					edges: workflowState.edges,
+					flags: workflowState.flags,
+					zoom: workflowState.zoom,
+					pan: workflowState.pan,
+				};
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+			}
 		}
 	}, [
+		workflowId,
+		isLoadingFromApi,
 		workflowState.nodes,
 		workflowState.edges,
 		workflowState.flags,
@@ -508,8 +693,12 @@ export function WorkflowEditor() {
 		});
 	}, [setWorkflowState]);
 
-	const handleValidate = useCallback(() => {
-		const errors = validateWorkflow(workflowState.nodes, workflowState.edges);
+	const handleValidate = useCallback(async () => {
+		const errors = await validateWorkflowWithSyntax(
+			workflowState.nodes,
+			workflowState.edges,
+			workflowState.flags,
+		);
 		setValidationErrors(errors);
 		const isValid = errors.length === 0;
 		setLastValidationErrorCount(errors.length);
@@ -525,6 +714,14 @@ export function WorkflowEditor() {
 			return;
 		}
 
+		const definitionJson = buildDefinitionJson(
+			workflowState.nodes,
+			workflowState.edges,
+			workflowState.flags,
+			workflowState.zoom,
+			workflowState.pan,
+		);
+
 		const payload = {
 			name: workflowState.metadata.name || "Nuevo Flujo de Trabajo",
 			slug: slugify(workflowState.metadata.name || "nuevo-flujo-de-trabajo"),
@@ -535,6 +732,7 @@ export function WorkflowEditor() {
 			current_major_version: extractMajorVersion(
 				workflowState.metadata.version,
 			),
+			definition: definitionJson,
 		};
 
 		try {
@@ -544,7 +742,10 @@ export function WorkflowEditor() {
 					description: `"${payload.name}" guardado correctamente.`,
 				});
 			} else {
-				const created = await createWorkflow(payload, { jwt: apiToken });
+				const created = await createWorkflow(
+					{ ...payload, status: "draft" },
+					{ jwt: apiToken },
+				);
 				setWorkflowApiId(created.id);
 				if (typeof window !== "undefined") {
 					localStorage.setItem(WORKFLOW_API_ID_KEY, String(created.id));
@@ -552,6 +753,8 @@ export function WorkflowEditor() {
 				toast.success("Workflow guardado", {
 					description: `"${payload.name}" creado correctamente.`,
 				});
+				// Redirect to the per-workflow editor URL
+				router.replace(`/editor/${created.id}`);
 			}
 		} catch (error) {
 			if (error instanceof ApiError && error.status === 401) {
@@ -572,9 +775,18 @@ export function WorkflowEditor() {
 				});
 			}
 		}
-	}, [apiToken, workflowApiId, workflowState.metadata]);
+	}, [apiToken, workflowApiId, workflowState, router]);
+
+	const handleBack = useCallback(() => {
+		router.push("/");
+	}, [router]);
 
 	const handleReset = useCallback(() => {
+		// In multi-workflow mode (workflowId prop given), "New" navigates to /editor
+		if (workflowId !== undefined) {
+			router.push("/editor");
+			return;
+		}
 		const confirmed = window.confirm(
 			"¿Estás seguro de que deseas eliminar el flujo actual? Esta acción no se puede deshacer.",
 		);
@@ -589,7 +801,7 @@ export function WorkflowEditor() {
 				localStorage.removeItem(WORKFLOW_API_ID_KEY);
 			}
 		}
-	}, []);
+	}, [workflowId, router]);
 
 	const handleLoadExample = useCallback(
 		(exampleKey: "basic" | "api" | "manual") => {
@@ -618,8 +830,8 @@ export function WorkflowEditor() {
 		setShowJSON(true);
 	}, []);
 
-	const handlePublish = useCallback(() => {
-		const isValid = handleValidate();
+	const handlePublish = useCallback(async () => {
+		const isValid = await handleValidate();
 		if (isValid) {
 			setShowPublish(true);
 		}
@@ -678,12 +890,75 @@ export function WorkflowEditor() {
 		}));
 	}, []);
 
-	const updateFlags = useCallback((flags: Flag[]) => {
-		setWorkflowState((prev) => ({
-			...prev,
-			flags,
-		}));
-	}, []);
+	const updateFlags = useCallback(
+		(newFlags: Flag[]) => {
+			setWorkflowState((prev) => {
+				// Build a set of still-valid {flagId, optionId} pairs so FlagChange
+				// nodes can be cleaned up when a flag or one of its options is removed.
+				const validPairs = new Set<string>();
+				for (const flag of newFlags) {
+					for (const option of flag.options) {
+						validPairs.add(`${flag.id}::${option.id}`);
+					}
+				}
+				const newFlagIds = new Set(newFlags.map((f) => f.id));
+
+				const cleanedNodes = prev.nodes.map((node) => {
+					if (node.type !== "FlagChange") return node;
+					const flagChanges =
+						(node.config.flagChanges as
+							| Array<{ flagId: string; optionId: string }>
+							| undefined) ?? [];
+
+					// Keep only changes that still point to an existing flag + option
+					const cleaned = flagChanges.filter(
+						(fc) =>
+							newFlagIds.has(fc.flagId) &&
+							validPairs.has(`${fc.flagId}::${fc.optionId}`),
+					);
+
+					if (cleaned.length === flagChanges.length) return node;
+					return {
+						...node,
+						config: { ...node.config, flagChanges: cleaned },
+					};
+				});
+
+				const nextState = { ...prev, flags: newFlags, nodes: cleanedNodes };
+
+				// Auto-save definition to the DB so flags persist across page reloads.
+				// We use the computed nextState (not stale closure) and fire-and-forget.
+				if (workflowApiId && apiToken) {
+					const definitionJson = buildDefinitionJson(
+						nextState.nodes,
+						nextState.edges,
+						newFlags,
+						nextState.zoom,
+						nextState.pan,
+					);
+					updateWorkflowApi(
+						workflowApiId,
+						{
+							name: prev.metadata.name || "Nuevo Flujo de Trabajo",
+							slug: slugify(prev.metadata.name || "nuevo-flujo-de-trabajo"),
+							description: prev.metadata.description || "",
+							class_name: toClassName(
+								prev.metadata.name || "GeneratedWorkflow",
+							),
+							current_major_version: extractMajorVersion(prev.metadata.version),
+							definition: definitionJson,
+						},
+						{ jwt: apiToken },
+					).catch((err) => {
+						console.error("[updateFlags] Failed to auto-save definition:", err);
+					});
+				}
+
+				return nextState;
+			});
+		},
+		[setWorkflowState, workflowApiId, apiToken],
+	);
 
 	const hasMultipleSelections =
 		workflowState.selectedNodeIds.length +
@@ -708,6 +983,17 @@ export function WorkflowEditor() {
 		!hasMultipleSelections &&
 		(shouldShowWorkflowPanel || hasSingleNodeSelected || hasSingleEdgeSelected);
 
+	if (isLoadingFromApi) {
+		return (
+			<div className="flex h-screen items-center justify-center bg-background">
+				<div className="flex flex-col items-center gap-3 text-muted-foreground">
+					<Loader2 className="h-8 w-8 animate-spin" />
+					<span className="text-sm">Cargando workflow...</span>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex h-screen flex-col bg-background">
 			<TopBar
@@ -717,7 +1003,15 @@ export function WorkflowEditor() {
 				onExportJSON={handleExportJSON}
 				onImportJSON={handleImportJSON}
 				onLoadExample={handleLoadExample}
-				onManageFlags={() => setShowFlagManager(true)}
+				onManageFlags={() => {
+					if (!workflowApiId) {
+						toast.warning(
+							"Guarda el workflow primero antes de gestionar flags.",
+						);
+						return;
+					}
+					setShowFlagManager(true);
+				}}
 				onToggleWorkflowProperties={() => {
 					setShowWorkflowProperties((prev) => {
 						const newValue = !prev;
@@ -729,6 +1023,11 @@ export function WorkflowEditor() {
 					});
 				}}
 				workflowMetadata={workflowState.metadata}
+				workflowStatus={workflowStatus}
+				currentMajorVersion={
+					workflowApiId !== null ? currentMajorVersion : undefined
+				}
+				onBack={workflowId !== undefined ? handleBack : undefined}
 				paletteProps={{
 					onAddNode: addNode,
 					zoom: workflowState.zoom,
@@ -856,7 +1155,11 @@ export function WorkflowEditor() {
 			{showJSON && (
 				<JSONModal
 					mode={jsonMode}
-					workflow={{ nodes: workflowState.nodes, edges: workflowState.edges }}
+					workflow={{
+						nodes: workflowState.nodes,
+						edges: workflowState.edges,
+						flags: workflowState.flags,
+					}}
 					onClose={() => setShowJSON(false)}
 					onImport={(data) => {
 						// Migrar nodos legacy antes de importar
@@ -867,6 +1170,8 @@ export function WorkflowEditor() {
 							selectedNodeIds: [],
 							selectedEdgeIds: [],
 						}));
+						// Also restore flags from the imported JSON (backwards-compatible: defaults to [])
+						setWorkflowState((prev) => ({ ...prev, flags: data.flags }));
 						setShowJSON(false);
 						setValidationErrors([]);
 						setValidationStatus("idle");
@@ -875,8 +1180,10 @@ export function WorkflowEditor() {
 				/>
 			)}
 
-			{showFlagManager && (
+			{showFlagManager && workflowApiId && apiToken && (
 				<FlagManagerModal
+					workflowId={workflowApiId}
+					apiToken={apiToken}
 					flags={workflowState.flags}
 					onClose={() => setShowFlagManager(false)}
 					onUpdateFlags={updateFlags}
@@ -898,10 +1205,18 @@ export function WorkflowEditor() {
 					edges={workflowState.edges}
 					metadata={workflowState.metadata}
 					flags={workflowState.flags}
+					zoom={workflowState.zoom}
+					pan={workflowState.pan}
 					workflowApiId={workflowApiId}
 					onSave={handleSave}
 					apiToken={apiToken}
 					onClose={() => setShowPublish(false)}
+					onPublished={(status, majorVersion) => {
+						setWorkflowStatus(status);
+						if (majorVersion !== undefined) {
+							setCurrentMajorVersion(majorVersion);
+						}
+					}}
 				/>
 			)}
 

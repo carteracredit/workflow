@@ -64,7 +64,7 @@ export async function createDeployment(
  * Gets a single workflow deployment by ID.
  */
 export async function getDeployment(
-	id: number,
+	id: string,
 	options?: ApiCallOptions,
 ): Promise<WorkflowDeployment> {
 	const baseUrl = getWorkflowServiceUrl();
@@ -81,7 +81,7 @@ export async function getDeployment(
  * Updates a workflow deployment status or deployed_at timestamp.
  */
 export async function updateDeployment(
-	id: number,
+	id: string,
 	payload: UpdateWorkflowDeploymentPayload,
 	options?: ApiCallOptions,
 ): Promise<WorkflowDeployment> {

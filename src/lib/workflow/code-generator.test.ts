@@ -505,7 +505,7 @@ describe("generateWorkflowCode with Join nodes", () => {
 });
 
 describe("generateWorkflowCode with FlagChange nodes", () => {
-	it("should generate FlagChange step code", () => {
+	it("should generate FlagChange step using service binding", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -530,8 +530,16 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("Flag Change: Update Status");
-		expect(result.code).toContain('flags.set("status", "approved")');
-		expect(result.code).toContain('flags.set("priority", "high")');
+		expect(result.code).toContain("WORKFLOW_SVC.fetch");
+		expect(result.code).toContain("batch-update-state");
+		expect(result.code).toContain('"status"');
+		expect(result.code).toContain('"approved"');
+		expect(result.code).toContain('"priority"');
+		expect(result.code).toContain('"high"');
+		expect(result.code).toContain("svcResponse.ok");
+		// Should NOT use old FLAGS pattern
+		expect(result.code).not.toContain("this.env.FLAGS");
+		expect(result.code).not.toContain("flags.set(");
 	});
 
 	it("should handle FlagChange with no flag changes", () => {
@@ -557,6 +565,53 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		expect(result.code).toContain(
 			"Configure flag changes in the workflow editor",
 		);
+	});
+
+	it("should generate WorkflowEnv with WORKFLOW_SVC and WORKFLOW_ID bindings", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("WORKFLOW_SVC: Fetcher");
+		expect(result.code).toContain("WORKFLOW_ID: string");
+		// Should NOT contain old bindings
+		expect(result.code).not.toContain("FLAGS?: unknown");
+		expect(result.code).not.toContain("FORMS?: unknown");
+	});
+
+	it("should produce stable checksum for FlagChange node (no formatting drift)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "flag",
+				type: "FlagChange",
+				title: "Update Status",
+				config: {
+					flagChanges: [
+						{ flagId: "status-flag-id", optionId: "approved-option-id" },
+					],
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "flag"),
+			createEdge("flag", "end"),
+		];
+
+		// Generate twice — must produce identical code (no timestamps, no random ids)
+		const result1 = generateWorkflowCode(nodes, edges, undefined, {
+			includeComments: false,
+		});
+		const result2 = generateWorkflowCode(nodes, edges, undefined, {
+			includeComments: false,
+		});
+
+		expect(result1.code).toBe(result2.code);
 	});
 });
 
@@ -1316,5 +1371,295 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(joinIdx).toBeGreaterThanOrEqual(0);
 		expect(msgIdx).toBeGreaterThan(joinIdx);
 		expect(returnIdx).toBeGreaterThan(msgIdx);
+	});
+
+	// ── Deterministic edge order (issue: delete+recreate edge) ──────────────
+
+	it("produces identical code when edges are re-ordered (simulating delete+recreate)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Decisión",
+				config: { condition: "cond" },
+			}),
+			createNode({
+				id: "msg-a",
+				type: "Message",
+				title: "Mensaje A",
+				config: { type: "email" },
+			}),
+			createNode({
+				id: "msg-b",
+				type: "Message",
+				title: "Mensaje B",
+				config: { type: "email" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edgesOriginal: WorkflowEdge[] = [
+			createEdge("start", "decision", { id: "e1" }),
+			createEdge("decision", "msg-a", { id: "e2", fromPort: "top" }),
+			createEdge("decision", "msg-b", { id: "e3", fromPort: "bottom" }),
+			createEdge("msg-a", "end", { id: "e4" }),
+			createEdge("msg-b", "end", { id: "e5" }),
+		];
+
+		const edgesReordered: WorkflowEdge[] = [
+			createEdge("start", "decision", { id: "e1" }),
+			createEdge("decision", "msg-b", { id: "e3", fromPort: "bottom" }),
+			createEdge("msg-b", "end", { id: "new-e4" }),
+			createEdge("decision", "msg-a", { id: "new-e2", fromPort: "top" }),
+			createEdge("msg-a", "end", { id: "new-e5" }),
+		];
+
+		const resultOriginal = generateWorkflowCode(nodes, edgesOriginal);
+		const resultReordered = generateWorkflowCode(nodes, edgesReordered);
+
+		expect(resultOriginal.code).toBe(resultReordered.code);
+	});
+
+	it("produces identical code regardless of edge ID changes", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Formulario",
+				roles: [],
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edgesV1: WorkflowEdge[] = [
+			createEdge("start", "form", { id: "edge-1000" }),
+			createEdge("form", "end", { id: "edge-2000" }),
+		];
+
+		const edgesV2: WorkflowEdge[] = [
+			createEdge("start", "form", { id: "edge-9999999" }),
+			createEdge("form", "end", { id: "edge-8888888" }),
+		];
+
+		const resultV1 = generateWorkflowCode(nodes, edgesV1);
+		const resultV2 = generateWorkflowCode(nodes, edgesV2);
+
+		expect(resultV1.code).toBe(resultV2.code);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API node: config.url fix tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("generateWorkflowCode – API node config.url fix", () => {
+	const baseNodes = (apiConfig: Record<string, unknown>) => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "api",
+			type: "API",
+			title: "Call API",
+			config: apiConfig,
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+	];
+	const baseEdges = () => [
+		createEdge("start", "api"),
+		createEdge("api", "end"),
+	];
+
+	it("should use config.url when provided", () => {
+		const result = generateWorkflowCode(
+			baseNodes({ url: "https://api.example.com/v1/resource", method: "POST" }),
+			baseEdges(),
+		);
+		expect(result.code).toContain(
+			'fetch("https://api.example.com/v1/resource"',
+		);
+	});
+
+	it("should fall back to config.endpoint for legacy nodes", () => {
+		const result = generateWorkflowCode(
+			baseNodes({
+				endpoint: "https://legacy.example.com/endpoint",
+				method: "GET",
+			}),
+			baseEdges(),
+		);
+		expect(result.code).toContain(
+			'fetch("https://legacy.example.com/endpoint"',
+		);
+	});
+
+	it("should prefer config.url over config.endpoint when both exist", () => {
+		const result = generateWorkflowCode(
+			baseNodes({
+				url: "https://new.example.com/api",
+				endpoint: "https://old.example.com/api",
+				method: "POST",
+			}),
+			baseEdges(),
+		);
+		expect(result.code).toContain('fetch("https://new.example.com/api"');
+		expect(result.code).not.toContain("https://old.example.com/api");
+	});
+
+	it("should fall back to /api/endpoint when neither url nor endpoint is set", () => {
+		const result = generateWorkflowCode(baseNodes({}), baseEdges());
+		expect(result.code).toContain('fetch("/api/endpoint"');
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateNodeCodeSyntax tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateNodeCodeSyntax", () => {
+	it("should pass for nodes without Transform or Decision", async () => {
+		const { validateNodeCodeSyntax } = await import("./code-generator");
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const result = await validateNodeCodeSyntax(nodes);
+		expect(result.valid).toBe(true);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("should pass for valid Transform code", async () => {
+		const { validateNodeCodeSyntax } = await import("./code-generator");
+		const nodes = [
+			createNode({
+				id: "t",
+				type: "Transform",
+				title: "Transform",
+				config: { code: "return { ok: true };" },
+			}),
+		];
+		const result = await validateNodeCodeSyntax(nodes);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should fail for Transform node with JSON object code (the reported bug)", async () => {
+		const { validateNodeCodeSyntax } = await import("./code-generator");
+		const nodes = [
+			createNode({
+				id: "t",
+				type: "Transform",
+				title: "Transformación 1",
+				config: { code: '"example":"example"' },
+			}),
+		];
+		const result = await validateNodeCodeSyntax(nodes);
+		expect(result.valid).toBe(false);
+		expect(result.errors.some((e) => e.includes("Transformación 1"))).toBe(
+			true,
+		);
+	});
+
+	it("should fail for Decision node with invalid condition", async () => {
+		const { validateNodeCodeSyntax } = await import("./code-generator");
+		const nodes = [
+			createNode({
+				id: "d",
+				type: "Decision",
+				title: "Decisión",
+				config: { condition: "amount >" },
+			}),
+		];
+		const result = await validateNodeCodeSyntax(nodes);
+		expect(result.valid).toBe(false);
+		expect(result.errors.some((e) => e.includes("Decisión"))).toBe(true);
+	});
+
+	it("should report errors for multiple invalid nodes", async () => {
+		const { validateNodeCodeSyntax } = await import("./code-generator");
+		const nodes = [
+			createNode({
+				id: "t",
+				type: "Transform",
+				title: "BadTransform",
+				config: { code: '{"bad": "json"}' },
+			}),
+			createNode({
+				id: "d",
+				type: "Decision",
+				title: "BadDecision",
+				config: { condition: "amount >" },
+			}),
+		];
+		const result = await validateNodeCodeSyntax(nodes);
+		expect(result.valid).toBe(false);
+		expect(result.errors.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it("should skip Transform nodes without code", async () => {
+		const { validateNodeCodeSyntax } = await import("./code-generator");
+		const nodes = [
+			createNode({
+				id: "t",
+				type: "Transform",
+				title: "EmptyTransform",
+				config: {},
+			}),
+		];
+		const result = await validateNodeCodeSyntax(nodes);
+		expect(result.valid).toBe(true);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// generateWorkflowCodeWithProgress – syntax validation integration
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("generateWorkflowCodeWithProgress – syntax validation", () => {
+	it("should fail with syntax error when Transform code contains bare JSON", async () => {
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "t",
+				type: "Transform",
+				title: "Transformación 1",
+				config: { code: '"example":"example"' },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "t"), createEdge("t", "end")];
+
+		const result = await generateWorkflowCodeWithProgress(nodes, edges);
+
+		expect(result.valid).toBe(false);
+		expect(result.errors.some((e) => e.includes("Transformación 1"))).toBe(
+			true,
+		);
+		const validatePhase = result.phases.find((p) => p.id === "validate");
+		expect(validatePhase?.status).toBe("error");
+	});
+
+	it("should succeed when Transform code is valid TypeScript", async () => {
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "t",
+				type: "Transform",
+				title: "Calcular",
+				config: { code: "return { ok: true };" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "t"), createEdge("t", "end")];
+
+		const result = await generateWorkflowCodeWithProgress(nodes, edges);
+
+		expect(result.valid).toBe(true);
+		expect(result.code).toContain('step.do("calcular"');
 	});
 });

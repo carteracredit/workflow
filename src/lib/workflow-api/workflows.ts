@@ -2,6 +2,7 @@ import { fetchJson } from "./http";
 import { getWorkflowServiceUrl } from "./config";
 import type {
 	Workflow,
+	WorkflowVersion,
 	CreateWorkflowPayload,
 	UpdateWorkflowPayload,
 	PublishWorkflowResponse,
@@ -11,6 +12,7 @@ import type {
 
 export type {
 	Workflow,
+	WorkflowVersion,
 	CreateWorkflowPayload,
 	UpdateWorkflowPayload,
 	PublishWorkflowResponse,
@@ -18,10 +20,11 @@ export type {
 
 export interface ListWorkflowsOptions extends ApiCallOptions {
 	search?: string;
+	status?: "draft" | "published" | "archived";
 }
 
 /**
- * Lists all workflows, optionally filtered by search query.
+ * Lists all workflows, optionally filtered by search query and status.
  */
 export async function listWorkflows(
 	options?: ListWorkflowsOptions,
@@ -30,6 +33,9 @@ export async function listWorkflows(
 	const url = new URL(`${baseUrl}/workflows`);
 	if (options?.search) {
 		url.searchParams.set("search", options.search);
+	}
+	if (options?.status) {
+		url.searchParams.set("status", options.status);
 	}
 
 	const { json } = await fetchJson<ApiResponse<Workflow[]>>(url.toString(), {
@@ -65,7 +71,7 @@ export async function createWorkflow(
  * Gets a single workflow by ID.
  */
 export async function getWorkflow(
-	id: number,
+	id: string,
 	options?: ApiCallOptions,
 ): Promise<Workflow> {
 	const baseUrl = getWorkflowServiceUrl();
@@ -82,7 +88,7 @@ export async function getWorkflow(
  * Updates an existing workflow by ID.
  */
 export async function updateWorkflow(
-	id: number,
+	id: string,
 	payload: UpdateWorkflowPayload,
 	options?: ApiCallOptions,
 ): Promise<Workflow> {
@@ -104,11 +110,19 @@ export async function updateWorkflow(
 /**
  * Publishes a workflow by pushing generated TypeScript code to GitHub
  * and triggering a Cloudflare Workers deployment via GitHub Actions.
- * Creates a deployment record in workflow-svc with status "deploying".
+ *
+ * Sends the current definition JSON alongside the code so the backend
+ * always saves the latest state even if the user never hit "Save".
+ *
+ * Returns a skipped response when no code changes are detected.
  */
 export async function publishWorkflow(
-	id: number,
-	payload: { code: string; environment: "development" | "production" },
+	id: string,
+	payload: {
+		code: string;
+		environment: "development" | "production";
+		definition?: string;
+	},
 	options?: ApiCallOptions,
 ): Promise<PublishWorkflowResponse> {
 	const baseUrl = getWorkflowServiceUrl();
@@ -130,17 +144,36 @@ export async function publishWorkflow(
  * Deletes a workflow by ID.
  */
 export async function deleteWorkflow(
-	id: number,
+	id: string,
 	options?: ApiCallOptions,
-): Promise<{ id: number }> {
+): Promise<{ id: string }> {
 	const baseUrl = getWorkflowServiceUrl();
 
-	const { json } = await fetchJson<ApiResponse<{ id: number }>>(
+	const { json } = await fetchJson<ApiResponse<{ id: string }>>(
 		`${baseUrl}/workflows/${id}`,
 		{
 			method: "DELETE",
 			jwt: options?.jwt,
 		},
+	);
+
+	return json.result;
+}
+
+/**
+ * Lists all published versions of a workflow.
+ */
+export async function listWorkflowVersions(
+	workflowId: string,
+	options?: ApiCallOptions,
+): Promise<WorkflowVersion[]> {
+	const baseUrl = getWorkflowServiceUrl();
+	const url = new URL(`${baseUrl}/workflow-versions`);
+	url.searchParams.set("workflow_id", String(workflowId));
+
+	const { json } = await fetchJson<ApiResponse<WorkflowVersion[]>>(
+		url.toString(),
+		{ jwt: options?.jwt },
 	);
 
 	return json.result;

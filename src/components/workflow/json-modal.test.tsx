@@ -7,7 +7,7 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { JSONModal } from "./json-modal";
-import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
+import type { WorkflowNode, WorkflowEdge, Flag } from "@/lib/workflow/types";
 
 const mockNodes: WorkflowNode[] = [
 	{
@@ -23,7 +23,18 @@ const mockNodes: WorkflowNode[] = [
 	},
 ];
 const mockEdges: WorkflowEdge[] = [];
-const workflow = { nodes: mockNodes, edges: mockEdges };
+const mockFlags: Flag[] = [
+	{
+		id: "flag-1",
+		name: "Estado",
+		options: [
+			{ id: "opt-1", label: "Pendiente", color: "yellow-500" },
+			{ id: "opt-2", label: "Aprobado", color: "green-500" },
+		],
+	},
+];
+const workflow = { nodes: mockNodes, edges: mockEdges, flags: mockFlags };
+const workflowNoFlags = { nodes: mockNodes, edges: mockEdges, flags: [] };
 
 describe("JSONModal", () => {
 	describe("export mode", () => {
@@ -42,6 +53,23 @@ describe("JSONModal", () => {
 			const value = (textarea as HTMLTextAreaElement).value;
 			expect(value).toContain("nodes");
 			expect(value).toContain("edges");
+		});
+
+		it("includes flags in exported JSON", () => {
+			render(
+				<JSONModal
+					mode="export"
+					workflow={workflow}
+					onClose={vi.fn()}
+					onImport={vi.fn()}
+				/>,
+			);
+			const textarea = screen.getByRole("textbox");
+			const value = (textarea as HTMLTextAreaElement).value;
+			const parsed = JSON.parse(value);
+			expect(parsed).toHaveProperty("flags");
+			expect(parsed.flags).toHaveLength(1);
+			expect(parsed.flags[0].name).toBe("Estado");
 		});
 
 		it("shows Download button in export mode", () => {
@@ -82,7 +110,7 @@ describe("JSONModal", () => {
 			render(
 				<JSONModal
 					mode="import"
-					workflow={workflow}
+					workflow={workflowNoFlags}
 					onClose={vi.fn()}
 					onImport={vi.fn()}
 				/>,
@@ -97,7 +125,7 @@ describe("JSONModal", () => {
 			render(
 				<JSONModal
 					mode="import"
-					workflow={workflow}
+					workflow={workflowNoFlags}
 					onClose={vi.fn()}
 					onImport={vi.fn()}
 				/>,
@@ -112,7 +140,7 @@ describe("JSONModal", () => {
 			render(
 				<JSONModal
 					mode="import"
-					workflow={workflow}
+					workflow={workflowNoFlags}
 					onClose={vi.fn()}
 					onImport={onImport}
 				/>,
@@ -131,12 +159,59 @@ describe("JSONModal", () => {
 			expect(onImport.mock.calls[0][0]).toHaveProperty("edges");
 		});
 
+		it("passes flags when importing JSON that includes them", async () => {
+			const onImport = vi.fn();
+			render(
+				<JSONModal
+					mode="import"
+					workflow={workflowNoFlags}
+					onClose={vi.fn()}
+					onImport={onImport}
+				/>,
+			);
+			const textarea = screen.getByPlaceholderText(
+				/Pega el JSON del flujo aquí/i,
+			);
+			const validJson = JSON.stringify({
+				nodes: mockNodes,
+				edges: mockEdges,
+				flags: mockFlags,
+			});
+			fireEvent.change(textarea, { target: { value: validJson } });
+			fireEvent.click(screen.getByRole("button", { name: "Importar" }));
+			expect(onImport).toHaveBeenCalledTimes(1);
+			const importedData = onImport.mock.calls[0][0];
+			expect(importedData.flags).toHaveLength(1);
+			expect(importedData.flags[0].name).toBe("Estado");
+		});
+
+		it("defaults flags to [] when importing legacy JSON without flags", async () => {
+			const onImport = vi.fn();
+			render(
+				<JSONModal
+					mode="import"
+					workflow={workflowNoFlags}
+					onClose={vi.fn()}
+					onImport={onImport}
+				/>,
+			);
+			const textarea = screen.getByPlaceholderText(
+				/Pega el JSON del flujo aquí/i,
+			);
+			// Old export format without flags
+			const legacyJson = JSON.stringify({ nodes: mockNodes, edges: mockEdges });
+			fireEvent.change(textarea, { target: { value: legacyJson } });
+			fireEvent.click(screen.getByRole("button", { name: "Importar" }));
+			expect(onImport).toHaveBeenCalledTimes(1);
+			expect(onImport.mock.calls[0][0].flags).toEqual([]);
+		});
+
 		it("shows error when JSON is invalid", async () => {
 			const onImport = vi.fn();
 			render(
 				<JSONModal
 					mode="import"
-					workflow={workflow}
+					workflow={workflowNoFlags}
 					onClose={vi.fn()}
 					onImport={onImport}
 				/>,
@@ -160,7 +235,7 @@ describe("JSONModal", () => {
 			render(
 				<JSONModal
 					mode="import"
-					workflow={workflow}
+					workflow={workflowNoFlags}
 					onClose={vi.fn()}
 					onImport={vi.fn()}
 				/>,
@@ -181,7 +256,7 @@ describe("JSONModal", () => {
 			render(
 				<JSONModal
 					mode="import"
-					workflow={workflow}
+					workflow={workflowNoFlags}
 					onClose={vi.fn()}
 					onImport={vi.fn()}
 				/>,

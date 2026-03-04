@@ -6,16 +6,21 @@ import {
 	updateWorkflow,
 	deleteWorkflow,
 	publishWorkflow,
+	listWorkflowVersions,
 } from "./workflows";
+import type { PublishWorkflowDeployedResponse } from "./types";
 import { ApiError } from "./http";
 
 const BASE_URL = "https://workflow-svc.carteracredit.workers.dev";
 
 const mockWorkflow = {
-	id: 1,
+	id: "wf-uuid-001",
 	name: "Credit App",
 	slug: "credit-app",
 	description: "Credit application workflow",
+	status: "published" as const,
+	definition: null,
+	published_code_checksum: null,
 	github_repo_url: "https://github.com/carteracredit/credit-app",
 	class_name: "CreditApp",
 	current_major_version: 1,
@@ -68,6 +73,15 @@ describe("workflow API functions", () => {
 			expect(url).toContain("search=credit");
 		});
 
+		it("appends status param when provided", async () => {
+			mockFetch({ success: true, result: [] });
+
+			await listWorkflows({ status: "draft" });
+
+			const url = vi.mocked(fetch).mock.calls[0][0] as string;
+			expect(url).toContain("status=draft");
+		});
+
 		it("passes JWT in Authorization header", async () => {
 			mockFetch({ success: true, result: [] });
 
@@ -108,10 +122,10 @@ describe("workflow API functions", () => {
 		it("fetches workflow by ID from correct URL", async () => {
 			mockFetch({ success: true, result: mockWorkflow });
 
-			const result = await getWorkflow(1);
+			const result = await getWorkflow("wf-uuid-001");
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-				`${BASE_URL}/workflows/1`,
+				`${BASE_URL}/workflows/wf-uuid-001`,
 				expect.any(Object),
 			);
 			expect(result).toEqual(mockWorkflow);
@@ -120,7 +134,7 @@ describe("workflow API functions", () => {
 		it("throws ApiError on 404", async () => {
 			mockFetch({ success: false, errors: [{ message: "Not Found" }] }, 404);
 
-			await expect(getWorkflow(9999)).rejects.toThrow(ApiError);
+			await expect(getWorkflow("wf-uuid-404")).rejects.toThrow(ApiError);
 		});
 	});
 
@@ -129,10 +143,12 @@ describe("workflow API functions", () => {
 			const updated = { ...mockWorkflow, name: "Updated Name" };
 			mockFetch({ success: true, result: updated });
 
-			const result = await updateWorkflow(1, { name: "Updated Name" });
+			const result = await updateWorkflow("wf-uuid-001", {
+				name: "Updated Name",
+			});
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-				`${BASE_URL}/workflows/1`,
+				`${BASE_URL}/workflows/wf-uuid-001`,
 				expect.objectContaining({ method: "PUT" }),
 			);
 			expect(result.name).toBe("Updated Name");
@@ -141,22 +157,22 @@ describe("workflow API functions", () => {
 
 	describe("deleteWorkflow", () => {
 		it("DELETEs to correct URL and returns id", async () => {
-			mockFetch({ success: true, result: { id: 1 } });
+			mockFetch({ success: true, result: { id: "wf-uuid-001" } });
 
-			const result = await deleteWorkflow(1);
+			const result = await deleteWorkflow("wf-uuid-001");
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-				`${BASE_URL}/workflows/1`,
+				`${BASE_URL}/workflows/wf-uuid-001`,
 				expect.objectContaining({ method: "DELETE" }),
 			);
-			expect(result.id).toBe(1);
+			expect(result.id).toBe("wf-uuid-001");
 		});
 	});
 
 	describe("publishWorkflow", () => {
 		const mockDeployment = {
-			id: 10,
-			workflow_id: 1,
+			id: "dep-uuid-010",
+			workflow_id: "wf-uuid-001",
 			major_version: 1,
 			semver: "1.0.0",
 			environment: "development" as const,
@@ -167,18 +183,20 @@ describe("workflow API functions", () => {
 			updated_at: "2026-02-24T00:00:00.000Z",
 		};
 
-		const mockPublishResult = {
+		const mockPublishResult: PublishWorkflowDeployedResponse = {
+			skipped: false,
 			deployment: mockDeployment,
 			repo_url: "https://github.com/carteracredit/credit-app",
 			worker_name: "credit-app-dev-v1",
 			branch: "dev",
+			version: 1,
 		};
 
 		it("POSTs to correct publish URL", async () => {
 			mockFetch({ success: true, result: mockPublishResult });
 
 			await publishWorkflow(
-				1,
+				"wf-uuid-001",
 				{
 					code: "export class MyWorkflow {}",
 					environment: "development",
@@ -187,7 +205,7 @@ describe("workflow API functions", () => {
 			);
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-				`${BASE_URL}/workflows/1/publish`,
+				`${BASE_URL}/workflows/wf-uuid-001/publish`,
 				expect.objectContaining({ method: "POST" }),
 			);
 		});
@@ -196,7 +214,7 @@ describe("workflow API functions", () => {
 			mockFetch({ success: true, result: mockPublishResult });
 
 			const code = "export class MyWorkflow extends WorkflowEntrypoint {}";
-			await publishWorkflow(1, { code, environment: "production" });
+			await publishWorkflow("wf-uuid-001", { code, environment: "production" });
 
 			const call = vi.mocked(fetch).mock.calls[0];
 			const body = JSON.parse(call[1]?.body as string) as {
@@ -207,27 +225,65 @@ describe("workflow API functions", () => {
 			expect(body.environment).toBe("production");
 		});
 
+		it("sends definition in body when provided", async () => {
+			mockFetch({ success: true, result: mockPublishResult });
+
+			const definition = JSON.stringify({ nodes: [], edges: [], flags: [] });
+			await publishWorkflow("wf-uuid-001", {
+				code: "code",
+				environment: "development",
+				definition,
+			});
+
+			const call = vi.mocked(fetch).mock.calls[0];
+			const body = JSON.parse(call[1]?.body as string) as {
+				definition: string;
+			};
+			expect(body.definition).toBe(definition);
+		});
+
 		it("returns deployment result on success", async () => {
 			mockFetch({ success: true, result: mockPublishResult });
 
-			const result = await publishWorkflow(1, {
+			const result = await publishWorkflow("wf-uuid-001", {
 				code: "export class MyWorkflow {}",
 				environment: "development",
 			});
 
+			if (result.skipped) throw new Error("Expected not skipped");
 			expect(result.deployment.status).toBe("deploying");
 			expect(result.worker_name).toBe("credit-app-dev-v1");
 			expect(result.branch).toBe("dev");
 			expect(result.repo_url).toBe(
 				"https://github.com/carteracredit/credit-app",
 			);
+			expect(result.version).toBe(1);
+		});
+
+		it("returns skipped response when code has not changed", async () => {
+			const skippedResult = {
+				skipped: true,
+				reason: "no_changes",
+				current_version: 1,
+			};
+			mockFetch({ success: true, result: skippedResult });
+
+			const result = await publishWorkflow("wf-uuid-001", {
+				code: "export class MyWorkflow {}",
+				environment: "development",
+			});
+
+			expect(result.skipped).toBe(true);
+			if (!result.skipped) throw new Error("Expected skipped");
+			expect(result.reason).toBe("no_changes");
+			expect(result.current_version).toBe(1);
 		});
 
 		it("passes JWT Authorization header", async () => {
 			mockFetch({ success: true, result: mockPublishResult });
 
 			await publishWorkflow(
-				1,
+				"wf-uuid-001",
 				{ code: "code", environment: "development" },
 				{ jwt: "publish-token" },
 			);
@@ -246,7 +302,10 @@ describe("workflow API functions", () => {
 			);
 
 			await expect(
-				publishWorkflow(1, { code: "code", environment: "development" }),
+				publishWorkflow("wf-uuid-001", {
+					code: "code",
+					environment: "development",
+				}),
 			).rejects.toThrow(ApiError);
 		});
 
@@ -254,19 +313,57 @@ describe("workflow API functions", () => {
 			mockFetch({ success: false, error: "Workflow not found" }, 404);
 
 			await expect(
-				publishWorkflow(99, { code: "code", environment: "development" }),
+				publishWorkflow("wf-uuid-099", {
+					code: "code",
+					environment: "development",
+				}),
 			).rejects.toThrow(ApiError);
 		});
 
 		it("works without JWT option", async () => {
 			mockFetch({ success: true, result: mockPublishResult });
 
-			const result = await publishWorkflow(1, {
+			const result = await publishWorkflow("wf-uuid-001", {
 				code: "code",
 				environment: "development",
 			});
 
 			expect(result).toEqual(mockPublishResult);
+		});
+	});
+
+	describe("listWorkflowVersions", () => {
+		const mockVersions = [
+			{
+				id: "ver-uuid-001",
+				workflow_id: "wf-uuid-001",
+				version: 1,
+				definition: "{}",
+				code_checksum: "abc123",
+				created_by: "user-id",
+				created_at: "2026-01-01T00:00:00.000Z",
+			},
+		];
+
+		it("fetches versions for a workflow ID", async () => {
+			mockFetch({ success: true, result: mockVersions });
+
+			const result = await listWorkflowVersions("wf-uuid-001", {
+				jwt: "my-token",
+			});
+
+			const url = vi.mocked(fetch).mock.calls[0][0] as string;
+			expect(url).toContain("/workflow-versions");
+			expect(url).toContain("workflow_id=wf-uuid-001");
+			expect(result).toEqual(mockVersions);
+		});
+
+		it("returns empty array when no versions exist", async () => {
+			mockFetch({ success: true, result: [] });
+
+			const result = await listWorkflowVersions("wf-uuid-404");
+
+			expect(result).toEqual([]);
 		});
 	});
 });
