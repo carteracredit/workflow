@@ -377,14 +377,23 @@ export function PropertiesPanel({
 							/>
 						</div>
 
-						{/* Version */}
+						{/* Version — read-only, managed automatically by the publish system */}
 						<div className="space-y-2">
-							<Label htmlFor="workflow-version">Versión</Label>
+							<Label
+								htmlFor="workflow-version"
+								className="text-muted-foreground"
+							>
+								Versión{" "}
+								<span className="text-xs font-normal">
+									(gestionada automáticamente)
+								</span>
+							</Label>
 							<Input
 								id="workflow-version"
 								value={workflowMetadata.version}
-								onChange={(e) => onUpdateMetadata({ version: e.target.value })}
-								placeholder="1.0.0"
+								readOnly
+								disabled
+								className="cursor-default opacity-60"
 							/>
 						</div>
 
