@@ -28,10 +28,12 @@ vi.mock("@/lib/workflow-api/hooks", () => ({
 const mockCreateWorkflow = vi.fn();
 const mockDeleteWorkflow = vi.fn();
 const mockUpdateWorkflow = vi.fn();
+const mockCloneWorkflow = vi.fn();
 vi.mock("@/lib/workflow-api/workflows", () => ({
 	createWorkflow: (...args: unknown[]) => mockCreateWorkflow(...args),
 	deleteWorkflow: (...args: unknown[]) => mockDeleteWorkflow(...args),
 	updateWorkflow: (...args: unknown[]) => mockUpdateWorkflow(...args),
+	cloneWorkflow: (...args: unknown[]) => mockCloneWorkflow(...args),
 }));
 
 const mockUseApiToken = vi.fn();
@@ -655,7 +657,12 @@ describe("WorkflowList – eliminar", () => {
 	it("no elimina si el usuario cancela el confirm", async () => {
 		vi.spyOn(window, "confirm").mockReturnValue(false);
 		makeHooksReturn([
-			makeWorkflow({ id: "wf-uuid-001", name: "WFDel", status: "draft" }),
+			makeWorkflow({
+				id: "wf-uuid-001",
+				name: "WFDel",
+				status: "draft",
+				current_major_version: 0,
+			}),
 		]);
 		render(<WorkflowList />);
 
@@ -670,7 +677,12 @@ describe("WorkflowList – eliminar", () => {
 		const { toast } = await import("sonner");
 		vi.spyOn(window, "confirm").mockReturnValue(true);
 		makeHooksReturn([
-			makeWorkflow({ id: "wf-uuid-007", name: "WFDel2", status: "draft" }),
+			makeWorkflow({
+				id: "wf-uuid-007",
+				name: "WFDel2",
+				status: "draft",
+				current_major_version: 0,
+			}),
 		]);
 		mockDeleteWorkflow.mockResolvedValue({});
 		render(<WorkflowList />);
@@ -694,7 +706,12 @@ describe("WorkflowList – eliminar", () => {
 		const { toast } = await import("sonner");
 		vi.spyOn(window, "confirm").mockReturnValue(true);
 		makeHooksReturn([
-			makeWorkflow({ id: "wf-uuid-008", name: "WFDelErr", status: "draft" }),
+			makeWorkflow({
+				id: "wf-uuid-008",
+				name: "WFDelErr",
+				status: "draft",
+				current_major_version: 0,
+			}),
 		]);
 		mockDeleteWorkflow.mockRejectedValue(new Error("delete failed"));
 		render(<WorkflowList />);
@@ -730,5 +747,78 @@ describe("WorkflowList – editar desde dropdown", () => {
 		fireEvent.click(editBtn);
 
 		expect(mockPush).toHaveBeenCalledWith("/editor/wf-uuid-033");
+	});
+});
+
+// -------------------------------------------------------------------------
+// Clone via dropdown
+// -------------------------------------------------------------------------
+
+describe("WorkflowList – clonar", () => {
+	async function openDropdown(workflowName: string) {
+		const user = userEvent.setup();
+		const row = screen.getByText(workflowName).closest("tr")!;
+		const trigger = within(row).getByRole("button");
+		await user.click(trigger);
+	}
+
+	it("el botón Clonar siempre está disponible en el dropdown", async () => {
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-uuid-040", name: "WFClone", status: "published" }),
+		]);
+		render(<WorkflowList />);
+
+		await openDropdown("WFClone");
+		const cloneBtn = await screen.findByText("Clonar");
+		expect(cloneBtn).toBeDefined();
+	});
+
+	it("llama a cloneWorkflow y redirige al editor del nuevo workflow", async () => {
+		const { toast } = await import("sonner");
+		const clonedWf = makeWorkflow({
+			id: "cloned-uuid-001",
+			name: "Copy of WFClone",
+		});
+		mockCloneWorkflow.mockResolvedValue(clonedWf);
+
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-uuid-041", name: "WFClone2", status: "draft" }),
+		]);
+		render(<WorkflowList />);
+
+		await openDropdown("WFClone2");
+		const cloneBtn = await screen.findByText("Clonar");
+		fireEvent.click(cloneBtn);
+
+		await waitFor(() => {
+			expect(mockCloneWorkflow).toHaveBeenCalledWith("wf-uuid-041", {
+				jwt: "test-jwt",
+			});
+		});
+		await waitFor(() => {
+			expect(toast.success).toHaveBeenCalledWith('Copia de "WFClone2" creada');
+		});
+		expect(mockPush).toHaveBeenCalledWith("/editor/cloned-uuid-001");
+	});
+
+	it("muestra error toast cuando falla el clon", async () => {
+		const { toast } = await import("sonner");
+		mockCloneWorkflow.mockRejectedValue(new Error("clone failed"));
+
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-uuid-042", name: "WFCloneErr", status: "draft" }),
+		]);
+		render(<WorkflowList />);
+
+		await openDropdown("WFCloneErr");
+		const cloneBtn = await screen.findByText("Clonar");
+		fireEvent.click(cloneBtn);
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalledWith(
+				"Error al clonar workflow",
+				expect.any(Object),
+			);
+		});
 	});
 });

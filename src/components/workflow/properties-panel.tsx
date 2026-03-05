@@ -390,7 +390,7 @@ export function PropertiesPanel({
 							</Label>
 							<Input
 								id="workflow-version"
-								value={workflowMetadata.version}
+								value={workflowMetadata.version || "Sin publicar"}
 								readOnly
 								disabled
 								className="cursor-default opacity-60"

@@ -233,16 +233,11 @@ export function TopBar({
 	const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
 	const displayVersion = (() => {
-		// Use the authoritative API version when available
+		// Show version badge only when the workflow has been published at least once
 		if (currentMajorVersion !== undefined && currentMajorVersion >= 1) {
 			return `v${currentMajorVersion}`;
 		}
-		// Fall back to parsing metadata.version (legacy / unsaved workflows)
-		const match = workflowMetadata.version.match(/(\d+)/);
-		if (!match) return "v1";
-		const parsed = Number.parseInt(match[1], 10);
-		if (Number.isNaN(parsed) || parsed < 1) return "v1";
-		return `v${parsed}`;
+		return null;
 	})();
 
 	return (
@@ -293,7 +288,7 @@ export function TopBar({
 								<Pencil className="h-3 w-3" />
 							</Button>
 						</div>
-						{workflowMetadata.version && (
+						{displayVersion && (
 							<span className="rounded-full border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-foreground/70">
 								{displayVersion}
 							</span>

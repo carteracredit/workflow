@@ -256,7 +256,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [workflowStatus, setWorkflowStatus] = useState<
 		"draft" | "published" | "archived"
 	>("draft");
-	const [currentMajorVersion, setCurrentMajorVersion] = useState<number>(1);
+	const [currentMajorVersion, setCurrentMajorVersion] = useState<number>(0);
 	const [isLoadingFromApi, setIsLoadingFromApi] = useState(
 		workflowId !== undefined,
 	);
@@ -333,13 +333,16 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				if (cancelled) return;
 
 				setWorkflowStatus(wf.status ?? "draft");
-				setCurrentMajorVersion(wf.current_major_version ?? 1);
+				setCurrentMajorVersion(wf.current_major_version ?? 0);
 
 				// Build metadata from API data
 				const metadata: WorkflowMetadata = {
 					name: wf.name,
 					description: wf.description,
-					version: `${wf.current_major_version}.0.0`,
+					version:
+						wf.current_major_version > 0
+							? `${wf.current_major_version}.0.0`
+							: "",
 					author: "",
 					tags: [],
 					createdAt: wf.created_at,

@@ -7,6 +7,7 @@ import {
 	Search,
 	Pencil,
 	Trash2,
+	Copy,
 	MoreHorizontal,
 	Loader2,
 	AlertCircle,
@@ -49,6 +50,7 @@ import {
 	createWorkflow,
 	deleteWorkflow,
 	updateWorkflow,
+	cloneWorkflow,
 } from "@/lib/workflow-api/workflows";
 import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 import { slugify } from "@/lib/slugify";
@@ -248,6 +250,7 @@ export function WorkflowList() {
 	const [activeTab, setActiveTab] = useState("all");
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
+	const [cloningId, setCloningId] = useState<string | null>(null);
 
 	const { workflows, isLoading, error, mutate } = useWorkflows();
 
@@ -336,6 +339,26 @@ export function WorkflowList() {
 			});
 		} finally {
 			setDeletingId(null);
+		}
+	};
+
+	const handleClone = async (wf: Workflow) => {
+		if (!token) {
+			toast.error("No autenticado");
+			return;
+		}
+		setCloningId(wf.id);
+		try {
+			const cloned = await cloneWorkflow(wf.id, { jwt: token });
+			toast.success(`Copia de "${wf.name}" creada`);
+			mutate();
+			router.push(`/editor/${cloned.id}`);
+		} catch (err) {
+			toast.error("Error al clonar workflow", {
+				description: extractApiErrorMessage(err),
+			});
+		} finally {
+			setCloningId(null);
 		}
 	};
 
@@ -544,9 +567,11 @@ export function WorkflowList() {
 														variant="ghost"
 														size="icon"
 														className="h-8 w-8"
-														disabled={deletingId === wf.id}
+														disabled={
+															deletingId === wf.id || cloningId === wf.id
+														}
 													>
-														{deletingId === wf.id ? (
+														{deletingId === wf.id || cloningId === wf.id ? (
 															<Loader2 className="h-4 w-4 animate-spin" />
 														) : (
 															<MoreHorizontal className="h-4 w-4" />
@@ -572,13 +597,23 @@ export function WorkflowList() {
 														)}
 													</DropdownMenuItem>
 													<DropdownMenuSeparator />
-													<DropdownMenuItem
-														className="text-destructive focus:text-destructive"
-														onClick={() => handleDelete(wf)}
-													>
-														<Trash2 className="mr-2 h-4 w-4" />
-														Eliminar
+													<DropdownMenuItem onClick={() => handleClone(wf)}>
+														<Copy className="mr-2 h-4 w-4" />
+														Clonar
 													</DropdownMenuItem>
+													{wf.current_major_version === 0 &&
+														wf.status === "draft" && (
+															<>
+																<DropdownMenuSeparator />
+																<DropdownMenuItem
+																	className="text-destructive focus:text-destructive"
+																	onClick={() => handleDelete(wf)}
+																>
+																	<Trash2 className="mr-2 h-4 w-4" />
+																	Eliminar
+																</DropdownMenuItem>
+															</>
+														)}
 												</DropdownMenuContent>
 											</DropdownMenu>
 										</TableCell>
