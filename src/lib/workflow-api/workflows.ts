@@ -161,6 +161,27 @@ export async function deleteWorkflow(
 }
 
 /**
+ * Clones a workflow by ID.
+ * Returns the new workflow (a fresh draft named "Copy of {original}").
+ */
+export async function cloneWorkflow(
+	id: string,
+	options?: ApiCallOptions,
+): Promise<Workflow> {
+	const baseUrl = getWorkflowServiceUrl();
+
+	const { json } = await fetchJson<ApiResponse<Workflow>>(
+		`${baseUrl}/workflows/${id}/clone`,
+		{
+			method: "POST",
+			jwt: options?.jwt,
+		},
+	);
+
+	return json.result;
+}
+
+/**
  * Lists all published versions of a workflow.
  */
 export async function listWorkflowVersions(

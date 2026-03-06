@@ -14,24 +14,12 @@ import {
 	MenubarTrigger,
 } from "@/components/ui/menubar";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
 	Dialog,
 	DialogContent,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LanguageSwitcher, ThemeSwitcher } from "@algenium/blocks";
-import { useLanguage } from "@/components/LanguageProvider";
-import { useAuthSession } from "@/lib/auth/useAuthSession";
-import { getAuthAppUrl } from "@/lib/auth/config";
-import { logout } from "@/lib/auth/actions";
+import { SessionControls } from "@/components/SessionControls";
 import {
 	Save,
 	Upload,
@@ -46,19 +34,12 @@ import {
 	Bell,
 	Pencil,
 	ChevronRight,
-	User,
-	LogOut,
 	Keyboard,
 	ArrowLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
-
-const languages = [
-	{ key: "en", label: "EN", nativeName: "English" },
-	{ key: "es", label: "ES", nativeName: "Español" },
-];
 
 type ShortcutDefinition = {
 	label: string;
@@ -233,16 +214,11 @@ export function TopBar({
 	const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
 	const displayVersion = (() => {
-		// Use the authoritative API version when available
+		// Show version badge only when the workflow has been published at least once
 		if (currentMajorVersion !== undefined && currentMajorVersion >= 1) {
 			return `v${currentMajorVersion}`;
 		}
-		// Fall back to parsing metadata.version (legacy / unsaved workflows)
-		const match = workflowMetadata.version.match(/(\d+)/);
-		if (!match) return "v1";
-		const parsed = Number.parseInt(match[1], 10);
-		if (Number.isNaN(parsed) || parsed < 1) return "v1";
-		return `v${parsed}`;
+		return null;
 	})();
 
 	return (
@@ -293,7 +269,7 @@ export function TopBar({
 								<Pencil className="h-3 w-3" />
 							</Button>
 						</div>
-						{workflowMetadata.version && (
+						{displayVersion && (
 							<span className="rounded-full border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-foreground/70">
 								{displayVersion}
 							</span>
@@ -405,9 +381,7 @@ export function TopBar({
 						</MenubarMenu>
 					</Menubar>
 
-					<LanguageSwitcherWrapper />
-					<ThemeSwitcherWrapper />
-					<UserMenu />
+					<SessionControls />
 				</div>
 			</div>
 			<KeyboardShortcutsModal
@@ -415,111 +389,6 @@ export function TopBar({
 				onOpenChange={setShortcutsModalOpen}
 			/>
 		</div>
-	);
-}
-
-function LanguageSwitcherWrapper() {
-	const { t, language, setLanguage } = useLanguage();
-
-	return (
-		<LanguageSwitcher
-			languages={languages}
-			currentLanguage={language}
-			onLanguageChange={(key) => setLanguage(key as "en" | "es")}
-			labels={{ language: t("languageToggle") }}
-			showIcon
-		/>
-	);
-}
-
-function ThemeSwitcherWrapper() {
-	const { t } = useLanguage();
-
-	return (
-		<ThemeSwitcher
-			labels={{
-				theme: t("themeToggle"),
-				light: t("themeLight"),
-				dark: t("themeDark"),
-				system: t("themeSystem"),
-			}}
-		/>
-	);
-}
-
-function UserMenu() {
-	const { data: session } = useAuthSession();
-	const { t } = useLanguage();
-
-	const handleLogout = async () => {
-		await logout();
-	};
-
-	if (!session) {
-		return null;
-	}
-
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" className="relative h-10 w-10 rounded-full">
-					<Avatar className="h-10 w-10">
-						<AvatarImage
-							src={session.user.image || undefined}
-							alt={session.user.name}
-						/>
-						<AvatarFallback>
-							{session.user.name
-								?.split(" ")
-								.map((n) => n[0])
-								.join("")
-								.toUpperCase() || "U"}
-						</AvatarFallback>
-					</Avatar>
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent className="w-56" align="end">
-				<div className="flex items-center gap-2 p-2">
-					<Avatar className="h-8 w-8">
-						<AvatarImage
-							src={session.user.image || undefined}
-							alt={session.user.name}
-						/>
-						<AvatarFallback>
-							{session.user.name
-								?.split(" ")
-								.map((n) => n[0])
-								.join("")
-								.toUpperCase() || "U"}
-						</AvatarFallback>
-					</Avatar>
-					<div className="flex flex-col space-y-0.5">
-						<p className="text-sm font-medium">{session.user.name}</p>
-						<p className="text-xs text-muted-foreground">
-							{session.user.email}
-						</p>
-					</div>
-				</div>
-				<DropdownMenuSeparator />
-				<DropdownMenuItem asChild>
-					<a
-						href={`${getAuthAppUrl()}/settings`}
-						className="flex items-center gap-2 cursor-pointer"
-					>
-						<User className="h-4 w-4" />
-						{t("userAccount")}
-					</a>
-				</DropdownMenuItem>
-				<DropdownMenuSeparator />
-				<DropdownMenuItem
-					onClick={handleLogout}
-					className="flex items-center gap-2 cursor-pointer text-destructive"
-				>
-					<LogOut className="h-4 w-4" />
-					{t("userLogout")}
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
 	);
 }
 

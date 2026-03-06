@@ -438,3 +438,94 @@ describe("TopBar Integration", () => {
 		}
 	});
 });
+
+describe("TopBar version badge", () => {
+	const baseMetadata: WorkflowMetadata = {
+		name: "Test Workflow",
+		version: "",
+		description: "",
+		author: "",
+		tags: [],
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	};
+
+	const baseProps = {
+		onNew: vi.fn(),
+		onSave: vi.fn(),
+		onPublish: vi.fn(),
+		onExportJSON: vi.fn(),
+		onImportJSON: vi.fn(),
+		onLoadExample: vi.fn(),
+		onManageFlags: vi.fn(),
+		onToggleWorkflowProperties: vi.fn(),
+		selectedNodeIds: [],
+		selectedEdgeIds: [],
+		onCopy: vi.fn(),
+		onPaste: vi.fn(),
+		onUndo: vi.fn(),
+		onRedo: vi.fn(),
+		canUndo: false,
+		canRedo: false,
+		onDelete: vi.fn(),
+		onValidate: vi.fn(),
+		onPreview: vi.fn(),
+		onReset: vi.fn(),
+	};
+
+	it("should NOT show a version badge when currentMajorVersion is 0 (never published)", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar
+					{...baseProps}
+					workflowMetadata={{ ...baseMetadata, version: "" }}
+					currentMajorVersion={0}
+				/>
+			</LanguageProvider>,
+		);
+
+		expect(screen.queryByText(/^v\d+$/)).toBeNull();
+	});
+
+	it("should NOT show a version badge when currentMajorVersion is undefined (draft, not linked to API)", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar
+					{...baseProps}
+					workflowMetadata={{ ...baseMetadata, version: "" }}
+					currentMajorVersion={undefined}
+				/>
+			</LanguageProvider>,
+		);
+
+		expect(screen.queryByText(/^v\d+$/)).toBeNull();
+	});
+
+	it("should show version badge v1 when currentMajorVersion is 1", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar
+					{...baseProps}
+					workflowMetadata={{ ...baseMetadata, version: "1.0.0" }}
+					currentMajorVersion={1}
+				/>
+			</LanguageProvider>,
+		);
+
+		expect(screen.getByText("v1")).toBeInTheDocument();
+	});
+
+	it("should show version badge v3 when currentMajorVersion is 3", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar
+					{...baseProps}
+					workflowMetadata={{ ...baseMetadata, version: "3.0.0" }}
+					currentMajorVersion={3}
+				/>
+			</LanguageProvider>,
+		);
+
+		expect(screen.getByText("v3")).toBeInTheDocument();
+	});
+});
