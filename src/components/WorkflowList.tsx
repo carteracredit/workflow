@@ -56,6 +56,7 @@ import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 import { slugify } from "@/lib/slugify";
 import type { Workflow } from "@/lib/workflow-api/types";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
+import { SessionControls } from "@/components/SessionControls";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -378,10 +379,13 @@ export function WorkflowList() {
 							</p>
 						</div>
 					</div>
-					<Button onClick={() => setCreateDialogOpen(true)}>
-						<Plus className="mr-2 h-4 w-4" />
-						Nuevo Workflow
-					</Button>
+					<div className="flex items-center gap-2">
+						<Button onClick={() => setCreateDialogOpen(true)}>
+							<Plus className="mr-2 h-4 w-4" />
+							Nuevo Workflow
+						</Button>
+						<SessionControls />
+					</div>
 				</div>
 
 				{/* Stats chips */}

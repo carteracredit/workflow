@@ -13,6 +13,10 @@ import type { Workflow } from "@/lib/workflow-api/types";
 
 // ---------------------------------------------------------------------------
 // Module mocks
+
+vi.mock("@/components/SessionControls", () => ({
+	SessionControls: () => null,
+}));
 // ---------------------------------------------------------------------------
 
 const mockPush = vi.fn();
