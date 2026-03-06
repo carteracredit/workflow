@@ -1,3 +1,11 @@
+# [1.0.0-rc.18](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.17...v1.0.0-rc.18) (2026-03-06)
+
+
+### Features
+
+* add SessionControls component for user interaction ([62c8858](https://github.com/carteracredit/workflow/commit/62c8858cabcb39d96800db37b6ec254a2e4ebe96))
+* implement workflow cloning functionality in WorkflowList ([356a60e](https://github.com/carteracredit/workflow/commit/356a60e4d29e45e6435f2db657d68db8346ec3b6))
+
 # [1.0.0-rc.17](https://github.com/carteracredit/workflow/compare/v1.0.0-rc.16...v1.0.0-rc.17) (2026-03-04)
 
 
