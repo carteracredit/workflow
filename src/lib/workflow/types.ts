@@ -180,8 +180,8 @@ export interface WorkflowState {
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
 	flags: Flag[]; // Global flags for the workflow
-	selectedNodeId: string | null;
-	selectedEdgeId: string | null;
+	selectedNodeIds: string[]; // Multiple node selection support
+	selectedEdgeIds: string[]; // Multiple edge selection support
 	zoom: number;
 	pan: { x: number; y: number };
 	history: Array<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }>;

@@ -13,6 +13,7 @@ import type {
 import { NodeRenderer } from "./node-renderer";
 import { EdgeRenderer } from "./edge-renderer";
 import { Minimap } from "./minimap";
+import { estimateNodeDimensions } from "./node-metrics";
 import { Button } from "@/components/ui/button";
 import {
 	ZoomIn,
@@ -26,6 +27,10 @@ import {
 	MousePointer2,
 	Undo,
 	Redo,
+	Copy,
+	Clipboard,
+	Check,
+	FileCode,
 } from "lucide-react";
 import { findNearestPreviousCheckpoint } from "@/lib/workflow/graph-utils";
 import {
@@ -35,11 +40,129 @@ import {
 	isRetryEdge,
 } from "@/lib/workflow/connection-rules";
 import { cn } from "@/lib/utils";
+import {
+	serializeSelection,
+	deserializeSelection,
+	type CopiedSelection,
+} from "@/lib/workflow/copy-paste";
 
 const MULTI_OUTPUT_NODE_TYPES: WorkflowNode["type"][] = [
 	"Decision",
 	"Challenge",
 ];
+
+const GRID_BASE_SIZE = 24;
+export const DEFAULT_START_NODE_PAN = { x: 200, y: 100 };
+const EMPTY_STATE_NODE_HORIZONTAL_RATIO = 0.32;
+const EMPTY_STATE_NODE_VERTICAL_RATIO = 0.62;
+
+export { estimateNodeDimensions } from "./node-metrics";
+
+type EmptyStatePanInput = {
+	canvasWidth: number;
+	canvasHeight: number;
+	node: WorkflowNode;
+	zoom: number;
+};
+
+export const getEmptyStatePanTarget = ({
+	canvasWidth,
+	canvasHeight,
+	node,
+	zoom,
+}: EmptyStatePanInput) => {
+	const nodeSize = estimateNodeDimensions(node);
+	const desiredLeft = canvasWidth * EMPTY_STATE_NODE_HORIZONTAL_RATIO;
+	const desiredCenterY = canvasHeight * EMPTY_STATE_NODE_VERTICAL_RATIO;
+	const desiredTop = desiredCenterY - (nodeSize.height * zoom) / 2;
+
+	return {
+		x: Math.round(desiredLeft - node.position.x * zoom),
+		y: Math.round(desiredTop - node.position.y * zoom),
+	};
+};
+
+export const getCanvasGridStyle = (
+	pan: { x: number; y: number },
+	zoom: number,
+): React.CSSProperties => {
+	const safeZoom = Math.max(zoom, 0.1);
+	const gridSize = GRID_BASE_SIZE * safeZoom;
+	const backgroundSize = `${gridSize}px ${gridSize}px`;
+	const backgroundPosition = `${pan.x}px ${pan.y}px`;
+
+	return {
+		backgroundSize,
+		backgroundPosition,
+	};
+};
+
+type ShortcutEventLike = Pick<
+	KeyboardEvent,
+	"key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"
+>;
+
+export type ToolbarShortcutAction =
+	| "save"
+	| "reset"
+	| "validate"
+	| "preview"
+	| "publish"
+	| "export"
+	| "import"
+	| "flags"
+	| "settings";
+
+export const matchToolbarShortcut = (
+	event: ShortcutEventLike,
+): ToolbarShortcutAction | null => {
+	const isCtrlLikePressed = event.ctrlKey || event.metaKey;
+	if (!isCtrlLikePressed) {
+		return null;
+	}
+
+	const key = event.key.toLowerCase();
+	const hasAlt = event.altKey;
+	const hasShift = event.shiftKey;
+
+	if (!hasAlt && !hasShift && key === "s") {
+		return "save";
+	}
+
+	if (!hasAlt && !hasShift && key === "p") {
+		return "preview";
+	}
+
+	if (!hasAlt && hasShift && key === "v") {
+		return "validate";
+	}
+
+	if (!hasAlt && hasShift && key === "r") {
+		return "reset";
+	}
+
+	if (!hasAlt && hasShift && key === "p") {
+		return "publish";
+	}
+
+	if (!hasAlt && !hasShift && key === "e") {
+		return "export";
+	}
+
+	if (!hasAlt && !hasShift && key === "i") {
+		return "import";
+	}
+
+	if (!hasAlt && hasShift && key === "f") {
+		return "flags";
+	}
+
+	if (!hasAlt && !hasShift && key === ",") {
+		return "settings";
+	}
+
+	return null;
+};
 
 const getPortDescriptor = (
 	nodeType: WorkflowNode["type"],
@@ -54,17 +177,21 @@ const getPortDescriptor = (
 interface CanvasProps {
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
-	selectedNodeId: string | null;
-	selectedEdgeId: string | null;
+	selectedNodeIds: string[];
+	selectedEdgeIds: string[];
 	zoom: number;
 	pan: { x: number; y: number };
 	flags?: Flag[];
-	onUpdateNode: (nodeId: string, updates: Partial<WorkflowNode>) => void;
+	onUpdateNode: (
+		nodeId: string,
+		updates: Partial<WorkflowNode>,
+		options?: { recordHistory?: boolean },
+	) => void;
 	onDeleteNode: (nodeId: string) => void;
 	onAddEdge: (edge: WorkflowEdge) => void;
 	onDeleteEdge: (edgeId: string) => void;
-	onSelectNode: (nodeId: string | null) => void;
-	onSelectEdge: (edgeId: string | null) => void;
+	onSelectNodes: (nodeIds: string[]) => void;
+	onSelectEdges: (edgeIds: string[]) => void;
 	onUpdateZoom: (zoom: number) => void;
 	onUpdatePan: (pan: { x: number; y: number }) => void;
 	validationErrors: ValidationError[];
@@ -72,16 +199,24 @@ interface CanvasProps {
 	onReset?: () => void;
 	onValidate?: () => void;
 	onPreview?: () => void;
+	onGenerateCode?: () => void;
 	validationState?: {
 		status: "idle" | "valid" | "invalid";
 	};
+	onCopy?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
+	onPaste?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
+	onUndo?: () => void;
+	canUndo?: boolean;
+	onRedo?: () => void;
+	canRedo?: boolean;
+	onCommitHistory?: () => void;
 }
 
 export function Canvas({
 	nodes,
 	edges,
-	selectedNodeId,
-	selectedEdgeId,
+	selectedNodeIds,
+	selectedEdgeIds,
 	zoom,
 	pan,
 	flags = [],
@@ -89,8 +224,8 @@ export function Canvas({
 	onDeleteNode,
 	onAddEdge,
 	onDeleteEdge,
-	onSelectNode,
-	onSelectEdge,
+	onSelectNodes,
+	onSelectEdges,
 	onUpdateZoom,
 	onUpdatePan,
 	validationErrors,
@@ -98,19 +233,101 @@ export function Canvas({
 	onReset,
 	onValidate,
 	onPreview,
+	onGenerateCode,
 	validationState,
+	onCopy,
+	onPaste,
+	onUndo,
+	canUndo = false,
+	onRedo,
+	canRedo = false,
+	onCommitHistory,
 }: CanvasProps) {
 	const canvasRef = useRef<HTMLDivElement>(null);
+	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 	const [isPanning, setIsPanning] = useState(false);
 	const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 	const [isSpacePressed, setIsSpacePressed] = useState(false);
-	const [isPanModeLocked, setIsPanModeLocked] = useState(true);
+	const [isPanModeLocked, setIsPanModeLocked] = useState(false);
+	const [isShiftPressed, setIsShiftPressed] = useState(false);
 	const lastAutoScrolledNodeId = useRef<string | null>(null);
+	const copiedDataRef = useRef<CopiedSelection | null>(null);
+	const hasAutoPositionedEmptyState = useRef(false);
+	const [hasCopiedData, setHasCopiedData] = useState(false);
+	const [justCopied, setJustCopied] = useState(false);
+	const editorContainerRef = useRef<HTMLDivElement>(null);
+	const [isEditorFocused, setIsEditorFocused] = useState(true);
+	useEffect(() => {
+		const element = canvasRef.current;
+		if (!element) return;
+
+		const updateSize = () => {
+			const width = element.clientWidth;
+			const height = element.clientHeight;
+			setViewportSize((prev) =>
+				prev.width === width && prev.height === height
+					? prev
+					: { width, height },
+			);
+		};
+
+		updateSize();
+
+		if (typeof ResizeObserver !== "undefined") {
+			const observer = new ResizeObserver(() => updateSize());
+			observer.observe(element);
+			return () => observer.disconnect();
+		}
+
+		window.addEventListener("resize", updateSize);
+		return () => window.removeEventListener("resize", updateSize);
+	}, []);
+
+	useEffect(() => {
+		const syncFocusState = (target: EventTarget | null) => {
+			if (!editorContainerRef.current || !(target instanceof Node)) {
+				setIsEditorFocused(false);
+				return;
+			}
+			setIsEditorFocused(editorContainerRef.current.contains(target));
+		};
+
+		const handlePointerDown = (event: PointerEvent) => {
+			syncFocusState(event.target);
+		};
+
+		const handleFocusIn = (event: FocusEvent) => {
+			syncFocusState(event.target);
+		};
+
+		const handleWindowBlur = () => setIsEditorFocused(false);
+
+		window.addEventListener("pointerdown", handlePointerDown, true);
+		window.addEventListener("focusin", handleFocusIn);
+		window.addEventListener("blur", handleWindowBlur);
+
+		return () => {
+			window.removeEventListener("pointerdown", handlePointerDown, true);
+			window.removeEventListener("focusin", handleFocusIn);
+			window.removeEventListener("blur", handleWindowBlur);
+		};
+	}, []);
 
 	const dragRef = useRef<{
 		nodeId: string;
 		offsetX: number;
 		offsetY: number;
+		selectedNodeIds: string[]; // All selected nodes to move together
+		nodeOffsets: Map<string, { offsetX: number; offsetY: number }>; // Offsets for each node
+		hasMoved: boolean;
+	} | null>(null);
+
+	// Box selection state
+	const [boxSelection, setBoxSelection] = useState<{
+		startX: number;
+		startY: number;
+		currentX: number;
+		currentY: number;
 	} | null>(null);
 
 	const [connectingFrom, setConnectingFrom] = useState<{
@@ -123,77 +340,10 @@ export function Canvas({
 		null,
 	);
 
+	const showEmptyState = nodes.length <= 1 && edges.length === 0;
+
 	// Función auxiliar para calcular tamaño de nodo (debe coincidir con node-renderer)
-	const calculateNodeSize = useCallback((node: WorkflowNode) => {
-		const MIN_NODE_WIDTH = 180; // Reducido para permitir nodos más estrechos
-		const MAX_NODE_WIDTH = 320;
-		const MIN_NODE_HEIGHT = 60;
-		const PADDING_X = 16; // Restaurado
-		const ICON_CONTAINER_SIZE = 40;
-
-		const titleWidth = node.title.length * 9;
-		const descWidth = node.description ? node.description.length * 7.5 : 0;
-
-		// Para el cálculo en canvas, usamos una aproximación más simple
-		// El cálculo real se hace en node-renderer con acceso a flags
-		let flagsMaxWidth = 0;
-		if (node.type === "FlagChange" && node.config.flagChanges) {
-			const flagChanges = node.config.flagChanges as Array<{
-				flagId: string;
-				optionId: string;
-			}>;
-			// Aproximación: calcular ancho basado en texto promedio
-			flagChanges.forEach(() => {
-				// Aproximación conservadora: ~150px por badge en promedio
-				flagsMaxWidth = Math.max(flagsMaxWidth, 150);
-			});
-		}
-
-		const contentWidth =
-			Math.max(titleWidth, descWidth, flagsMaxWidth) +
-			ICON_CONTAINER_SIZE +
-			12 +
-			PADDING_X * 2;
-		const NODE_WIDTH = Math.max(
-			MIN_NODE_WIDTH,
-			Math.min(MAX_NODE_WIDTH, contentWidth),
-		);
-
-		const hasDescription = !!node.description;
-		const hasRoles = node.roles.length > 0;
-		const flagChangesCount =
-			node.type === "FlagChange" && node.config.flagChanges
-				? (
-						node.config.flagChanges as Array<{
-							flagId: string;
-							optionId: string;
-						}>
-					).length
-				: 0;
-		const hasSpecialBadges =
-			(node.type === "Reject" &&
-				(node.config.allowRetry as boolean) === true) ||
-			flagChangesCount > 0 ||
-			(node.type === "API" && node.config.failureHandling) ||
-			node.type === "Challenge";
-
-		let estimatedHeight = MIN_NODE_HEIGHT;
-		if (hasDescription) estimatedHeight += 22;
-		if (hasRoles) {
-			const rolesRows = Math.ceil(node.roles.length / 3); // Aproximación: 3 roles por fila
-			estimatedHeight += rolesRows * 28;
-		}
-		if (hasSpecialBadges) {
-			if (flagChangesCount > 0) {
-				const flagRows = Math.ceil(flagChangesCount / 2); // Aproximación: 2 flags por fila
-				estimatedHeight += flagRows * 28;
-			} else {
-				estimatedHeight += 28;
-			}
-		}
-
-		return { width: NODE_WIDTH, height: estimatedHeight };
-	}, []);
+	const calculateNodeSize = useCallback(estimateNodeDimensions, []);
 
 	const handleFitToView = useCallback(() => {
 		if (nodes.length === 0) return;
@@ -233,19 +383,22 @@ export function Canvas({
 	// Auto-scroll al seleccionar un nodo si está fuera de la vista
 	useEffect(() => {
 		// Solo ejecutar si cambió el nodo seleccionado (no por cambios en pan/zoom)
+		// Use first selected node for auto-scroll
+		const firstSelectedNodeId =
+			selectedNodeIds.length > 0 ? selectedNodeIds[0] : null;
 		if (
-			!selectedNodeId ||
-			selectedNodeId === lastAutoScrolledNodeId.current ||
+			!firstSelectedNodeId ||
+			firstSelectedNodeId === lastAutoScrolledNodeId.current ||
 			!canvasRef.current
 		) {
 			return;
 		}
 
-		const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+		const selectedNode = nodes.find((n) => n.id === firstSelectedNodeId);
 		if (!selectedNode) return;
 
 		// Marcar que ya procesamos este nodo
-		lastAutoScrolledNodeId.current = selectedNodeId;
+		lastAutoScrolledNodeId.current = firstSelectedNodeId;
 
 		// Calcular tamaño dinámico del nodo usando la función auxiliar
 		const nodeSize = calculateNodeSize(selectedNode);
@@ -301,14 +454,59 @@ export function Canvas({
 		if (needsUpdate) {
 			onUpdatePan({ x: newPanX, y: newPanY });
 		}
-	}, [selectedNodeId, nodes, zoom, pan, onUpdatePan, calculateNodeSize]);
+	}, [selectedNodeIds, nodes, zoom, pan, onUpdatePan, calculateNodeSize]);
 
 	// Resetear el ref cuando se deselecciona
 	useEffect(() => {
-		if (!selectedNodeId) {
+		if (selectedNodeIds.length === 0) {
 			lastAutoScrolledNodeId.current = null;
 		}
-	}, [selectedNodeId]);
+	}, [selectedNodeIds]);
+
+	useEffect(() => {
+		if (!showEmptyState) {
+			hasAutoPositionedEmptyState.current = false;
+			return;
+		}
+
+		if (hasAutoPositionedEmptyState.current || !canvasRef.current) {
+			return;
+		}
+
+		const approxDefaultPan =
+			Math.abs(pan.x - DEFAULT_START_NODE_PAN.x) < 1 &&
+			Math.abs(pan.y - DEFAULT_START_NODE_PAN.y) < 1;
+
+		if (!approxDefaultPan) {
+			return;
+		}
+
+		const startNode = nodes.find((node) => node.type === "Start") ?? nodes[0];
+		if (!startNode) {
+			return;
+		}
+
+		const rect = canvasRef.current.getBoundingClientRect();
+		if (!rect.width || !rect.height) {
+			return;
+		}
+
+		const targetPan = getEmptyStatePanTarget({
+			canvasWidth: rect.width,
+			canvasHeight: rect.height,
+			node: startNode,
+			zoom,
+		});
+
+		const needsUpdate =
+			Math.abs(targetPan.x - pan.x) > 1 || Math.abs(targetPan.y - pan.y) > 1;
+
+		if (needsUpdate) {
+			onUpdatePan(targetPan);
+		}
+
+		hasAutoPositionedEmptyState.current = true;
+	}, [showEmptyState, nodes, pan.x, pan.y, zoom, onUpdatePan]);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -360,12 +558,18 @@ export function Canvas({
 			if (e.code === "Space" && !isSpacePressed) {
 				setIsSpacePressed(true);
 			}
+			if (e.key === "Shift" && !isShiftPressed) {
+				setIsShiftPressed(true);
+			}
 		};
 
 		const handleKeyUp = (e: KeyboardEvent) => {
 			if (e.code === "Space") {
 				setIsSpacePressed(false);
 				setIsPanning(false);
+			}
+			if (e.key === "Shift") {
+				setIsShiftPressed(false);
 			}
 		};
 
@@ -376,20 +580,139 @@ export function Canvas({
 			window.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("keyup", handleKeyUp);
 		};
-	}, [isSpacePressed]);
+	}, [isSpacePressed, isShiftPressed]);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Delete" && selectedNodeId) {
-				const node = nodes.find((n) => n.id === selectedNodeId);
-				if (node?.type === "Start") {
-					console.warn("[v0] Cannot delete Start node - it is required");
+			// Check if user is typing in an input/textarea
+			const activeElement = document.activeElement;
+			const isInputActive =
+				activeElement &&
+				(activeElement.tagName === "INPUT" ||
+					activeElement.tagName === "TEXTAREA" ||
+					activeElement.getAttribute("contenteditable") === "true");
+
+			const isCtrlLikePressed = e.ctrlKey || e.metaKey;
+			const key = e.key.toLowerCase();
+
+			// Toolbar shortcuts (save, reset, validate, preview) work globally
+			if (!isInputActive) {
+				const toolbarAction = matchToolbarShortcut(e);
+				if (toolbarAction) {
+					e.preventDefault();
+					if (toolbarAction === "save") {
+						onSave?.();
+					} else if (toolbarAction === "reset") {
+						onReset?.();
+					} else if (toolbarAction === "validate") {
+						onValidate?.();
+					} else if (toolbarAction === "preview") {
+						onPreview?.();
+					}
+					// Los demás shortcuts (publish, export, import, flags, settings) se manejan en WorkflowEditor
 					return;
 				}
-				onDeleteNode(selectedNodeId);
 			}
-			if (e.key === "Delete" && selectedEdgeId) {
-				onDeleteEdge(selectedEdgeId);
+
+			// Editor-specific shortcuts only work when editor is focused
+			if (!isEditorFocused) {
+				return;
+			}
+
+			// Handle tool selection (V key)
+			if (
+				!isInputActive &&
+				!isCtrlLikePressed &&
+				key === "v" &&
+				!e.shiftKey &&
+				!e.altKey
+			) {
+				e.preventDefault();
+				activateSelectionMode();
+				return;
+			}
+
+			// Handle Undo/Redo shortcuts
+			if (isCtrlLikePressed && !isInputActive) {
+				if (key === "z") {
+					e.preventDefault();
+					if (e.shiftKey) {
+						onRedo?.();
+					} else {
+						onUndo?.();
+					}
+					return;
+				}
+
+				if (key === "y") {
+					e.preventDefault();
+					onRedo?.();
+					return;
+				}
+			}
+
+			// Handle Copy (Ctrl/Cmd+C)
+			if (
+				isCtrlLikePressed &&
+				key === "c" &&
+				!isInputActive &&
+				!e.shiftKey &&
+				!e.altKey
+			) {
+				e.preventDefault();
+				if (
+					onCopy &&
+					(selectedNodeIds.length > 0 || selectedEdgeIds.length > 0)
+				) {
+					const selection = serializeSelection(
+						selectedNodeIds,
+						selectedEdgeIds,
+						nodes,
+						edges,
+					);
+					if (selection) {
+						copiedDataRef.current = selection;
+						setHasCopiedData(true);
+						setJustCopied(true);
+						onCopy(selection.nodes, selection.edges);
+						// Reset visual feedback after 1.5 seconds
+						setTimeout(() => {
+							setJustCopied(false);
+						}, 1500);
+					}
+				}
+				return;
+			}
+
+			// Handle Paste (Ctrl/Cmd+V)
+			if (
+				isCtrlLikePressed &&
+				key === "v" &&
+				!isInputActive &&
+				!e.shiftKey &&
+				!e.altKey
+			) {
+				e.preventDefault();
+				if (onPaste && copiedDataRef.current) {
+					const { nodes: pastedNodes, edges: pastedEdges } =
+						deserializeSelection(copiedDataRef.current, nodes);
+					onPaste(pastedNodes, pastedEdges);
+				}
+				return;
+			}
+
+			if (e.key === "Delete") {
+				// Delete all selected nodes (except Start nodes)
+				selectedNodeIds.forEach((nodeId) => {
+					const node = nodes.find((n) => n.id === nodeId);
+					if (node && node.type !== "Start") {
+						onDeleteNode(nodeId);
+					}
+				});
+				// Delete all selected edges
+				selectedEdgeIds.forEach((edgeId) => {
+					onDeleteEdge(edgeId);
+				});
 			}
 			if (e.key === "1") {
 				onUpdateZoom(Math.max(0.1, zoom - 0.1));
@@ -400,9 +723,6 @@ export function Canvas({
 			if (e.key === "f" || e.key === "F") {
 				handleFitToView();
 			}
-			if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-				e.preventDefault();
-			}
 			if (e.key === "Escape" && connectingFrom) {
 				setConnectingFrom(null);
 				setTempEdgeTo(null);
@@ -412,8 +732,8 @@ export function Canvas({
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [
-		selectedNodeId,
-		selectedEdgeId,
+		selectedNodeIds,
+		selectedEdgeIds,
 		connectingFrom,
 		zoom,
 		onDeleteNode,
@@ -421,6 +741,16 @@ export function Canvas({
 		onUpdateZoom,
 		handleFitToView,
 		nodes,
+		edges,
+		onCopy,
+		onPaste,
+		onUndo,
+		onRedo,
+		onSave,
+		onReset,
+		onValidate,
+		onPreview,
+		isEditorFocused,
 	]);
 
 	const startPanning = useCallback(
@@ -431,7 +761,7 @@ export function Canvas({
 		[pan.x, pan.y],
 	);
 
-	const deactivatePanMode = useCallback(() => {
+	const activateSelectionMode = useCallback(() => {
 		setIsPanModeLocked(false);
 		setIsPanning(false);
 	}, []);
@@ -461,19 +791,18 @@ export function Canvas({
 					(target.tagName === "g" &&
 						!target.classList.contains("workflow-edge"))); // Grupos SVG vacíos
 
-			if (isCanvasBackground) {
-				onSelectNode(null);
-				onSelectEdge(null);
-			}
-
 			// Activar panning si:
 			// 1. Botón del medio del mouse
-			// 2. Space + clic izquierdo
-			// 3. Clic izquierdo en el fondo del canvas (manita) - solo si no fue manejado por handlers hijos
+			// 2. Space + clic izquierdo (temporal, override del modo actual)
+			// 3. Clic izquierdo en el fondo del canvas solo si pan mode está bloqueado (manita activa)
 			const shouldPanWithLeftButton =
 				e.button === 0 && (isSpacePressed || isPanModeLocked);
 			const shouldPanByBackgroundClick =
-				e.button === 0 && isCanvasBackground && target === e.currentTarget;
+				e.button === 0 &&
+				isCanvasBackground &&
+				target === e.currentTarget &&
+				isPanModeLocked &&
+				!isSpacePressed; // No panear si space está presionado (se maneja arriba)
 
 			if (
 				e.button === 1 ||
@@ -482,9 +811,41 @@ export function Canvas({
 			) {
 				e.preventDefault();
 				startPanning(e.clientX, e.clientY);
+			} else if (
+				e.button === 0 &&
+				isCanvasBackground &&
+				!isPanModeLocked &&
+				!isSpacePressed
+			) {
+				// Start box selection on canvas background in selection mode
+				const rect = canvasRef.current?.getBoundingClientRect();
+				if (rect) {
+					const startX = (e.clientX - rect.left - pan.x) / zoom;
+					const startY = (e.clientY - rect.top - pan.y) / zoom;
+					setBoxSelection({
+						startX,
+						startY,
+						currentX: startX,
+						currentY: startY,
+					});
+					// Clear selection if not holding shift (use e.shiftKey for reliable detection)
+					if (!e.shiftKey && !isShiftPressed) {
+						onSelectNodes([]);
+						onSelectEdges([]);
+					}
+				}
 			}
 		},
-		[onSelectNode, onSelectEdge, isSpacePressed, isPanModeLocked, startPanning],
+		[
+			onSelectNodes,
+			onSelectEdges,
+			isSpacePressed,
+			isPanModeLocked,
+			isShiftPressed,
+			startPanning,
+			zoom,
+			pan,
+		],
 	);
 
 	const handleMouseMove = useCallback(
@@ -497,6 +858,21 @@ export function Canvas({
 				return;
 			}
 
+			// Update box selection visual only (don't update selection until mouse up)
+			if (boxSelection) {
+				const rect = canvasRef.current?.getBoundingClientRect();
+				if (rect) {
+					const currentX = (e.clientX - rect.left - pan.x) / zoom;
+					const currentY = (e.clientY - rect.top - pan.y) / zoom;
+					setBoxSelection({
+						...boxSelection,
+						currentX,
+						currentY,
+					});
+				}
+				return;
+			}
+
 			if (dragRef.current) {
 				const rect = canvasRef.current?.getBoundingClientRect();
 				if (!rect) return;
@@ -504,12 +880,44 @@ export function Canvas({
 				const cursorX = (e.clientX - rect.left - pan.x) / zoom;
 				const cursorY = (e.clientY - rect.top - pan.y) / zoom;
 
-				const newX = cursorX - dragRef.current.offsetX;
-				const newY = cursorY - dragRef.current.offsetY;
-
-				onUpdateNode(dragRef.current.nodeId, {
-					position: { x: newX, y: newY },
-				});
+				// Move all selected nodes together
+				if (
+					dragRef.current.selectedNodeIds &&
+					dragRef.current.selectedNodeIds.length > 0 &&
+					dragRef.current.nodeOffsets &&
+					dragRef.current.nodeOffsets.size > 0
+				) {
+					// Multi-node drag: move all selected nodes
+					dragRef.current.selectedNodeIds.forEach((nodeId) => {
+						const offset = dragRef.current?.nodeOffsets?.get(nodeId);
+						if (offset) {
+							const newX = cursorX - offset.offsetX;
+							const newY = cursorY - offset.offsetY;
+							onUpdateNode(
+								nodeId,
+								{
+									position: { x: newX, y: newY },
+								},
+								{ recordHistory: false },
+							);
+						}
+					});
+					if (dragRef.current) {
+						dragRef.current.hasMoved = true;
+					}
+				} else {
+					// Fallback for single node drag (backward compatibility)
+					const newX = cursorX - dragRef.current.offsetX;
+					const newY = cursorY - dragRef.current.offsetY;
+					onUpdateNode(
+						dragRef.current.nodeId,
+						{
+							position: { x: newX, y: newY },
+						},
+						{ recordHistory: false },
+					);
+					dragRef.current.hasMoved = true;
+				}
 			}
 
 			if (connectingFrom) {
@@ -522,13 +930,115 @@ export function Canvas({
 				}
 			}
 		},
-		[isPanning, panStart, zoom, pan, connectingFrom, onUpdatePan, onUpdateNode],
+		[
+			isPanning,
+			panStart,
+			zoom,
+			pan,
+			connectingFrom,
+			boxSelection,
+			isShiftPressed,
+			selectedNodeIds,
+			selectedEdgeIds,
+			nodes,
+			edges,
+			onUpdatePan,
+			onUpdateNode,
+			onSelectNodes,
+			onSelectEdges,
+			calculateNodeSize,
+		],
 	);
 
 	const handleMouseUp = useCallback(() => {
+		const dragSession = dragRef.current;
+		// Finalize box selection if active
+		if (boxSelection) {
+			const minX = Math.min(boxSelection.startX, boxSelection.currentX);
+			const maxX = Math.max(boxSelection.startX, boxSelection.currentX);
+			const minY = Math.min(boxSelection.startY, boxSelection.currentY);
+			const maxY = Math.max(boxSelection.startY, boxSelection.currentY);
+
+			// Find nodes and edges within selection box
+			const selectedNodeIdsInBox: string[] = [];
+			const selectedEdgeIdsInBox: string[] = [];
+
+			nodes.forEach((node) => {
+				const nodeSize = calculateNodeSize(node);
+				const nodeLeft = node.position.x;
+				const nodeRight = node.position.x + nodeSize.width;
+				const nodeTop = node.position.y;
+				const nodeBottom = node.position.y + nodeSize.height;
+
+				// Check if node intersects with selection box
+				if (
+					nodeRight >= minX &&
+					nodeLeft <= maxX &&
+					nodeBottom >= minY &&
+					nodeTop <= maxY
+				) {
+					selectedNodeIdsInBox.push(node.id);
+				}
+			});
+
+			// For edges, check if both endpoints are in the box
+			edges.forEach((edge) => {
+				const fromNode = nodes.find((n) => n.id === edge.from);
+				const toNode = nodes.find((n) => n.id === edge.to);
+				if (fromNode && toNode) {
+					const fromNodeSize = calculateNodeSize(fromNode);
+					const toNodeSize = calculateNodeSize(toNode);
+					const fromInBox =
+						fromNode.position.x + fromNodeSize.width / 2 >= minX &&
+						fromNode.position.x + fromNodeSize.width / 2 <= maxX &&
+						fromNode.position.y + fromNodeSize.height / 2 >= minY &&
+						fromNode.position.y + fromNodeSize.height / 2 <= maxY;
+					const toInBox =
+						toNode.position.x + toNodeSize.width / 2 >= minX &&
+						toNode.position.x + toNodeSize.width / 2 <= maxX &&
+						toNode.position.y + toNodeSize.height / 2 >= minY &&
+						toNode.position.y + toNodeSize.height / 2 <= maxY;
+
+					if (fromInBox && toInBox) {
+						selectedEdgeIdsInBox.push(edge.id);
+					}
+				}
+			});
+
+			// Update selection (add to existing if shift pressed, replace otherwise)
+			if (isShiftPressed) {
+				const newNodeIds = [
+					...new Set([...selectedNodeIds, ...selectedNodeIdsInBox]),
+				];
+				const newEdgeIds = [
+					...new Set([...selectedEdgeIds, ...selectedEdgeIdsInBox]),
+				];
+				onSelectNodes(newNodeIds);
+				onSelectEdges(newEdgeIds);
+			} else {
+				onSelectNodes(selectedNodeIdsInBox);
+				onSelectEdges(selectedEdgeIdsInBox);
+			}
+		}
+
 		setIsPanning(false);
+		if (dragSession?.hasMoved) {
+			onCommitHistory?.();
+		}
 		dragRef.current = null;
-	}, []);
+		setBoxSelection(null);
+	}, [
+		boxSelection,
+		isShiftPressed,
+		selectedNodeIds,
+		selectedEdgeIds,
+		nodes,
+		edges,
+		onSelectNodes,
+		onSelectEdges,
+		calculateNodeSize,
+		onCommitHistory,
+	]);
 
 	const handleNodeMouseDown = useCallback(
 		(nodeId: string, e: React.MouseEvent) => {
@@ -548,21 +1058,79 @@ export function Canvas({
 			const cursorX = (e.clientX - rect.left - pan.x) / zoom;
 			const cursorY = (e.clientY - rect.top - pan.y) / zoom;
 
-			dragRef.current = {
-				nodeId,
-				offsetX: cursorX - node.position.x,
-				offsetY: cursorY - node.position.y,
-			};
+			// Use e.shiftKey for more reliable shift detection
+			const shiftKeyPressed = e.shiftKey || isShiftPressed;
 
-			onSelectNode(nodeId);
+			// Handle multi-selection with shift key
+			let nodesToSelect: string[];
+			if (shiftKeyPressed) {
+				// Toggle node in selection
+				if (selectedNodeIds.includes(nodeId)) {
+					nodesToSelect = selectedNodeIds.filter((id) => id !== nodeId);
+				} else {
+					nodesToSelect = [...selectedNodeIds, nodeId];
+				}
+				// Don't clear edge selection when using shift - allow mixed selection
+			} else {
+				// If clicking on a node that's already selected, keep all selected nodes
+				// Otherwise, replace selection with just this node
+				if (selectedNodeIds.includes(nodeId)) {
+					// Keep all selected nodes - don't change selection
+					// This allows dragging all selected nodes together
+					nodesToSelect = selectedNodeIds;
+				} else {
+					// Replace selection with just this node
+					nodesToSelect = [nodeId];
+				}
+				// Clear edge selection only on single click (non-shift)
+				onSelectEdges([]);
+			}
+			onSelectNodes(nodesToSelect);
+
+			// Setup drag for all selected nodes (only if the clicked node is in the selection)
+			// If we removed the node from selection, don't drag anything
+			if (nodesToSelect.includes(nodeId)) {
+				// Use the updated selection for dragging
+				const nodesToDrag = nodesToSelect;
+				const nodeOffsets = new Map<
+					string,
+					{ offsetX: number; offsetY: number }
+				>();
+
+				nodesToDrag.forEach((id) => {
+					const n = nodes.find((nd) => nd.id === id);
+					if (n) {
+						nodeOffsets.set(id, {
+							offsetX: cursorX - n.position.x,
+							offsetY: cursorY - n.position.y,
+						});
+					}
+				});
+
+				dragRef.current = {
+					nodeId,
+					offsetX: cursorX - node.position.x,
+					offsetY: cursorY - node.position.y,
+					selectedNodeIds: nodesToDrag,
+					nodeOffsets,
+					hasMoved: false,
+				};
+			} else {
+				// Node was removed from selection, don't start dragging
+				dragRef.current = null;
+			}
 		},
 		[
-			onSelectNode,
+			onSelectNodes,
+			onSelectEdges,
 			nodes,
 			zoom,
 			pan,
 			isSpacePressed,
 			isPanModeLocked,
+			isShiftPressed,
+			selectedNodeIds,
+			selectedEdgeIds,
 			startPanning,
 		],
 	);
@@ -757,15 +1325,21 @@ export function Canvas({
 
 	const isHandToolActive = isPanning || isSpacePressed || isPanModeLocked;
 
-	const showEmptyState = nodes.length <= 1 && edges.length === 0;
-
 	return (
-		<div className="relative h-full w-full select-none overflow-hidden">
+		<div
+			ref={editorContainerRef}
+			className="relative h-full w-full select-none overflow-hidden"
+		>
 			{/* Toolbar superior */}
-			{(onSave || onReset || onValidate || onPreview) && (
+			{(onSave || onReset || onValidate || onPreview || onGenerateCode) && (
 				<div className="absolute top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-border/50 bg-card/95 px-3 py-2 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-card/90">
 					{onSave && (
-						<Button variant="ghost" size="sm" onClick={onSave} title="Guardar">
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={onSave}
+							title="Guardar (Ctrl/Cmd+S)"
+						>
 							<Save className="h-4 w-4" />
 						</Button>
 					)}
@@ -774,7 +1348,7 @@ export function Canvas({
 							variant="ghost"
 							size="sm"
 							onClick={onReset}
-							title="Reiniciar"
+							title="Reiniciar (Ctrl/Cmd+Shift+Alt+R)"
 						>
 							<Trash2 className="h-4 w-4" />
 						</Button>
@@ -786,7 +1360,7 @@ export function Canvas({
 							}
 							size="sm"
 							onClick={onValidate}
-							title="Validar"
+							title="Validar (Ctrl/Cmd+Shift+V)"
 						>
 							<CheckCircle className="h-4 w-4" />
 						</Button>
@@ -796,9 +1370,19 @@ export function Canvas({
 							variant="ghost"
 							size="sm"
 							onClick={onPreview}
-							title="Preview"
+							title="Preview (Ctrl/Cmd+P)"
 						>
 							<Play className="h-4 w-4" />
+						</Button>
+					)}
+					{onGenerateCode && (
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={onGenerateCode}
+							title="Generar código Cloudflare Workflow"
+						>
+							<FileCode className="h-4 w-4" />
 						</Button>
 					)}
 				</div>
@@ -808,7 +1392,12 @@ export function Canvas({
 				ref={canvasRef}
 				className="canvas-grid h-full w-full"
 				style={{
-					cursor: isPanning ? "grabbing" : isSpacePressed ? "grab" : "grab",
+					...getCanvasGridStyle(pan, zoom),
+					cursor: isPanning
+						? "grabbing"
+						: isSpacePressed || isPanModeLocked
+							? "grab"
+							: "default",
 				}}
 				onMouseDown={handleMouseDown}
 				onMouseMove={handleMouseMove}
@@ -830,12 +1419,33 @@ export function Canvas({
 							edge={edge}
 							nodes={nodes}
 							edges={edges}
-							selected={edge.id === selectedEdgeId}
+							selected={selectedEdgeIds.includes(edge.id)}
 							onSelect={(e) => {
 								e.stopPropagation();
 								console.warn("[v0] Edge selected:", edge.id);
-								onSelectNode(null);
-								onSelectEdge(edge.id);
+								// Use e.shiftKey for more reliable shift detection
+								const shiftKeyPressed = e.shiftKey || isShiftPressed;
+
+								// Handle multi-selection with shift key
+								if (shiftKeyPressed) {
+									// Toggle edge in selection
+									let newEdgeIds: string[];
+									if (selectedEdgeIds.includes(edge.id)) {
+										// Remove edge from selection
+										newEdgeIds = selectedEdgeIds.filter((id) => id !== edge.id);
+									} else {
+										// Add edge to selection
+										newEdgeIds = [...selectedEdgeIds, edge.id];
+									}
+									// Update edge selection
+									onSelectEdges(newEdgeIds);
+									// Don't clear node selection when using shift - allow mixed selection
+								} else {
+									// Single selection - replace current selection
+									onSelectEdges([edge.id]);
+									// Clear node selection only on single click (non-shift)
+									onSelectNodes([]);
+								}
 							}}
 							onDelete={() => {
 								console.warn("[v0] Edge deleted:", edge.id);
@@ -844,15 +1454,47 @@ export function Canvas({
 						/>
 					))}
 
-					{connectingFrom && tempEdgeTo && (
-						<g className="workflow-edge">
-							<path
-								d={`M ${connectingFrom.x} ${connectingFrom.y} C ${connectingFrom.x} ${connectingFrom.y + 100}, ${tempEdgeTo.x} ${tempEdgeTo.y - 100}, ${tempEdgeTo.x} ${tempEdgeTo.y}`}
-								stroke="var(--primary)"
-								strokeWidth={2}
-								fill="none"
-								strokeDasharray="5,5"
-								opacity={0.6}
+					{connectingFrom &&
+						tempEdgeTo &&
+						(() => {
+							const horizontalDistance = Math.abs(
+								tempEdgeTo.x - connectingFrom.x,
+							);
+							const direction = Math.sign(tempEdgeTo.x - connectingFrom.x) || 1;
+							const offset = Math.min(
+								Math.max(horizontalDistance * 0.4, 80),
+								200,
+							);
+							const controlPoint1X = connectingFrom.x + direction * offset;
+							const controlPoint2X = tempEdgeTo.x - direction * offset;
+
+							return (
+								<g className="workflow-edge">
+									<path
+										d={`M ${connectingFrom.x} ${connectingFrom.y} C ${controlPoint1X} ${connectingFrom.y}, ${controlPoint2X} ${tempEdgeTo.y}, ${tempEdgeTo.x} ${tempEdgeTo.y}`}
+										stroke="var(--primary)"
+										strokeWidth={2}
+										fill="none"
+										strokeDasharray="5,5"
+										opacity={0.6}
+										className="pointer-events-none"
+									/>
+								</g>
+							);
+						})()}
+
+					{/* Selection box */}
+					{boxSelection && (
+						<g className="selection-box">
+							<rect
+								x={Math.min(boxSelection.startX, boxSelection.currentX)}
+								y={Math.min(boxSelection.startY, boxSelection.currentY)}
+								width={Math.abs(boxSelection.currentX - boxSelection.startX)}
+								height={Math.abs(boxSelection.currentY - boxSelection.startY)}
+								fill="rgba(59, 130, 246, 0.1)"
+								stroke="rgba(59, 130, 246, 0.5)"
+								strokeWidth={1}
+								strokeDasharray="4,4"
 								className="pointer-events-none"
 							/>
 						</g>
@@ -875,10 +1517,10 @@ export function Canvas({
 						// Detectar si este checkpoint está siendo referenciado por un nodo API SELECCIONADO
 						const isReferencedCheckpoint =
 							node.type === "Checkpoint" &&
-							selectedNodeId !== null &&
+							selectedNodeIds.length > 0 &&
 							nodes.some(
 								(n) =>
-									n.id === selectedNodeId &&
+									selectedNodeIds.includes(n.id) &&
 									n.type === "API" &&
 									(
 										n.config.failureHandling as
@@ -896,7 +1538,7 @@ export function Canvas({
 							<NodeRenderer
 								key={node.id}
 								node={node}
-								selected={node.id === selectedNodeId}
+								selected={selectedNodeIds.includes(node.id)}
 								errors={nodeErrors}
 								connecting={connectingFrom?.nodeId === node.id}
 								highlightCheckpoint={isReferencedCheckpoint}
@@ -911,9 +1553,9 @@ export function Canvas({
 				</div>
 
 				{showEmptyState && (
-					<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-						<div className="pointer-events-auto max-w-md rounded-2xl border border-dashed border-border/70 bg-background/95 p-6 text-center shadow-2xl">
-							<p className="text-sm font-semibold text-foreground">
+					<div className="pointer-events-none absolute inset-0 flex items-start justify-start px-4 pt-6 sm:px-8 sm:pt-8 lg:px-14 lg:pt-10">
+						<div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-dashed border-border/70 bg-background/95 p-6 text-left shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:max-w-md">
+							<p className="text-sm font-semibold uppercase tracking-wide text-primary">
 								Construye tu primer flujo
 							</p>
 							<p className="mt-2 text-sm text-muted-foreground">
@@ -921,28 +1563,30 @@ export function Canvas({
 								el lienzo para comenzar. Puedes arrastrar elementos para
 								reorganizarlos libremente.
 							</p>
-							<div className="mt-4 grid grid-cols-2 gap-3 text-left text-xs text-muted-foreground">
-								<div className="rounded-md bg-muted/60 p-2">
+							<div className="mt-4 grid grid-cols-1 gap-3 text-left text-xs text-muted-foreground sm:grid-cols-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">
 										Arrastrar lienzo
 									</p>
-									<p className="mt-1">
+									<p className="mt-1 text-[11px] sm:text-xs">
 										Mantén presionada la barra espaciadora y arrastra.
 									</p>
 								</div>
-								<div className="rounded-md bg-muted/60 p-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">Zoom preciso</p>
-									<p className="mt-1">Ctrl/⌘ + scroll para acercar o alejar.</p>
+									<p className="mt-1 text-[11px] sm:text-xs">
+										Ctrl/⌘ + scroll para acercar o alejar.
+									</p>
 								</div>
-								<div className="rounded-md bg-muted/60 p-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">Atajos útiles</p>
-									<p className="mt-1">
+									<p className="mt-1 text-[11px] sm:text-xs">
 										1 / 2 ajustan zoom · F centra el flujo.
 									</p>
 								</div>
-								<div className="rounded-md bg-muted/60 p-2">
+								<div className="rounded-md bg-muted/60 p-3">
 									<p className="font-semibold text-foreground">Conexiones</p>
-									<p className="mt-1">
+									<p className="mt-1 text-[11px] sm:text-xs">
 										Haz clic en los conectores para unir nodos.
 									</p>
 								</div>
@@ -952,13 +1596,14 @@ export function Canvas({
 				)}
 			</div>
 
-			{/* Minimap - esquina inferior izquierda */}
-			<div className="absolute bottom-4 left-4">
+			{/* Minimap - esquina inferior derecha */}
+			<div className="absolute bottom-4 right-4 flex flex-col items-end gap-2">
 				<Minimap
 					nodes={nodes}
 					edges={edges}
 					zoom={zoom}
 					pan={pan}
+					viewportSize={viewportSize}
 					onUpdatePan={onUpdatePan}
 				/>
 			</div>
@@ -1002,13 +1647,20 @@ export function Canvas({
 					<Button
 						size="icon"
 						variant="ghost"
-						className="h-8 w-8"
+						className={cn(
+							"h-8 w-8 transition-colors",
+							!isHandToolActive &&
+								"border border-primary/30 bg-primary/10 text-primary shadow-inner ring-1 ring-primary/30",
+						)}
 						title="Herramienta de selección (puntero)"
 						aria-label="Herramienta de selección (puntero)"
 						aria-pressed={!isHandToolActive}
-						onClick={deactivatePanMode}
+						data-state={!isHandToolActive ? "active" : "inactive"}
+						onClick={activateSelectionMode}
 					>
-						<MousePointer2 className="h-4 w-4" />
+						<MousePointer2
+							className={cn("h-4 w-4", !isHandToolActive && "text-primary")}
+						/>
 					</Button>
 					<div className="mx-1 h-6 w-px bg-border" />
 					<Button
@@ -1016,7 +1668,9 @@ export function Canvas({
 						variant="ghost"
 						className="h-8 w-8"
 						title="Deshacer (Ctrl+Z)"
-						disabled
+						disabled={!canUndo}
+						aria-disabled={!canUndo}
+						onClick={onUndo}
 					>
 						<Undo className="h-4 w-4" />
 					</Button>
@@ -1024,10 +1678,71 @@ export function Canvas({
 						size="icon"
 						variant="ghost"
 						className="h-8 w-8"
-						title="Rehacer (Ctrl+Y)"
-						disabled
+						title="Rehacer (Ctrl+Y / Ctrl+Shift+Z)"
+						disabled={!canRedo}
+						aria-disabled={!canRedo}
+						onClick={onRedo}
 					>
 						<Redo className="h-4 w-4" />
+					</Button>
+					<div className="mx-1 h-6 w-px bg-border" />
+					<Button
+						size="icon"
+						variant="ghost"
+						className={cn(
+							"h-8 w-8 transition-colors",
+							justCopied &&
+								"border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400",
+						)}
+						title={justCopied ? "¡Copiado!" : "Copiar (Ctrl/Cmd+C)"}
+						disabled={
+							selectedNodeIds.length === 0 && selectedEdgeIds.length === 0
+						}
+						onClick={() => {
+							if (
+								onCopy &&
+								(selectedNodeIds.length > 0 || selectedEdgeIds.length > 0)
+							) {
+								const selection = serializeSelection(
+									selectedNodeIds,
+									selectedEdgeIds,
+									nodes,
+									edges,
+								);
+								if (selection) {
+									copiedDataRef.current = selection;
+									setHasCopiedData(true);
+									setJustCopied(true);
+									onCopy(selection.nodes, selection.edges);
+									// Reset visual feedback after 1.5 seconds
+									setTimeout(() => {
+										setJustCopied(false);
+									}, 1500);
+								}
+							}
+						}}
+					>
+						{justCopied ? (
+							<Check className="h-4 w-4" />
+						) : (
+							<Copy className="h-4 w-4" />
+						)}
+					</Button>
+					<Button
+						size="icon"
+						variant="ghost"
+						className="h-8 w-8"
+						title="Pegar (Ctrl/Cmd+V)"
+						disabled={!hasCopiedData || !copiedDataRef.current}
+						onClick={() => {
+							if (onPaste && copiedDataRef.current) {
+								const { nodes: pastedNodes, edges: pastedEdges } =
+									deserializeSelection(copiedDataRef.current, nodes);
+								onPaste(pastedNodes, pastedEdges);
+							}
+						}}
+					>
+						<Clipboard className="h-4 w-4" />
 					</Button>
 					<div className="mx-1 h-6 w-px bg-border" />
 					{/* Controles de zoom */}
