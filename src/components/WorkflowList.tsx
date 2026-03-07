@@ -614,9 +614,7 @@ export function WorkflowList() {
 				{/* Header - responsive: stack on small screens, wrap actions on narrow */}
 				<div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 					<div className="flex items-center gap-3 min-w-0 flex-shrink-0">
-						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-							<WorkflowIcon className="h-5 w-5 text-primary" />
-						</div>
+						<img src="/app-icon.svg" alt="" className="h-8 w-auto shrink-0" />
 						<div className="min-w-0">
 							<h1 className="text-xl font-bold tracking-tight truncate sm:text-2xl">
 								Workflows
@@ -801,7 +799,11 @@ export function WorkflowList() {
 						</div>
 					) : filtered.length === 0 ? (
 						<div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-							<WorkflowIcon className="h-10 w-10 opacity-30" />
+							<img
+								src="/app-icon.svg"
+								alt=""
+								className="h-10 w-auto opacity-30"
+							/>
 							<p className="text-sm">
 								{search || activeTab !== "all" || versionFilter !== "all"
 									? "No se encontraron workflows con esos filtros"

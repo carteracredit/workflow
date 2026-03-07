@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TopBar } from "./workflow/top-bar";
 import {
 	Canvas,
@@ -199,6 +199,75 @@ type HistoryChange = Partial<WorkflowState> & {
 	edges: WorkflowEdge[];
 	recordHistory?: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// Skeleton — mirrors the real editor chrome to eliminate CLS on load
+// ---------------------------------------------------------------------------
+
+function WorkflowEditorSkeleton({ showBack }: { showBack: boolean }) {
+	// Palette has ~12 node buttons across 3 categories with 2 separators
+	const PALETTE_ITEMS = 12;
+
+	return (
+		<div
+			className="flex h-screen flex-col bg-background"
+			role="status"
+			aria-live="polite"
+			aria-label="Cargando workflow"
+		>
+			{/* ── TopBar skeleton ──────────────────────────────────────────── */}
+			<div className="relative z-50 border-b border-border bg-card/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/70">
+				<div className="flex items-center gap-3 min-w-0">
+					{/* Back button */}
+					{showBack && <Skeleton className="h-8 w-8 shrink-0 rounded-md" />}
+
+					{/* Breadcrumb: icon › Workflow › name badge pencil version */}
+					<div className="flex shrink-0 items-center gap-2">
+						<Skeleton className="h-6 w-6 shrink-0" />
+						<Skeleton className="h-4 w-16" />
+						<Skeleton className="h-4 w-4" />
+						<Skeleton className="h-4 w-28" />
+						<Skeleton className="h-5 w-16 rounded-full" />
+						<Skeleton className="h-5 w-5 rounded-md" />
+					</div>
+
+					{/* Palette tools — scrollable area */}
+					<div className="relative flex min-w-0 flex-1 items-center overflow-hidden">
+						<div className="flex min-w-0 flex-1 items-center gap-2 px-1">
+							{Array.from({ length: PALETTE_ITEMS }).map((_, i) => (
+								<Skeleton key={i} className="h-10 w-10 shrink-0 rounded-md" />
+							))}
+						</div>
+					</div>
+
+					{/* Right actions: bell, Publicar, dots, lang, theme, avatar */}
+					<div className="flex shrink-0 items-center gap-1">
+						<Skeleton className="h-8 w-8 rounded-md" />
+						<Skeleton className="h-8 w-24 rounded-md" />
+						<Skeleton className="h-8 w-8 rounded-md" />
+						<Skeleton className="h-8 w-12 rounded-md" />
+						<Skeleton className="h-8 w-8 rounded-md" />
+						<Skeleton className="h-8 w-8 rounded-full" />
+					</div>
+				</div>
+			</div>
+
+			{/* ── Canvas area ──────────────────────────────────────────────── */}
+			{/* Dotted background matching the real canvas so nothing shifts */}
+			<div
+				className="flex-1"
+				style={{
+					backgroundImage:
+						"radial-gradient(circle, var(--border) 1px, transparent 1px)",
+					backgroundSize: "24px 24px",
+					backgroundColor: "var(--background)",
+				}}
+			/>
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------------------
 
 interface WorkflowEditorProps {
 	/** If provided, load this workflow from the API. */
@@ -998,14 +1067,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		(shouldShowWorkflowPanel || hasSingleNodeSelected || hasSingleEdgeSelected);
 
 	if (isLoadingFromApi) {
-		return (
-			<div className="flex h-screen items-center justify-center bg-background">
-				<div className="flex flex-col items-center gap-3 text-muted-foreground">
-					<Loader2 className="h-8 w-8 animate-spin" />
-					<span className="text-sm">Cargando workflow...</span>
-				</div>
-			</div>
-		);
+		return <WorkflowEditorSkeleton showBack={workflowId !== undefined} />;
 	}
 
 	return (
