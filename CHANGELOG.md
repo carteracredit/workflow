@@ -1,3 +1,12 @@
+# [1.1.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.1...v1.1.0-rc.2) (2026-03-07)
+
+
+### Features
+
+* enhance SessionControls with compact language and theme switchers ([fff9ad7](https://github.com/carteracredit/workflow/commit/fff9ad71e2ce63417c9c73f11cfdf2b495ea421b))
+* enhance workflow definition handling and API method support ([dc9a8f1](https://github.com/carteracredit/workflow/commit/dc9a8f1781026762f1469a46104d990ebc0ea6c4))
+* enhance WorkflowList with loading skeleton and improved user interaction ([43c67d8](https://github.com/carteracredit/workflow/commit/43c67d84a5723c542559ecc06f95e739d1a6bc44))
+
 # [1.1.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.0.0...v1.1.0-rc.1) (2026-03-07)
 
 
