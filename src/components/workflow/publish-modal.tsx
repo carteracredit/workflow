@@ -283,13 +283,13 @@ export function PublishModal({
 
 		// Build definition snapshot: always sent to keep the DB in sync with the
 		// editor state, even when the user never clicked "Save" explicitly.
-		const definitionSnapshot = JSON.stringify({
+		const definitionSnapshot = {
 			nodes,
 			edges,
 			flags,
 			zoom,
 			pan,
-		});
+		};
 
 		setDeployStatus("running");
 		try {

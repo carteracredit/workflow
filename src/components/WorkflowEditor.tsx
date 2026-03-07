@@ -205,6 +205,16 @@ interface WorkflowEditorProps {
 	workflowId?: string;
 }
 
+function buildDefinitionObject(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+	flags: Flag[],
+	zoom: number,
+	pan: { x: number; y: number },
+): Record<string, unknown> {
+	return { nodes, edges, flags, zoom, pan };
+}
+
 function buildDefinitionJson(
 	nodes: WorkflowNode[],
 	edges: WorkflowEdge[],
@@ -212,10 +222,10 @@ function buildDefinitionJson(
 	zoom: number,
 	pan: { x: number; y: number },
 ): string {
-	return JSON.stringify({ nodes, edges, flags, zoom, pan });
+	return JSON.stringify(buildDefinitionObject(nodes, edges, flags, zoom, pan));
 }
 
-function parseDefinitionJson(definition: string): {
+function parseDefinitionJson(definition: string | Record<string, unknown>): {
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
 	flags: Flag[];
@@ -223,7 +233,8 @@ function parseDefinitionJson(definition: string): {
 	pan: { x: number; y: number };
 } | null {
 	try {
-		const parsed = JSON.parse(definition);
+		const parsed =
+			typeof definition === "string" ? JSON.parse(definition) : definition;
 		return {
 			nodes: migrateLegacyNodes(parsed.nodes || []).map(
 				withDefaultStaleTimeout,
@@ -717,7 +728,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			return;
 		}
 
-		const definitionJson = buildDefinitionJson(
+		const definitionObj = buildDefinitionObject(
 			workflowState.nodes,
 			workflowState.edges,
 			workflowState.flags,
@@ -735,7 +746,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			current_major_version: extractMajorVersion(
 				workflowState.metadata.version,
 			),
-			definition: definitionJson,
+			definition: definitionObj,
 		};
 
 		try {
@@ -932,7 +943,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				// Auto-save definition to the DB so flags persist across page reloads.
 				// We use the computed nextState (not stale closure) and fire-and-forget.
 				if (workflowApiId && apiToken) {
-					const definitionJson = buildDefinitionJson(
+					const definitionObj = buildDefinitionObject(
 						nextState.nodes,
 						nextState.edges,
 						newFlags,
@@ -949,7 +960,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 								prev.metadata.name || "GeneratedWorkflow",
 							),
 							current_major_version: extractMajorVersion(prev.metadata.version),
-							definition: definitionJson,
+							definition: definitionObj,
 						},
 						{ jwt: apiToken },
 					).catch((err) => {

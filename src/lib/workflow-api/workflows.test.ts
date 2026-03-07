@@ -225,10 +225,10 @@ describe("workflow API functions", () => {
 			expect(body.environment).toBe("production");
 		});
 
-		it("sends definition in body when provided", async () => {
+		it("sends definition as object in body when provided", async () => {
 			mockFetch({ success: true, result: mockPublishResult });
 
-			const definition = JSON.stringify({ nodes: [], edges: [], flags: [] });
+			const definition = { nodes: [], edges: [], flags: [] };
 			await publishWorkflow("wf-uuid-001", {
 				code: "code",
 				environment: "development",
@@ -237,9 +237,9 @@ describe("workflow API functions", () => {
 
 			const call = vi.mocked(fetch).mock.calls[0];
 			const body = JSON.parse(call[1]?.body as string) as {
-				definition: string;
+				definition: Record<string, unknown>;
 			};
-			expect(body.definition).toBe(definition);
+			expect(body.definition).toEqual(definition);
 		});
 
 		it("returns deployment result on success", async () => {
