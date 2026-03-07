@@ -7,7 +7,7 @@ export interface Workflow {
 	slug: string;
 	description: string;
 	status: "draft" | "published" | "archived";
-	definition?: string | null;
+	definition?: Record<string, unknown> | null;
 	published_code_checksum?: string | null;
 	github_repo_url: string | null;
 	class_name: string;
@@ -24,7 +24,7 @@ export interface CreateWorkflowPayload {
 	slug: string;
 	description: string;
 	status?: "draft" | "published" | "archived";
-	definition?: string | null;
+	definition?: Record<string, unknown> | null;
 	github_repo_url?: string | null;
 	class_name: string;
 	current_major_version: number;
@@ -58,7 +58,7 @@ export interface WorkflowVersion {
 	id: string;
 	workflow_id: string;
 	version: number;
-	definition: string;
+	definition: Record<string, unknown>;
 	code_checksum: string;
 	created_by: string | null;
 	created_at: string;

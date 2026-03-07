@@ -151,7 +151,6 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
-	code += `${indent}\t// Collect form data from user\n`;
 	if (fields.length > 0) {
 		code += `${indent}\t// Fields: ${fields.join(", ")}\n`;
 	}
@@ -170,28 +169,29 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
  */
 function generateAPIStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	// Properties panel stores the URL as `config.url`; older nodes may still use
-	// `config.endpoint` – fall back gracefully for backwards compatibility.
 	const endpoint =
 		(node.config.url as string) ||
 		(node.config.endpoint as string) ||
 		"/api/endpoint";
-	const method = (node.config.method as string) || "POST";
+	const method = (node.config.method as string) || "GET";
 	const failureHandling = node.config.failureHandling as
 		| APIFailureHandling
 		| undefined;
+	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
 
 	let code = `${indent}// API Call: ${node.title}\n`;
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	code += `${indent}\tconst response = await fetch("${escapeString(endpoint)}", {\n`;
 	code += `${indent}\t\tmethod: "${method}",\n`;
-	code += `${indent}\t\theaders: { "Content-Type": "application/json" },\n`;
-	code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+	if (hasBody) {
+		code += `${indent}\t\theaders: { "Content-Type": "application/json" },\n`;
+		code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+	}
 	code += `${indent}\t});\n`;
 	code += `${indent}\tif (!response.ok) {\n`;
 	code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
 	code += `${indent}\t}\n`;
-	code += `${indent}\treturn response.json();\n`;
+	code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
 	code += `${indent}}`;
 
 	// Add retry configuration if specified
@@ -260,9 +260,8 @@ function generateCheckpointStep(node: WorkflowNode, indent: string): string {
 
 	let code = `${indent}// Checkpoint: ${node.title}${isSafe ? " (safe)" : ""}\n`;
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
-	code += `${indent}\t// State is automatically persisted at this point\n`;
 	if (isSafe) {
-		code += `${indent}\t// This is a safe checkpoint - workflow can be safely retried from here\n`;
+		code += `${indent}\t// Safe checkpoint - workflow can be safely retried from here\n`;
 	}
 	code += `${indent}\treturn { checkpoint: "${stepName}", timestamp: Date.now() };\n`;
 	code += `${indent}});\n`;
@@ -282,7 +281,7 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
-	code += `${indent}const ${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+	code += `${indent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
 	code += `${indent}\t"${stepName}",\n`;
 	code += `${indent}\t{\n`;
 	code += `${indent}\t\ttype: "${challengeType}",\n`;
@@ -560,7 +559,7 @@ function traverseBranch(
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			code += `${indent}if (${varName}.payload.accepted) {\n`;
+			code += `${indent}if ((${varName} as { payload: { accepted: boolean } }).payload.accepted) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(
@@ -713,6 +712,19 @@ export function generateWorkflowCode(
 		code += `> {\n`;
 	}
 	code += `\tasync run(\n\t\tevent: WorkflowEvent<WorkflowParams>,\n\t\tstep: WorkflowStep,\n\t): Promise<unknown> {\n`;
+
+	// Declare let variables only for Challenge nodes whose result is used in the
+	// generated if/else branch (varName.payload.accepted).
+	// Other output nodes (API, Form, Transform, Checkpoint) use inline const
+	// assignment inside their step.do() callback, so no hoisted let is needed.
+	const challengeNodes = nodes.filter((n) => n.type === "Challenge");
+	if (challengeNodes.length > 0) {
+		for (const node of challengeNodes) {
+			const varName = createVariableName(node.title, "challengeResult");
+			code += `\t\tlet ${varName}: unknown = null;\n`;
+		}
+		code += `\n`;
+	}
 
 	// Traverse and generate step code (2 tabs = class body + method body)
 	const { code: stepsCode, warnings: traverseWarnings } = traverseAndGenerate(

@@ -260,7 +260,10 @@ describe("generateWorkflowCode", () => {
 
 		expect(result.code).toContain("step.waitForEvent<{ accepted: boolean }>(");
 		expect(result.code).toContain('"manual-approval"');
-		expect(result.code).toContain("const manualApproval =");
+		// Challenge nodes get a hoisted let so the if/else branch can access it
+		expect(result.code).toContain("let manualApproval: unknown = null;");
+		expect(result.code).toContain("manualApproval = await step.waitForEvent");
+		expect(result.code).not.toContain("const manualApproval");
 		expect(result.code).toContain('type: "acceptance"');
 		expect(result.code).toContain('timeout: "48 hours"');
 	});
@@ -640,8 +643,13 @@ describe("generateWorkflowCode with Challenge branching", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("const approval =");
-		expect(result.code).toContain("if (approval.payload.accepted)");
+		// Challenge nodes get a hoisted let variable used in the if/else branch
+		expect(result.code).toContain("let approval: unknown = null;");
+		expect(result.code).toContain("approval = await step.waitForEvent");
+		expect(result.code).not.toContain("const approval");
+		expect(result.code).toContain(
+			"if ((approval as { payload: { accepted: boolean } }).payload.accepted)",
+		);
 		expect(result.code).toContain("return { success: true");
 		expect(result.code).toContain("} else {");
 		expect(result.code).toContain("return { success: false");
@@ -1060,7 +1068,9 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(result.code).toContain('step.do("mensaje-rechazo"');
 
 		// Join and End must appear AFTER the if/else, not inside a branch
-		const ifIdx = result.code.indexOf("if (aprobacion.payload.accepted)");
+		const ifIdx = result.code.indexOf(
+			"if ((aprobacion as { payload: { accepted: boolean } }).payload.accepted)",
+		);
 		const joinIdx = result.code.indexOf('step.do("union"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
@@ -1219,7 +1229,9 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 			.length;
 		expect(returnCount).toBe(1);
 
-		const ifIdx = result.code.indexOf("if (firma.payload.accepted)");
+		const ifIdx = result.code.indexOf(
+			"if ((firma as { payload: { accepted: boolean } }).payload.accepted)",
+		);
 		const returnIdx = result.code.indexOf("return { success: true");
 		expect(returnIdx).toBeGreaterThan(ifIdx);
 	});
@@ -1661,5 +1673,333 @@ describe("generateWorkflowCodeWithProgress – syntax validation", () => {
 
 		expect(result.valid).toBe(true);
 		expect(result.code).toContain('step.do("calcular"');
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API node bugfix: GET without body, PATCH with body, default method
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("generateWorkflowCode – API node method/body fix", () => {
+	const apiNodes = (config: Record<string, unknown>) => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({ id: "api", type: "API", title: "API Call", config }),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+	];
+	const apiEdges = () => [createEdge("start", "api"), createEdge("api", "end")];
+
+	it("GET requests should NOT include body or Content-Type header", () => {
+		const result = generateWorkflowCode(
+			apiNodes({ url: "https://example.com/data", method: "GET" }),
+			apiEdges(),
+		);
+		expect(result.code).toContain('method: "GET"');
+		expect(result.code).not.toContain("body:");
+		expect(result.code).not.toContain("Content-Type");
+	});
+
+	it("DELETE requests should NOT include body or Content-Type header", () => {
+		const result = generateWorkflowCode(
+			apiNodes({ url: "https://example.com/data", method: "DELETE" }),
+			apiEdges(),
+		);
+		expect(result.code).toContain('method: "DELETE"');
+		expect(result.code).not.toContain("body:");
+		expect(result.code).not.toContain("Content-Type");
+	});
+
+	it("POST requests should include body and Content-Type header", () => {
+		const result = generateWorkflowCode(
+			apiNodes({ url: "https://example.com/data", method: "POST" }),
+			apiEdges(),
+		);
+		expect(result.code).toContain('method: "POST"');
+		expect(result.code).toContain("body: JSON.stringify(event.payload)");
+		expect(result.code).toContain("Content-Type");
+	});
+
+	it("PUT requests should include body and Content-Type header", () => {
+		const result = generateWorkflowCode(
+			apiNodes({ url: "https://example.com/data", method: "PUT" }),
+			apiEdges(),
+		);
+		expect(result.code).toContain('method: "PUT"');
+		expect(result.code).toContain("body:");
+	});
+
+	it("PATCH requests should include body and Content-Type header", () => {
+		const result = generateWorkflowCode(
+			apiNodes({ url: "https://example.com/data", method: "PATCH" }),
+			apiEdges(),
+		);
+		expect(result.code).toContain('method: "PATCH"');
+		expect(result.code).toContain("body: JSON.stringify(event.payload)");
+		expect(result.code).toContain("Content-Type");
+	});
+
+	it("default method should be GET (not POST)", () => {
+		const result = generateWorkflowCode(
+			apiNodes({ url: "https://example.com/data" }),
+			apiEdges(),
+		);
+		expect(result.code).toContain('method: "GET"');
+		expect(result.code).not.toContain("body:");
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Node output variables: only Challenge gets hoisted let declarations;
+// API, Form, Transform, Checkpoint use direct await (no captured variable)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("generateWorkflowCode – let variable declarations for node output", () => {
+	it("should NOT declare let variables for API/Form/Transform/Checkpoint nodes", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Formulario Inicial",
+				roles: ["Solicitante"],
+			}),
+			createNode({
+				id: "api",
+				type: "API",
+				title: "Pokemon API",
+				config: { url: "https://pokeapi.co/api/v2/pokemon/1/" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "api"),
+			createEdge("api", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// No hoisted let for API or Form — avoids unused-variable lint errors
+		expect(result.code).not.toContain("let formularioInicial");
+		expect(result.code).not.toContain("let pokemonApi");
+
+		// Steps are generated with plain await (no captured variable)
+		expect(result.code).toContain('await step.do("formulario-inicial"');
+		expect(result.code).toContain('await step.do("pokemon-api"');
+	});
+
+	it("should NOT declare let for Transform nodes", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Procesar Datos",
+				config: { code: "return { ok: true };" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "transform"),
+			createEdge("transform", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toContain("let procesarDatos");
+		expect(result.code).toContain('await step.do("procesar-datos"');
+	});
+
+	it("should NOT declare let for Checkpoint nodes", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "cp",
+				type: "Checkpoint",
+				title: "Guardar Estado",
+				checkpointType: "safe",
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp"),
+			createEdge("cp", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toContain("let guardarEstado");
+		expect(result.code).toContain('await step.do("guardar-estado"');
+	});
+
+	it("should declare let ONLY for Challenge nodes (result used in if/else branch)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion Manual",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Aprobado" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Challenge gets hoisted let so the if/else can reference it
+		expect(result.code).toContain("let aprobacionManual: unknown = null;");
+		expect(result.code).toContain("aprobacionManual = await step.waitForEvent");
+		expect(result.code).not.toContain("const aprobacionManual");
+	});
+
+	it("should NOT declare let for fire-and-forget nodes (Message, FlagChange, Join)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "msg",
+				type: "Message",
+				title: "Notificar",
+				config: { type: "email" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "msg"),
+			createEdge("msg", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toContain("let notificar:");
+		expect(result.code).not.toMatch(/^\s*let\s/m);
+	});
+
+	it("should NOT generate any let declarations when no Challenge nodes exist", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toMatch(/\blet\s+\w+:\s*unknown\s*=\s*null/);
+	});
+
+	it("should use fallback variable name when challenge title is empty", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("let challengeResult: unknown = null;");
+		expect(result.code).toContain(
+			"challengeResult = await step.waitForEvent<{ accepted: boolean }>(",
+		);
+	});
+
+	it("should handle Spanish characters in challenge variable names", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobación Básica",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("let aprobacionBasica: unknown = null;");
+		expect(result.code).toContain(
+			"aprobacionBasica = await step.waitForEvent<{ accepted: boolean }>(",
+		);
+	});
+
+	it("let declarations should appear before // Workflow started", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Test Approval",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		const letIdx = result.code.indexOf("let testApproval: unknown = null;");
+		const startedIdx = result.code.indexOf("// Workflow started");
+
+		expect(letIdx).toBeGreaterThanOrEqual(0);
+		expect(startedIdx).toBeGreaterThan(letIdx);
+	});
+
+	it("should produce deterministic code (same input = same output)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos",
+				roles: ["Admin"],
+			}),
+			createNode({
+				id: "api",
+				type: "API",
+				title: "Enviar",
+				config: { url: "https://example.com", method: "POST" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "api"),
+			createEdge("api", "end"),
+		];
+
+		const result1 = generateWorkflowCode(nodes, edges, undefined, {
+			includeComments: false,
+		});
+		const result2 = generateWorkflowCode(nodes, edges, undefined, {
+			includeComments: false,
+		});
+
+		expect(result1.code).toBe(result2.code);
 	});
 });

@@ -27,8 +27,13 @@ vi.mock("@/lib/workflow-api/http", () => ({
 
 import useSWR from "swr";
 import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
-import { useWorkflows, useWorkflow, useWorkflowVersions } from "./hooks";
-import type { Workflow, WorkflowVersion } from "./types";
+import {
+	useWorkflows,
+	useWorkflow,
+	useWorkflowVersions,
+	useWorkflowFlags,
+} from "./hooks";
+import type { Workflow, WorkflowVersion, WorkflowFlag } from "./types";
 
 // ---------------------------------------------------------------------------
 // Typed mocks
@@ -261,5 +266,90 @@ describe("useWorkflowVersions", () => {
 		const { result } = renderHook(() => useWorkflowVersions("wf-uuid-003"));
 
 		expect(result.current.versions).toEqual(versions);
+	});
+});
+
+describe("useWorkflowFlags", () => {
+	it("passes null key when token is null", () => {
+		withToken(null);
+		mockSWRReturn<WorkflowFlag[]>(undefined);
+
+		renderHook(() => useWorkflowFlags("wf-uuid-001"));
+
+		expect(mockUseSWR).toHaveBeenCalledWith(
+			null,
+			expect.any(Function),
+			expect.objectContaining({ refreshInterval: 10_000 }),
+		);
+	});
+
+	it("passes null key when workflowId is null", () => {
+		withToken("my-token");
+		mockSWRReturn<WorkflowFlag[]>(undefined);
+
+		renderHook(() => useWorkflowFlags(null));
+
+		expect(mockUseSWR).toHaveBeenCalledWith(
+			null,
+			expect.any(Function),
+			expect.objectContaining({ refreshInterval: 10_000 }),
+		);
+	});
+
+	it("passes correct URL key for a given workflowId", () => {
+		withToken("my-token");
+		mockSWRReturn<WorkflowFlag[]>(undefined);
+
+		renderHook(() => useWorkflowFlags("wf-uuid-042"));
+
+		const key = mockUseSWR.mock.calls[0][0] as string;
+		expect(key).toBe(`${BASE}/workflows/wf-uuid-042/flags`);
+		expect(mockUseSWR).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.any(Function),
+			expect.objectContaining({ refreshInterval: 10_000 }),
+		);
+	});
+
+	it("returns empty array when data is undefined", () => {
+		withToken("my-token");
+		mockSWRReturn<WorkflowFlag[]>(undefined);
+
+		const { result } = renderHook(() => useWorkflowFlags("wf-uuid-001"));
+
+		expect(result.current.flags).toEqual([]);
+	});
+
+	it("returns flags array when SWR provides data", () => {
+		const flags: WorkflowFlag[] = [
+			{
+				id: "flag-uuid-001",
+				workflow_id: "wf-uuid-001",
+				name: "Feature X",
+				sort_order: 0,
+				created_at: "2024-01-01T00:00:00Z",
+				updated_at: "2024-01-01T00:00:00Z",
+				options: [],
+				currentState: null,
+			},
+		];
+		withToken("my-token");
+		mockSWRReturn<WorkflowFlag[]>(flags);
+
+		const { result } = renderHook(() => useWorkflowFlags("wf-uuid-001"));
+
+		expect(result.current.flags).toEqual(flags);
+	});
+
+	it("forwards isLoading, error, and mutate", () => {
+		withToken("my-token");
+		const err = new Error("flags fetch failed");
+		mockSWRReturn<WorkflowFlag[]>(undefined, { error: err, isLoading: true });
+
+		const { result } = renderHook(() => useWorkflowFlags("wf-uuid-099"));
+
+		expect(result.current.isLoading).toBe(true);
+		expect(result.current.error).toBe(err);
+		expect(result.current.mutate).toBe(mockMutate);
 	});
 });

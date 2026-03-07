@@ -121,7 +121,7 @@ export async function publishWorkflow(
 	payload: {
 		code: string;
 		environment: "development" | "production";
-		definition?: string;
+		definition?: Record<string, unknown>;
 	},
 	options?: ApiCallOptions,
 ): Promise<PublishWorkflowResponse> {

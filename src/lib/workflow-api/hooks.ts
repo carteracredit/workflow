@@ -65,7 +65,7 @@ async function apiFetcher<T>(url: string, jwt: string): Promise<T> {
  * Hook to list workflows with optional search and status filter.
  */
 export function useWorkflows(params?: { search?: string; status?: string }) {
-	const { token } = useWorkflowApiToken();
+	const { token, isLoading: isTokenLoading } = useWorkflowApiToken();
 	const key = workflowsKey(token, params);
 
 	const { data, error, isLoading, mutate } = useSWR<Workflow[]>(
@@ -75,9 +75,12 @@ export function useWorkflows(params?: { search?: string; status?: string }) {
 
 	return {
 		workflows: data ?? [],
+		data,
 		isLoading,
+		isTokenLoading,
 		error,
 		mutate,
+		hasValidKey: key !== null,
 	};
 }
 

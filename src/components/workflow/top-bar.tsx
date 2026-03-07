@@ -27,17 +27,16 @@ import {
 	HelpCircle,
 	FolderOpen,
 	Rocket,
+	RefreshCw,
 	Trash2,
 	Flag,
 	Settings,
 	MoreVertical,
 	Bell,
 	Pencil,
-	ChevronRight,
 	Keyboard,
 	ArrowLeft,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
 
@@ -187,15 +186,6 @@ interface TopBarProps {
 	};
 }
 
-const STATUS_BADGE_CONFIG: Record<
-	"draft" | "published" | "archived",
-	{ label: string; variant: "secondary" | "success" | "outline" }
-> = {
-	draft: { label: "Borrador", variant: "secondary" },
-	published: { label: "Publicado", variant: "success" },
-	archived: { label: "Archivado", variant: "outline" },
-};
-
 export function TopBar({
 	onNew,
 	onSave,
@@ -223,7 +213,7 @@ export function TopBar({
 
 	return (
 		<div className="relative z-50 border-b border-border bg-card/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/70">
-			<div className="flex items-center gap-3">
+			<div className="flex items-center gap-3 min-w-0">
 				{onBack && (
 					<Button
 						variant="ghost"
@@ -243,22 +233,10 @@ export function TopBar({
 							className="h-6"
 							style={{ width: "auto" }}
 						/>
-						<span className="text-base font-semibold text-foreground">
-							Workflow
-						</span>
-						<ChevronRight className="h-4 w-4 text-muted-foreground" />
 						<div className="flex items-center gap-1.5">
 							<h1 className="truncate text-base font-semibold text-foreground">
 								{workflowMetadata.name || "Your Workflow"}
 							</h1>
-							{workflowStatus && (
-								<Badge
-									variant={STATUS_BADGE_CONFIG[workflowStatus].variant}
-									className="text-xs"
-								>
-									{STATUS_BADGE_CONFIG[workflowStatus].label}
-								</Badge>
-							)}
 							<Button
 								variant="ghost"
 								size="icon"
@@ -278,12 +256,37 @@ export function TopBar({
 				</div>
 
 				{paletteProps && (
-					<div className="flex flex-1 items-center justify-center">
-						<Palette
-							onAddNode={paletteProps.onAddNode}
-							zoom={paletteProps.zoom}
-							pan={paletteProps.pan}
-							className="flex-nowrap"
+					<div className="relative flex min-w-0 flex-1 items-center">
+						{/* Left fade edge */}
+						<div
+							aria-hidden="true"
+							className="pointer-events-none absolute left-0 top-0 z-10 h-full w-6 bg-gradient-to-r from-card/80 to-transparent"
+						/>
+						{/*
+						 * Two-element centering pattern that avoids the
+						 * "justify-center + overflow-x: auto" left-scroll bug:
+						 *
+						 *  outer  — flex-1, justify-center → centers the inner div
+						 *           when the palette fits; never scrolls itself
+						 *  inner  — max-w-full, overflow-x-auto → constrained to the
+						 *           available width so it can scroll left-to-right
+						 *           when the palette is too wide; no justify-center
+						 *           so nothing overflows to the left
+						 */}
+						<div className="flex min-w-0 flex-1 items-center justify-center">
+							<div className="max-w-full overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+								<Palette
+									onAddNode={paletteProps.onAddNode}
+									zoom={paletteProps.zoom}
+									pan={paletteProps.pan}
+									className="flex-nowrap flex-shrink-0"
+								/>
+							</div>
+						</div>
+						{/* Right fade edge */}
+						<div
+							aria-hidden="true"
+							className="pointer-events-none absolute right-0 top-0 z-10 h-full w-6 bg-gradient-to-l from-card/80 to-transparent"
 						/>
 					</div>
 				)}
@@ -298,16 +301,29 @@ export function TopBar({
 						<Bell className="h-4 w-4 text-muted-foreground" />
 					</Button>
 
-					<Button
-						variant="default"
-						size="sm"
-						onClick={onPublish}
-						title="Publicar flujo"
-						className="gap-2 rounded-md px-3"
-					>
-						<Rocket className="h-4 w-4" />
-						<span className="text-sm font-semibold">Publicar</span>
-					</Button>
+					{workflowStatus === "published" ? (
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={onPublish}
+							title="Publicar nueva versión"
+							className="gap-2 rounded-md border-primary/40 px-3 text-primary hover:border-primary hover:bg-primary/10 hover:text-primary"
+						>
+							<RefreshCw className="h-4 w-4" />
+							<span className="text-sm font-semibold">Actualizar</span>
+						</Button>
+					) : (
+						<Button
+							variant="default"
+							size="sm"
+							onClick={onPublish}
+							title="Publicar flujo"
+							className="gap-2 rounded-md px-3"
+						>
+							<Rocket className="h-4 w-4" />
+							<span className="text-sm font-semibold">Publicar</span>
+						</Button>
+					)}
 
 					<Menubar className="border-none bg-transparent">
 						<MenubarMenu>
