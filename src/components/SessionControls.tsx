@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -126,9 +127,9 @@ function UserMenu() {
  * Shared session controls bar: language switcher, theme switcher, user menu.
  * Used in both the editor top-bar and the workflow list header.
  */
-export function SessionControls() {
+export function SessionControls({ className }: { className?: string }) {
 	return (
-		<div className="flex items-center gap-1">
+		<div className={cn("flex items-center gap-1", className)}>
 			<LanguageSwitcherWrapper />
 			<ThemeSwitcherWrapper />
 			<UserMenu />

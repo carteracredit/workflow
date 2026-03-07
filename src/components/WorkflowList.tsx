@@ -44,6 +44,14 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { useWorkflows } from "@/lib/workflow-api/hooks";
 import {
@@ -92,6 +100,111 @@ function StatusBadge({ status }: { status: WorkflowStatus | string }) {
 	return <Badge variant={config.variant}>{config.label}</Badge>;
 }
 
+// ---------------------------------------------------------------------------
+// WorkflowCardRow - mobile list item
+// ---------------------------------------------------------------------------
+
+interface WorkflowCardRowProps {
+	workflow: Workflow;
+	onEdit: (id: string) => void;
+	onArchive: (wf: Workflow) => void;
+	onDelete: (wf: Workflow) => void;
+	onClone: (wf: Workflow) => void;
+	deletingId: string | null;
+	cloningId: string | null;
+}
+
+function WorkflowCardRow({
+	workflow,
+	onEdit,
+	onArchive,
+	onDelete,
+	onClone,
+	deletingId,
+	cloningId,
+}: WorkflowCardRowProps) {
+	const isBusy = deletingId === workflow.id || cloningId === workflow.id;
+	return (
+		<div
+			role="button"
+			tabIndex={0}
+			onClick={() => onEdit(workflow.id)}
+			onKeyDown={(e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					onEdit(workflow.id);
+				}
+			}}
+			className="flex cursor-pointer items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+		>
+			<div className="min-w-0 flex-1">
+				<p className="font-medium truncate">{workflow.name}</p>
+				<p className="text-sm text-muted-foreground truncate">
+					{workflow.description || "Sin descripción"}
+				</p>
+				<div className="mt-2">
+					<StatusBadge status={workflow.status} />
+				</div>
+			</div>
+			<div onClick={(e) => e.stopPropagation()}>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-8 w-8"
+							disabled={isBusy}
+						>
+							{isBusy ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<MoreHorizontal className="h-4 w-4" />
+							)}
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuItem onClick={() => onEdit(workflow.id)}>
+							<Pencil className="mr-2 h-4 w-4" />
+							Editar
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => onArchive(workflow)}>
+							{workflow.status === "archived" ? (
+								<>
+									<WorkflowIcon className="mr-2 h-4 w-4" />
+									Restaurar
+								</>
+							) : (
+								<>
+									<WorkflowIcon className="mr-2 h-4 w-4" />
+									Archivar
+								</>
+							)}
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem onClick={() => onClone(workflow)}>
+							<Copy className="mr-2 h-4 w-4" />
+							Clonar
+						</DropdownMenuItem>
+						{workflow.current_major_version === 0 &&
+							workflow.status === "draft" && (
+								<>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem
+										className="text-destructive focus:text-destructive"
+										onClick={() => onDelete(workflow)}
+									>
+										<Trash2 className="mr-2 h-4 w-4" />
+										Eliminar
+									</DropdownMenuItem>
+								</>
+							)}
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</div>
+		</div>
+	);
+}
+
 function formatRelativeDate(dateStr: string): string {
 	const date = new Date(dateStr);
 	const now = new Date();
@@ -108,6 +221,95 @@ function formatRelativeDate(dateStr: string): string {
 		month: "short",
 		day: "numeric",
 	});
+}
+
+// ---------------------------------------------------------------------------
+// WorkflowListSkeleton
+// ---------------------------------------------------------------------------
+
+function WorkflowListSkeleton() {
+	return (
+		<div
+			className="min-h-screen bg-background"
+			role="status"
+			aria-live="polite"
+			aria-label="Cargando workflows"
+		>
+			<div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+				{/* Header skeleton */}
+				<div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+					<div className="flex items-center gap-3 min-w-0">
+						<Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+						<div className="min-w-0 flex-1 space-y-1">
+							<Skeleton className="h-8 w-32" />
+							<Skeleton className="h-4 w-56" />
+						</div>
+					</div>
+					<div className="flex items-center gap-2 shrink-0">
+						<Skeleton className="h-10 w-36" />
+						<Skeleton className="h-9 w-9 rounded-md" />
+					</div>
+				</div>
+
+				{/* Stats chips skeleton */}
+				<div className="mb-5 flex min-h-[44px] flex-wrap justify-center gap-2 overflow-x-auto">
+					{[1, 2, 3, 4].map((i) => (
+						<Skeleton
+							key={i}
+							className="h-10 w-24 shrink-0 rounded-lg sm:w-28"
+						/>
+					))}
+				</div>
+
+				{/* Search skeleton */}
+				<div className="mb-4 w-full max-w-sm">
+					<Skeleton className="h-10 w-full rounded-md" />
+				</div>
+
+				{/* Table skeleton - desktop */}
+				<Card className="min-h-[320px] overflow-hidden">
+					<div className="hidden md:block">
+						<div className="border-b px-4 py-3">
+							<div className="flex gap-4">
+								<Skeleton className="h-4 w-24" />
+								<Skeleton className="h-4 w-32 hidden sm:block" />
+								<Skeleton className="h-4 w-16" />
+								<Skeleton className="h-4 w-16 hidden md:block" />
+								<Skeleton className="h-4 w-20 hidden lg:block" />
+								<Skeleton className="h-4 w-10 ml-auto" />
+							</div>
+						</div>
+						{Array.from({ length: 6 }).map((_, i) => (
+							<div
+								key={i}
+								className="flex items-center gap-4 border-b px-4 py-3 last:border-0"
+							>
+								<Skeleton className="h-4 w-40 flex-1 min-w-0" />
+								<Skeleton className="h-4 w-32 hidden sm:block flex-shrink-0" />
+								<Skeleton className="h-6 w-20 flex-shrink-0 rounded-full" />
+								<Skeleton className="h-4 w-8 hidden md:block flex-shrink-0" />
+								<Skeleton className="h-4 w-12 hidden lg:block flex-shrink-0" />
+								<Skeleton className="h-8 w-8 flex-shrink-0 rounded" />
+							</div>
+						))}
+					</div>
+					{/* Card list skeleton - mobile */}
+					<div className="md:hidden space-y-3 p-4">
+						{Array.from({ length: 4 }).map((_, i) => (
+							<div key={i} className="rounded-lg border p-4 space-y-2">
+								<Skeleton className="h-5 w-3/4" />
+								<Skeleton className="h-4 w-1/2" />
+								<div className="flex justify-between items-center pt-2">
+									<Skeleton className="h-6 w-20 rounded-full" />
+									<Skeleton className="h-8 w-8 rounded" />
+								</div>
+							</div>
+						))}
+					</div>
+				</Card>
+			</div>
+		</div>
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,10 +446,15 @@ function CreateWorkflowDialog({
 // Main WorkflowList component
 // ---------------------------------------------------------------------------
 
+type SearchScope = "all" | "name" | "description";
+type VersionFilter = "all" | "unpublished" | number;
+
 export function WorkflowList() {
 	const router = useRouter();
 	const { token } = useWorkflowApiToken();
 	const [search, setSearch] = useState("");
+	const [searchScope, setSearchScope] = useState<SearchScope>("all");
+	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
 	const [activeTab, setActiveTab] = useState("all");
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -258,14 +465,27 @@ export function WorkflowList() {
 	// Client-side filter
 	const filtered = useMemo(() => {
 		return workflows.filter((wf) => {
-			const matchesSearch =
-				!search ||
-				wf.name.toLowerCase().includes(search.toLowerCase()) ||
-				wf.description.toLowerCase().includes(search.toLowerCase());
+			const matchesSearch = (() => {
+				if (!search) return true;
+				const q = search.toLowerCase();
+				if (searchScope === "name") return wf.name.toLowerCase().includes(q);
+				if (searchScope === "description")
+					return wf.description.toLowerCase().includes(q);
+				return (
+					wf.name.toLowerCase().includes(q) ||
+					wf.description.toLowerCase().includes(q)
+				);
+			})();
 			const matchesStatus = activeTab === "all" || wf.status === activeTab;
-			return matchesSearch && matchesStatus;
+			const matchesVersion = (() => {
+				if (versionFilter === "all") return true;
+				if (versionFilter === "unpublished")
+					return wf.current_major_version === 0;
+				return wf.current_major_version === versionFilter;
+			})();
+			return matchesSearch && matchesStatus && matchesVersion;
 		});
-	}, [workflows, search, activeTab]);
+	}, [workflows, search, searchScope, activeTab, versionFilter]);
 
 	// Stats
 	const stats = useMemo(() => {
@@ -275,6 +495,14 @@ export function WorkflowList() {
 			draft: workflows.filter((w) => w.status === "draft").length,
 			archived: workflows.filter((w) => w.status === "archived").length,
 		};
+	}, [workflows]);
+
+	// Unique versions for filter (excluding 0)
+	const availableVersions = useMemo(() => {
+		const versions = new Set(
+			workflows.map((w) => w.current_major_version).filter((v) => v > 0),
+		);
+		return Array.from(versions).sort((a, b) => a - b);
 	}, [workflows]);
 
 	const handleCreated = (id: string) => {
@@ -363,33 +591,45 @@ export function WorkflowList() {
 		}
 	};
 
+	// Skeleton only on initial load; keep list on refetch to avoid CLS
+	const showSkeleton = isLoading && workflows.length === 0;
+
+	if (showSkeleton) {
+		return <WorkflowListSkeleton />;
+	}
+
 	return (
 		<div className="min-h-screen bg-background">
-			<div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-				{/* Header */}
-				<div className="mb-8 flex items-center justify-between">
-					<div className="flex items-center gap-3">
-						<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+			<div className="mx-auto w-full max-w-7xl min-w-0 px-4 py-8 sm:px-6 lg:px-8">
+				{/* Header - responsive: stack on small screens, wrap actions on narrow */}
+				<div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+					<div className="flex items-center gap-3 min-w-0 flex-shrink-0">
+						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
 							<WorkflowIcon className="h-5 w-5 text-primary" />
 						</div>
-						<div>
-							<h1 className="text-2xl font-bold tracking-tight">Workflows</h1>
-							<p className="text-sm text-muted-foreground">
+						<div className="min-w-0">
+							<h1 className="text-xl font-bold tracking-tight truncate sm:text-2xl">
+								Workflows
+							</h1>
+							<p className="text-sm text-muted-foreground truncate">
 								Gestiona y publica tus flujos de trabajo
 							</p>
 						</div>
 					</div>
-					<div className="flex items-center gap-2">
-						<Button onClick={() => setCreateDialogOpen(true)}>
+					<div className="flex w-full min-w-0 max-w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
+						<Button
+							onClick={() => setCreateDialogOpen(true)}
+							className="shrink-0"
+						>
 							<Plus className="mr-2 h-4 w-4" />
 							Nuevo Workflow
 						</Button>
-						<SessionControls />
+						<SessionControls className="flex-wrap justify-end" />
 					</div>
 				</div>
 
-				{/* Stats chips */}
-				<div className="mb-5 flex flex-wrap justify-center gap-2">
+				{/* Stats chips - scroll on very narrow screens */}
+				<div className="mb-5 flex min-h-[44px] flex-wrap justify-center gap-2 overflow-x-auto pb-1">
 					{[
 						{
 							label: "Total",
@@ -469,24 +709,79 @@ export function WorkflowList() {
 					})}
 				</div>
 
-				{/* Search */}
-				<div className="mb-4 relative max-w-sm">
-					<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-					<Input
-						placeholder="Buscar por nombre o descripción..."
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						className="pl-9"
-					/>
+				{/* Search and filters */}
+				<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+					<div className="relative w-full min-w-0 flex-1 sm:max-w-sm">
+						<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							placeholder="Buscar por nombre o descripción..."
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							className="pl-9"
+						/>
+					</div>
+					<div className="flex min-w-0 flex-wrap items-center gap-2">
+						<Select
+							value={searchScope}
+							onValueChange={(v) => setSearchScope(v as SearchScope)}
+						>
+							<SelectTrigger
+								className="h-9 w-full min-w-0 sm:w-[180px]"
+								aria-label="Ámbito de búsqueda"
+							>
+								<SelectValue placeholder="Buscar en" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">Nombre y descripción</SelectItem>
+								<SelectItem value="name">Solo nombre</SelectItem>
+								<SelectItem value="description">Solo descripción</SelectItem>
+							</SelectContent>
+						</Select>
+						<Select
+							value={
+								versionFilter === "all"
+									? "all"
+									: versionFilter === "unpublished"
+										? "unpublished"
+										: String(versionFilter)
+							}
+							onValueChange={(v) =>
+								setVersionFilter(
+									v === "all"
+										? "all"
+										: v === "unpublished"
+											? "unpublished"
+											: Number(v),
+								)
+							}
+						>
+							<SelectTrigger
+								className="h-9 w-full min-w-0 sm:w-[140px]"
+								aria-label="Filtrar por versión"
+							>
+								<SelectValue placeholder="Versión" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">Todas</SelectItem>
+								<SelectItem value="unpublished">Sin publicar</SelectItem>
+								{availableVersions.map((v) => (
+									<SelectItem key={v} value={String(v)}>
+										v{v}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+							{filtered.length === 1
+								? "1 resultado"
+								: `${filtered.length} resultados`}
+						</span>
+					</div>
 				</div>
 
-				{/* Table */}
-				<Card>
-					{isLoading ? (
-						<div className="flex items-center justify-center py-16">
-							<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-						</div>
-					) : error ? (
+				{/* List */}
+				<Card className="min-h-[200px] overflow-hidden">
+					{error ? (
 						<div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
 							<AlertCircle className="h-8 w-8 text-destructive" />
 							<p className="text-sm">Error al cargar los workflows</p>
@@ -498,11 +793,11 @@ export function WorkflowList() {
 						<div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
 							<WorkflowIcon className="h-10 w-10 opacity-30" />
 							<p className="text-sm">
-								{search || activeTab !== "all"
+								{search || activeTab !== "all" || versionFilter !== "all"
 									? "No se encontraron workflows con esos filtros"
 									: "No hay workflows todavía. ¡Crea el primero!"}
 							</p>
-							{!search && activeTab === "all" && (
+							{!search && activeTab === "all" && versionFilter === "all" && (
 								<Button
 									variant="outline"
 									size="sm"
@@ -514,117 +809,143 @@ export function WorkflowList() {
 							)}
 						</div>
 					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Nombre</TableHead>
-									<TableHead className="hidden sm:table-cell">
-										Descripción
-									</TableHead>
-									<TableHead>Estado</TableHead>
-									<TableHead className="hidden md:table-cell">
-										Versión
-									</TableHead>
-									<TableHead className="hidden lg:table-cell">
-										Actualizado
-									</TableHead>
-									<TableHead className="w-[60px]" />
-								</TableRow>
-							</TableHeader>
-							<TableBody>
+						<>
+							{/* Mobile card list */}
+							<div className="md:hidden divide-y">
 								{filtered.map((wf) => (
-									<TableRow
+									<WorkflowCardRow
 										key={wf.id}
-										className="cursor-pointer"
-										onClick={() => handleEdit(wf.id)}
-									>
-										<TableCell className="font-medium">{wf.name}</TableCell>
-										<TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">
-											{wf.description || (
-												<span className="italic opacity-50">
-													Sin descripción
-												</span>
-											)}
-										</TableCell>
-										<TableCell>
-											<StatusBadge status={wf.status} />
-										</TableCell>
-										<TableCell className="hidden md:table-cell">
-											{wf.current_major_version > 0 ? (
-												<span className="font-mono text-xs text-muted-foreground">
-													v{wf.current_major_version}
-												</span>
-											) : (
-												<span className="text-xs text-muted-foreground">—</span>
-											)}
-										</TableCell>
-										<TableCell className="hidden text-muted-foreground lg:table-cell">
-											{formatRelativeDate(wf.updated_at)}
-										</TableCell>
-										<TableCell
-											onClick={(e) => e.stopPropagation()}
-											className="text-right"
-										>
-											<DropdownMenu>
-												<DropdownMenuTrigger asChild>
-													<Button
-														variant="ghost"
-														size="icon"
-														className="h-8 w-8"
-														disabled={
-															deletingId === wf.id || cloningId === wf.id
-														}
-													>
-														{deletingId === wf.id || cloningId === wf.id ? (
-															<Loader2 className="h-4 w-4 animate-spin" />
-														) : (
-															<MoreHorizontal className="h-4 w-4" />
-														)}
-													</Button>
-												</DropdownMenuTrigger>
-												<DropdownMenuContent align="end">
-													<DropdownMenuItem onClick={() => handleEdit(wf.id)}>
-														<Pencil className="mr-2 h-4 w-4" />
-														Editar
-													</DropdownMenuItem>
-													<DropdownMenuItem onClick={() => handleArchive(wf)}>
-														{wf.status === "archived" ? (
-															<>
-																<WorkflowIcon className="mr-2 h-4 w-4" />
-																Restaurar
-															</>
-														) : (
-															<>
-																<WorkflowIcon className="mr-2 h-4 w-4" />
-																Archivar
-															</>
-														)}
-													</DropdownMenuItem>
-													<DropdownMenuSeparator />
-													<DropdownMenuItem onClick={() => handleClone(wf)}>
-														<Copy className="mr-2 h-4 w-4" />
-														Clonar
-													</DropdownMenuItem>
-													{wf.current_major_version === 0 &&
-														wf.status === "draft" && (
-															<>
-																<DropdownMenuSeparator />
-																<DropdownMenuItem
-																	className="text-destructive focus:text-destructive"
-																	onClick={() => handleDelete(wf)}
-																>
-																	<Trash2 className="mr-2 h-4 w-4" />
-																	Eliminar
-																</DropdownMenuItem>
-															</>
-														)}
-												</DropdownMenuContent>
-											</DropdownMenu>
-										</TableCell>
-									</TableRow>
+										workflow={wf}
+										onEdit={handleEdit}
+										onArchive={handleArchive}
+										onDelete={handleDelete}
+										onClone={handleClone}
+										deletingId={deletingId}
+										cloningId={cloningId}
+									/>
 								))}
-							</TableBody>
-						</Table>
+							</div>
+							{/* Desktop table */}
+							<div className="hidden md:block">
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead>Nombre</TableHead>
+											<TableHead className="hidden sm:table-cell">
+												Descripción
+											</TableHead>
+											<TableHead>Estado</TableHead>
+											<TableHead className="hidden md:table-cell">
+												Versión
+											</TableHead>
+											<TableHead className="hidden lg:table-cell">
+												Actualizado
+											</TableHead>
+											<TableHead className="w-[60px]" />
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{filtered.map((wf) => (
+											<TableRow
+												key={wf.id}
+												className="cursor-pointer"
+												onClick={() => handleEdit(wf.id)}
+											>
+												<TableCell className="font-medium">{wf.name}</TableCell>
+												<TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">
+													{wf.description || (
+														<span className="italic opacity-50">
+															Sin descripción
+														</span>
+													)}
+												</TableCell>
+												<TableCell>
+													<StatusBadge status={wf.status} />
+												</TableCell>
+												<TableCell className="hidden md:table-cell">
+													{wf.current_major_version > 0 ? (
+														<span className="font-mono text-xs text-muted-foreground">
+															v{wf.current_major_version}
+														</span>
+													) : (
+														<span className="text-xs text-muted-foreground">
+															—
+														</span>
+													)}
+												</TableCell>
+												<TableCell className="hidden text-muted-foreground lg:table-cell">
+													{formatRelativeDate(wf.updated_at)}
+												</TableCell>
+												<TableCell
+													onClick={(e) => e.stopPropagation()}
+													className="text-right"
+												>
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button
+																variant="ghost"
+																size="icon"
+																className="h-8 w-8"
+																disabled={
+																	deletingId === wf.id || cloningId === wf.id
+																}
+															>
+																{deletingId === wf.id || cloningId === wf.id ? (
+																	<Loader2 className="h-4 w-4 animate-spin" />
+																) : (
+																	<MoreHorizontal className="h-4 w-4" />
+																)}
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
+															<DropdownMenuItem
+																onClick={() => handleEdit(wf.id)}
+															>
+																<Pencil className="mr-2 h-4 w-4" />
+																Editar
+															</DropdownMenuItem>
+															<DropdownMenuItem
+																onClick={() => handleArchive(wf)}
+															>
+																{wf.status === "archived" ? (
+																	<>
+																		<WorkflowIcon className="mr-2 h-4 w-4" />
+																		Restaurar
+																	</>
+																) : (
+																	<>
+																		<WorkflowIcon className="mr-2 h-4 w-4" />
+																		Archivar
+																	</>
+																)}
+															</DropdownMenuItem>
+															<DropdownMenuSeparator />
+															<DropdownMenuItem onClick={() => handleClone(wf)}>
+																<Copy className="mr-2 h-4 w-4" />
+																Clonar
+															</DropdownMenuItem>
+															{wf.current_major_version === 0 &&
+																wf.status === "draft" && (
+																	<>
+																		<DropdownMenuSeparator />
+																		<DropdownMenuItem
+																			className="text-destructive focus:text-destructive"
+																			onClick={() => handleDelete(wf)}
+																		>
+																			<Trash2 className="mr-2 h-4 w-4" />
+																			Eliminar
+																		</DropdownMenuItem>
+																	</>
+																)}
+														</DropdownMenuContent>
+													</DropdownMenu>
+												</TableCell>
+											</TableRow>
+										))}
+									</TableBody>
+								</Table>
+							</div>
+						</>
 					)}
 				</Card>
 			</div>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchJson, ApiError } from "./http";
+import { fetchJson, ApiError, extractApiErrorMessage } from "./http";
 
 describe("fetchJson", () => {
 	beforeEach(() => {
@@ -122,6 +122,64 @@ describe("fetchJson", () => {
 		await expect(fetchJson("https://example.com/api")).rejects.toThrow(
 			ApiError,
 		);
+	});
+});
+
+describe("extractApiErrorMessage", () => {
+	it("returns errors[0].message for ApiError with Chanfana format", () => {
+		const err = new ApiError("Request failed", {
+			status: 400,
+			body: {
+				success: false,
+				errors: [{ code: "VALIDATION", message: "Campo requerido" }],
+			},
+		});
+		expect(extractApiErrorMessage(err)).toBe("Campo requerido");
+	});
+
+	it("returns error string for ApiError with publish format", () => {
+		const err = new ApiError("Request failed", {
+			status: 500,
+			body: { success: false, error: "Internal server error" },
+		});
+		expect(extractApiErrorMessage(err)).toBe("Internal server error");
+	});
+
+	it("returns error + details for ApiError with publish format and details", () => {
+		const err = new ApiError("Request failed", {
+			status: 500,
+			body: {
+				success: false,
+				error: "Deploy failed",
+				details: "Invalid config",
+			},
+		});
+		expect(extractApiErrorMessage(err)).toBe("Deploy failed: Invalid config");
+	});
+
+	it("returns error.message when ApiError body has no matching format", () => {
+		const err = new ApiError("Network timeout", {
+			status: 504,
+			body: { success: false, unknown: "format" },
+		});
+		expect(extractApiErrorMessage(err)).toBe("Network timeout");
+	});
+
+	it("returns error.message when ApiError body is null", () => {
+		const err = new ApiError("Connection refused", { status: 0, body: null });
+		expect(extractApiErrorMessage(err)).toBe("Connection refused");
+	});
+
+	it("returns error.message for plain Error", () => {
+		expect(extractApiErrorMessage(new Error("Something broke"))).toBe(
+			"Something broke",
+		);
+	});
+
+	it('returns "Error desconocido" for non-Error values', () => {
+		expect(extractApiErrorMessage("string error")).toBe("Error desconocido");
+		expect(extractApiErrorMessage(123)).toBe("Error desconocido");
+		expect(extractApiErrorMessage(null)).toBe("Error desconocido");
 	});
 });
 

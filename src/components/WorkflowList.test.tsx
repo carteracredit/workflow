@@ -118,11 +118,15 @@ afterEach(() => {
 // -------------------------------------------------------------------------
 
 describe("WorkflowList – estados de carga y error", () => {
-	it("muestra spinner mientras carga", () => {
+	it("muestra skeleton mientras carga", () => {
 		makeHooksReturn([], { isLoading: true });
 		render(<WorkflowList />);
-		// The spinning loader icon should be in the DOM (has animate-spin class)
-		expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+		expect(
+			screen.getByRole("status", { name: "Cargando workflows" }),
+		).toBeInTheDocument();
+		expect(
+			document.querySelector('[data-slot="skeleton"]'),
+		).toBeInTheDocument();
 	});
 
 	it("muestra mensaje de error y botón reintentar cuando falla la carga", () => {
@@ -169,8 +173,9 @@ describe("WorkflowList – renderización con datos", () => {
 			makeWorkflow({ id: "wf-uuid-002", name: "Beta", status: "draft" }),
 		]);
 		render(<WorkflowList />);
-		expect(screen.getByText("Alpha")).toBeInTheDocument();
-		expect(screen.getByText("Beta")).toBeInTheDocument();
+		// Content appears in both mobile card list and desktop table
+		expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText("Beta").length).toBeGreaterThanOrEqual(1);
 	});
 
 	it("muestra el badge de estado correcto", () => {
@@ -180,9 +185,9 @@ describe("WorkflowList – renderización con datos", () => {
 			makeWorkflow({ id: "wf-uuid-003", name: "Gamma", status: "archived" }),
 		]);
 		render(<WorkflowList />);
-		expect(screen.getByText("Publicado")).toBeInTheDocument();
-		expect(screen.getByText("Borrador")).toBeInTheDocument();
-		expect(screen.getByText("Archivado")).toBeInTheDocument();
+		expect(screen.getAllByText("Publicado").length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText("Borrador").length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText("Archivado").length).toBeGreaterThanOrEqual(1);
 	});
 
 	it("muestra la versión del workflow en la tabla", () => {
@@ -202,13 +207,17 @@ describe("WorkflowList – renderización con datos", () => {
 	it("muestra descripción del workflow", () => {
 		makeHooksReturn([makeWorkflow({ description: "Mi descripción especial" })]);
 		render(<WorkflowList />);
-		expect(screen.getByText("Mi descripción especial")).toBeInTheDocument();
+		expect(
+			screen.getAllByText("Mi descripción especial").length,
+		).toBeGreaterThanOrEqual(1);
 	});
 
 	it("muestra 'Sin descripción' cuando el workflow no tiene descripción", () => {
 		makeHooksReturn([makeWorkflow({ description: "" })]);
 		render(<WorkflowList />);
-		expect(screen.getByText("Sin descripción")).toBeInTheDocument();
+		expect(
+			screen.getAllByText("Sin descripción").length,
+		).toBeGreaterThanOrEqual(1);
 	});
 });
 
@@ -256,7 +265,7 @@ describe("WorkflowList – chips de estadísticas", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
 
-		expect(screen.getByText("Draft")).toBeInTheDocument();
+		expect(screen.getAllByText("Draft").length).toBeGreaterThanOrEqual(1);
 		expect(screen.queryByText("Pub")).not.toBeInTheDocument();
 	});
 
@@ -271,8 +280,8 @@ describe("WorkflowList – chips de estadísticas", () => {
 		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
 		fireEvent.click(screen.getByRole("button", { name: /Total/ }));
 
-		expect(screen.getByText("Pub")).toBeInTheDocument();
-		expect(screen.getByText("Draft")).toBeInTheDocument();
+		expect(screen.getAllByText("Pub").length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText("Draft").length).toBeGreaterThanOrEqual(1);
 	});
 });
 
@@ -308,7 +317,7 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 		);
 		await userEvent.type(input, "hipoteca");
 
-		expect(screen.getByText("Hipoteca")).toBeInTheDocument();
+		expect(screen.getAllByText("Hipoteca").length).toBeGreaterThanOrEqual(1);
 		expect(screen.queryByText("Crédito Personal")).not.toBeInTheDocument();
 	});
 
@@ -321,7 +330,7 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 		);
 		await userEvent.type(input, "inmuebles");
 
-		expect(screen.getByText("Hipoteca")).toBeInTheDocument();
+		expect(screen.getAllByText("Hipoteca").length).toBeGreaterThanOrEqual(1);
 		expect(screen.queryByText("Crédito Personal")).not.toBeInTheDocument();
 	});
 
@@ -349,7 +358,7 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
 
-		expect(screen.getByText("Draft")).toBeInTheDocument();
+		expect(screen.getAllByText("Draft").length).toBeGreaterThanOrEqual(1);
 		expect(screen.queryByText("Pub")).not.toBeInTheDocument();
 	});
 
@@ -364,8 +373,40 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 		fireEvent.click(screen.getByRole("button", { name: /Borradores/ }));
 		fireEvent.click(screen.getByRole("button", { name: /Total/ }));
 
-		expect(screen.getByText("Pub")).toBeInTheDocument();
-		expect(screen.getByText("Draft")).toBeInTheDocument();
+		expect(screen.getAllByText("Pub").length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText("Draft").length).toBeGreaterThanOrEqual(1);
+	});
+
+	it("muestra conteo de resultados", () => {
+		makeHooksReturn([
+			makeWorkflow({ id: "1", name: "A" }),
+			makeWorkflow({ id: "2", name: "B" }),
+		]);
+		render(<WorkflowList />);
+		expect(screen.getByText("2 resultados")).toBeInTheDocument();
+	});
+
+	it("muestra '1 resultado' cuando hay un solo workflow filtrado", async () => {
+		makeHooksReturn(WORKFLOWS);
+		render(<WorkflowList />);
+		const input = screen.getByPlaceholderText(
+			"Buscar por nombre o descripción...",
+		);
+		await userEvent.type(input, "hipoteca");
+		expect(screen.getByText("1 resultado")).toBeInTheDocument();
+	});
+
+	it("renderiza los selects de ámbito y versión", () => {
+		makeHooksReturn([
+			makeWorkflow({ id: "1", name: "A", current_major_version: 1 }),
+		]);
+		render(<WorkflowList />);
+		expect(
+			screen.getByRole("combobox", { name: /Ámbito de búsqueda/i }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("combobox", { name: /Filtrar por versión/i }),
+		).toBeInTheDocument();
 	});
 });
 
@@ -378,7 +419,8 @@ describe("WorkflowList – navegación", () => {
 		makeHooksReturn([makeWorkflow({ id: "wf-uuid-042", name: "Click Me" })]);
 		render(<WorkflowList />);
 
-		fireEvent.click(screen.getByText("Click Me"));
+		// Click first occurrence (appears in both mobile card and desktop table)
+		fireEvent.click(screen.getAllByText("Click Me")[0]);
 
 		expect(mockPush).toHaveBeenCalledWith("/editor/wf-uuid-042");
 	});
@@ -560,6 +602,24 @@ describe("WorkflowList – diálogo de creación", () => {
 			expect(mockCreateWorkflow).toHaveBeenCalled();
 		});
 	});
+
+	it("muestra error cuando se intenta crear sin nombre", async () => {
+		const { toast } = await import("sonner");
+		makeHooksReturn([]);
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
+		const descInput = await screen.findByPlaceholderText(
+			"Descripción opcional del workflow",
+		);
+		descInput.focus();
+		await userEvent.keyboard("{Enter}");
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalledWith("El nombre es requerido");
+		});
+		expect(mockCreateWorkflow).not.toHaveBeenCalled();
+	});
 });
 
 // -------------------------------------------------------------------------
@@ -569,7 +629,10 @@ describe("WorkflowList – diálogo de creación", () => {
 describe("WorkflowList – archivar y restaurar", () => {
 	async function openDropdown(workflowName: string) {
 		const user = userEvent.setup();
-		const row = screen.getByText(workflowName).closest("tr")!;
+		const nameEl = screen.getAllByText(workflowName)[0];
+		const row =
+			nameEl.closest("tr") ?? nameEl.closest("div[class*='cursor-pointer']");
+		if (!row) throw new Error(`Could not find row for ${workflowName}`);
 		const trigger = within(row).getByRole("button");
 		await user.click(trigger);
 	}
@@ -653,7 +716,10 @@ describe("WorkflowList – archivar y restaurar", () => {
 describe("WorkflowList – eliminar", () => {
 	async function openDropdown(workflowName: string) {
 		const user = userEvent.setup();
-		const row = screen.getByText(workflowName).closest("tr")!;
+		const nameEl = screen.getAllByText(workflowName)[0];
+		const row =
+			nameEl.closest("tr") ?? nameEl.closest("div[class*='cursor-pointer']");
+		if (!row) throw new Error(`Could not find row for ${workflowName}`);
 		const trigger = within(row).getByRole("button");
 		await user.click(trigger);
 	}
@@ -743,7 +809,10 @@ describe("WorkflowList – editar desde dropdown", () => {
 		makeHooksReturn([makeWorkflow({ id: "wf-uuid-033", name: "WFEdit" })]);
 		render(<WorkflowList />);
 
-		const row = screen.getByText("WFEdit").closest("tr")!;
+		const nameEl = screen.getAllByText("WFEdit")[0];
+		const row =
+			nameEl.closest("tr") ?? nameEl.closest("div[class*='cursor-pointer']");
+		if (!row) throw new Error("Could not find row for WFEdit");
 		const trigger = within(row).getByRole("button");
 		await user.click(trigger);
 
@@ -761,7 +830,10 @@ describe("WorkflowList – editar desde dropdown", () => {
 describe("WorkflowList – clonar", () => {
 	async function openDropdown(workflowName: string) {
 		const user = userEvent.setup();
-		const row = screen.getByText(workflowName).closest("tr")!;
+		const nameEl = screen.getAllByText(workflowName)[0];
+		const row =
+			nameEl.closest("tr") ?? nameEl.closest("div[class*='cursor-pointer']");
+		if (!row) throw new Error(`Could not find row for ${workflowName}`);
 		const trigger = within(row).getByRole("button");
 		await user.click(trigger);
 	}
