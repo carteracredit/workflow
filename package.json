@@ -94,7 +94,7 @@
 		"check": "pnpm run build && pnpm run typecheck",
 		"deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
 		"dev": "next dev",
-		"dev:local": "next dev --port 3010",
+		"dev:local": "next dev --port 3004",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"lint": "eslint . --max-warnings=0",
