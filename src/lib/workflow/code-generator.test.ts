@@ -260,6 +260,7 @@ describe("generateWorkflowCode", () => {
 
 		expect(result.code).toContain("step.waitForEvent<{ accepted: boolean }>(");
 		expect(result.code).toContain('"manual-approval"');
+		// Challenge nodes get a hoisted let so the if/else branch can access it
 		expect(result.code).toContain("let manualApproval: unknown = null;");
 		expect(result.code).toContain("manualApproval = await step.waitForEvent");
 		expect(result.code).not.toContain("const manualApproval");
@@ -642,10 +643,13 @@ describe("generateWorkflowCode with Challenge branching", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
+		// Challenge nodes get a hoisted let variable used in the if/else branch
 		expect(result.code).toContain("let approval: unknown = null;");
 		expect(result.code).toContain("approval = await step.waitForEvent");
 		expect(result.code).not.toContain("const approval");
-		expect(result.code).toContain("if (approval.payload.accepted)");
+		expect(result.code).toContain(
+			"if ((approval as { payload: { accepted: boolean } }).payload.accepted)",
+		);
 		expect(result.code).toContain("return { success: true");
 		expect(result.code).toContain("} else {");
 		expect(result.code).toContain("return { success: false");
@@ -1064,7 +1068,9 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(result.code).toContain('step.do("mensaje-rechazo"');
 
 		// Join and End must appear AFTER the if/else, not inside a branch
-		const ifIdx = result.code.indexOf("if (aprobacion.payload.accepted)");
+		const ifIdx = result.code.indexOf(
+			"if ((aprobacion as { payload: { accepted: boolean } }).payload.accepted)",
+		);
 		const joinIdx = result.code.indexOf('step.do("union"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
@@ -1223,7 +1229,9 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 			.length;
 		expect(returnCount).toBe(1);
 
-		const ifIdx = result.code.indexOf("if (firma.payload.accepted)");
+		const ifIdx = result.code.indexOf(
+			"if ((firma as { payload: { accepted: boolean } }).payload.accepted)",
+		);
 		const returnIdx = result.code.indexOf("return { success: true");
 		expect(returnIdx).toBeGreaterThan(ifIdx);
 	});
@@ -1740,11 +1748,12 @@ describe("generateWorkflowCode – API node method/body fix", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Node output variables: let declarations at top + assignments in nodes
+// Node output variables: only Challenge gets hoisted let declarations;
+// API, Form, Transform, Checkpoint use direct await (no captured variable)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("generateWorkflowCode – let variable declarations for node output", () => {
-	it("should declare let variables at top of run() for output nodes", () => {
+	it("should NOT declare let variables for API/Form/Transform/Checkpoint nodes", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -1769,19 +1778,16 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("let formularioInicial: unknown = null;");
-		expect(result.code).toContain("let pokemonApi: unknown = null;");
+		// No hoisted let for API or Form — avoids unused-variable lint errors
+		expect(result.code).not.toContain("let formularioInicial");
+		expect(result.code).not.toContain("let pokemonApi");
 
-		expect(result.code).toContain(
-			'formularioInicial = await step.do("formulario-inicial"',
-		);
-		expect(result.code).toContain('pokemonApi = await step.do("pokemon-api"');
-
-		expect(result.code).not.toContain("const formularioInicial");
-		expect(result.code).not.toContain("const pokemonApi");
+		// Steps are generated with plain await (no captured variable)
+		expect(result.code).toContain('await step.do("formulario-inicial"');
+		expect(result.code).toContain('await step.do("pokemon-api"');
 	});
 
-	it("should declare let for Transform nodes", () => {
+	it("should NOT declare let for Transform nodes", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -1799,13 +1805,11 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("let procesarDatos: unknown = null;");
-		expect(result.code).toContain(
-			'procesarDatos = await step.do("procesar-datos"',
-		);
+		expect(result.code).not.toContain("let procesarDatos");
+		expect(result.code).toContain('await step.do("procesar-datos"');
 	});
 
-	it("should declare let for Checkpoint nodes", () => {
+	it("should NOT declare let for Checkpoint nodes", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -1823,10 +1827,34 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("let guardarEstado: unknown = null;");
-		expect(result.code).toContain(
-			'guardarEstado = await step.do("guardar-estado"',
-		);
+		expect(result.code).not.toContain("let guardarEstado");
+		expect(result.code).toContain('await step.do("guardar-estado"');
+	});
+
+	it("should declare let ONLY for Challenge nodes (result used in if/else branch)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion Manual",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Aprobado" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Challenge gets hoisted let so the if/else can reference it
+		expect(result.code).toContain("let aprobacionManual: unknown = null;");
+		expect(result.code).toContain("aprobacionManual = await step.waitForEvent");
+		expect(result.code).not.toContain("const aprobacionManual");
 	});
 
 	it("should NOT declare let for fire-and-forget nodes (Message, FlagChange, Join)", () => {
@@ -1851,7 +1879,7 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 		expect(result.code).not.toMatch(/^\s*let\s/m);
 	});
 
-	it("should NOT generate let declarations when no output nodes exist", () => {
+	it("should NOT generate any let declarations when no Challenge nodes exist", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({ id: "end", type: "End", title: "Fin" }),
@@ -1863,69 +1891,79 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 		expect(result.code).not.toMatch(/\blet\s+\w+:\s*unknown\s*=\s*null/);
 	});
 
-	it("should use fallback variable name when title is empty", () => {
+	it("should use fallback variable name when challenge title is empty", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
-				id: "api",
-				type: "API",
+				id: "challenge",
+				type: "Challenge",
 				title: "",
-				config: { url: "https://example.com" },
+				config: { challengeType: "acceptance" },
 			}),
-			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
 		];
 		const edges: WorkflowEdge[] = [
-			createEdge("start", "api"),
-			createEdge("api", "end"),
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
 		];
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("let apiResult: unknown = null;");
-		expect(result.code).toContain("apiResult = await step.do(");
+		expect(result.code).toContain("let challengeResult: unknown = null;");
+		expect(result.code).toContain(
+			"challengeResult = await step.waitForEvent<{ accepted: boolean }>(",
+		);
 	});
 
-	it("should handle Spanish characters in variable names", () => {
+	it("should handle Spanish characters in challenge variable names", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
-				id: "form",
-				type: "Form",
-				title: "Formulación Básica",
-				roles: ["Solicitante"],
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobación Básica",
+				config: { challengeType: "acceptance" },
 			}),
-			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
 		];
 		const edges: WorkflowEdge[] = [
-			createEdge("start", "form"),
-			createEdge("form", "end"),
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
 		];
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("let formulacionBasica: unknown = null;");
-		expect(result.code).toContain("formulacionBasica = await step.do(");
+		expect(result.code).toContain("let aprobacionBasica: unknown = null;");
+		expect(result.code).toContain(
+			"aprobacionBasica = await step.waitForEvent<{ accepted: boolean }>(",
+		);
 	});
 
 	it("let declarations should appear before // Workflow started", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
-				id: "api",
-				type: "API",
-				title: "Test API",
-				config: { url: "https://example.com" },
+				id: "challenge",
+				type: "Challenge",
+				title: "Test Approval",
+				config: { challengeType: "acceptance" },
 			}),
-			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
 		];
 		const edges: WorkflowEdge[] = [
-			createEdge("start", "api"),
-			createEdge("api", "end"),
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
 		];
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		const letIdx = result.code.indexOf("let testApi: unknown = null;");
+		const letIdx = result.code.indexOf("let testApproval: unknown = null;");
 		const startedIdx = result.code.indexOf("// Workflow started");
 
 		expect(letIdx).toBeGreaterThanOrEqual(0);

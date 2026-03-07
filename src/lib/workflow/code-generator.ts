@@ -146,12 +146,11 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
  */
 function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "formResult");
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const fields = (node.config.fields as string[]) || [];
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
-	code += `${indent}${varName} = await step.do("${stepName}", async () => {\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	if (fields.length > 0) {
 		code += `${indent}\t// Fields: ${fields.join(", ")}\n`;
 	}
@@ -180,10 +179,8 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 		| undefined;
 	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
 
-	const varName = createVariableName(node.title, "apiResult");
-
 	let code = `${indent}// API Call: ${node.title}\n`;
-	code += `${indent}${varName} = await step.do("${stepName}", async () => {\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	code += `${indent}\tconst response = await fetch("${escapeString(endpoint)}", {\n`;
 	code += `${indent}\t\tmethod: "${method}",\n`;
 	if (hasBody) {
@@ -194,7 +191,7 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 	code += `${indent}\tif (!response.ok) {\n`;
 	code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
 	code += `${indent}\t}\n`;
-	code += `${indent}\treturn response.json();\n`;
+	code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
 	code += `${indent}}`;
 
 	// Add retry configuration if specified
@@ -219,11 +216,10 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
  */
 function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "transformResult");
 	const transformCode = (node.config.code as string) || "// Transform logic";
 
 	let code = `${indent}// Transform: ${node.title}\n`;
-	code += `${indent}${varName} = await step.do("${stepName}", async () => {\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	code += `${indent}\t${transformCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}});\n`;
 
@@ -260,11 +256,10 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
  */
 function generateCheckpointStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "checkpointResult");
 	const isSafe = node.checkpointType === "safe";
 
 	let code = `${indent}// Checkpoint: ${node.title}${isSafe ? " (safe)" : ""}\n`;
-	code += `${indent}${varName} = await step.do("${stepName}", async () => {\n`;
+	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	if (isSafe) {
 		code += `${indent}\t// Safe checkpoint - workflow can be safely retried from here\n`;
 	}
@@ -564,7 +559,7 @@ function traverseBranch(
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			code += `${indent}if (${varName}.payload.accepted) {\n`;
+			code += `${indent}if ((${varName} as { payload: { accepted: boolean } }).payload.accepted) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(
@@ -718,22 +713,14 @@ export function generateWorkflowCode(
 	}
 	code += `\tasync run(\n\t\tevent: WorkflowEvent<WorkflowParams>,\n\t\tstep: WorkflowStep,\n\t): Promise<unknown> {\n`;
 
-	// Declare output variables at the top of run() so they are accessible
-	// across all branches (Decision/Challenge if/else blocks).
-	const OUTPUT_NODE_TYPES = [
-		"Form",
-		"API",
-		"Transform",
-		"Checkpoint",
-		"Challenge",
-	];
-	const nodesWithOutput = nodes.filter((n) =>
-		OUTPUT_NODE_TYPES.includes(n.type),
-	);
-	if (nodesWithOutput.length > 0) {
-		for (const node of nodesWithOutput) {
-			const fallback = `${node.type.toLowerCase()}Result`;
-			const varName = createVariableName(node.title, fallback);
+	// Declare let variables only for Challenge nodes whose result is used in the
+	// generated if/else branch (varName.payload.accepted).
+	// Other output nodes (API, Form, Transform, Checkpoint) use inline const
+	// assignment inside their step.do() callback, so no hoisted let is needed.
+	const challengeNodes = nodes.filter((n) => n.type === "Challenge");
+	if (challengeNodes.length > 0) {
+		for (const node of challengeNodes) {
+			const varName = createVariableName(node.title, "challengeResult");
 			code += `\t\tlet ${varName}: unknown = null;\n`;
 		}
 		code += `\n`;
