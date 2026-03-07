@@ -40,17 +40,17 @@ vi.mock("@/lib/workflow-api/workflows", () => ({
 	cloneWorkflow: (...args: unknown[]) => mockCloneWorkflow(...args),
 }));
 
-const mockUseApiToken = vi.fn();
-vi.mock("@/hooks/useWorkflowApiToken", () => ({
-	useWorkflowApiToken: () => mockUseApiToken(),
-}));
-
 vi.mock("sonner", () => ({
 	toast: {
 		success: vi.fn(),
 		error: vi.fn(),
 	},
 	Toaster: () => null,
+}));
+
+const mockUseApiToken = vi.fn();
+vi.mock("@/hooks/useWorkflowApiToken", () => ({
+	useWorkflowApiToken: () => mockUseApiToken(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -61,19 +61,29 @@ const mockMutate = vi.fn();
 
 function makeHooksReturn(
 	workflows: Workflow[],
-	opts: { isLoading?: boolean; error?: Error } = {},
+	opts: {
+		isLoading?: boolean;
+		isTokenLoading?: boolean;
+		error?: Error;
+		data?: Workflow[];
+		hasValidKey?: boolean;
+	} = {},
 ) {
+	const data = opts.data ?? (opts.isLoading ? undefined : workflows);
 	mockUseWorkflows.mockReturnValue({
 		workflows,
+		data,
 		isLoading: opts.isLoading ?? false,
+		isTokenLoading: opts.isTokenLoading ?? false,
 		error: opts.error,
 		mutate: mockMutate,
+		hasValidKey: opts.hasValidKey ?? true,
 	});
 }
 
-function withToken(token: string | null = "test-jwt") {
+function withoutToken() {
 	mockUseApiToken.mockReturnValue({
-		token,
+		token: null,
 		isLoading: false,
 		error: null,
 		refetch: vi.fn(),
@@ -106,7 +116,13 @@ function makeWorkflow(overrides: Partial<Workflow> = {}): Workflow {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	withToken();
+	// Default: token is available
+	mockUseApiToken.mockReturnValue({
+		token: "test-jwt",
+		isLoading: false,
+		error: null,
+		refetch: vi.fn(),
+	});
 });
 
 afterEach(() => {
@@ -525,7 +541,7 @@ describe("WorkflowList – diálogo de creación", () => {
 
 	it("muestra error 'No autenticado' cuando no hay token", async () => {
 		const { toast } = await import("sonner");
-		withToken(null);
+		withoutToken();
 		makeHooksReturn([]);
 		render(<WorkflowList />);
 

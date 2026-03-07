@@ -460,7 +460,15 @@ export function WorkflowList() {
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [cloningId, setCloningId] = useState<string | null>(null);
 
-	const { workflows, isLoading, error, mutate } = useWorkflows();
+	const {
+		workflows,
+		data,
+		isLoading,
+		isTokenLoading,
+		error,
+		mutate,
+		hasValidKey,
+	} = useWorkflows();
 
 	// Client-side filter
 	const filtered = useMemo(() => {
@@ -591,8 +599,10 @@ export function WorkflowList() {
 		}
 	};
 
-	// Skeleton only on initial load; keep list on refetch to avoid CLS
-	const showSkeleton = isLoading && workflows.length === 0;
+	// Skeleton until we have received a response (data defined) or error. Show empty
+	// state only when loading is done and data is available (possibly empty array).
+	const showSkeleton =
+		!error && data === undefined && (hasValidKey || isTokenLoading);
 
 	if (showSkeleton) {
 		return <WorkflowListSkeleton />;
