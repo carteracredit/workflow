@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type {
 	WorkflowNode,
 	WorkflowEdge,
@@ -13,6 +13,7 @@ import type {
 	ChallengeType,
 	ChallengeDeliveryMethod,
 	ChallengeRetryConfig,
+	OutputSchema,
 } from "@/lib/workflow/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,8 @@ import {
 	findNearestPreviousCheckpoint,
 	findAllNearestPreviousCheckpoints,
 	getCheckpointNode,
+	findUpstreamNodes,
+	buildVariableSourceNodes,
 } from "@/lib/workflow/graph-utils";
 import { getColorValue } from "@/lib/flag-manager";
 import { cn } from "@/lib/utils";
@@ -48,6 +51,80 @@ import {
 	validateTransformCode,
 	validateConditionExpression,
 } from "@/lib/workflow/validate-code";
+import { OutputSchemaEditor } from "@/components/workflow/output-schema-editor";
+import {
+	VariableTemplateInput,
+	VariablePicker,
+} from "@/components/workflow/variable-picker";
+import type { TemplateSegment } from "@/components/workflow/variable-picker";
+import type { OutputSchemaProperty } from "@/lib/workflow/types";
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function generateSchemaId() {
+	return `prop_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function jsonValueToSchemaProperty(
+	key: string,
+	value: unknown,
+): OutputSchemaProperty {
+	const base = { id: generateSchemaId(), name: key };
+	if (value === null) return { ...base, type: "string" };
+	if (Array.isArray(value)) {
+		const firstItem = value[0];
+		if (typeof firstItem === "object" && firstItem !== null) {
+			return {
+				...base,
+				type: "array",
+				items: {
+					id: generateSchemaId(),
+					name: "item",
+					type: "object",
+					properties: Object.entries(firstItem as Record<string, unknown>).map(
+						([k, v]) => jsonValueToSchemaProperty(k, v),
+					),
+				},
+			};
+		}
+		return {
+			...base,
+			type: "array",
+			items: { id: generateSchemaId(), name: "item", type: "string" },
+		};
+	}
+	if (typeof value === "object") {
+		return {
+			...base,
+			type: "object",
+			properties: Object.entries(value as Record<string, unknown>).map(
+				([k, v]) => jsonValueToSchemaProperty(k, v),
+			),
+		};
+	}
+	if (typeof value === "boolean") return { ...base, type: "boolean" };
+	if (typeof value === "number") return { ...base, type: "number" };
+	return { ...base, type: "string" };
+}
+
+function inferSchemaFromJson(
+	json: string,
+	schemaName: string,
+): OutputSchema | null {
+	try {
+		const parsed = JSON.parse(json) as Record<string, unknown>;
+		if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null)
+			return null;
+		return {
+			name: schemaName,
+			properties: Object.entries(parsed).map(([k, v]) =>
+				jsonValueToSchemaProperty(k, v),
+			),
+		};
+	} catch {
+		return null;
+	}
+}
 
 interface PropertiesPanelProps {
 	selectedNodes: WorkflowNode[];
@@ -68,7 +145,12 @@ interface PropertiesPanelProps {
 	showWorkflowProperties: boolean;
 	onCloseWorkflowProperties: () => void;
 	position?: "left" | "right";
+	width?: number;
+	onWidthChange?: (width: number) => void;
 }
+
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MAX_WIDTH = 560;
 
 const NODES_WITH_ROLES = ["Form", "Challenge"];
 
@@ -142,6 +224,8 @@ export function PropertiesPanel({
 	showWorkflowProperties,
 	onCloseWorkflowProperties,
 	position = "right",
+	width,
+	onWidthChange,
 }: PropertiesPanelProps) {
 	// For backward compatibility and single selection UI, use first selected item
 	const selectedNode =
@@ -154,6 +238,19 @@ export function PropertiesPanel({
 	const hasMultipleItems =
 		selectedNodes.length + selectedEdges.length > 1 ||
 		(selectedNodes.length > 0 && selectedEdges.length > 0);
+	// Upstream variable source nodes for the variable picker
+	const upstreamVariableNodes = useMemo(() => {
+		if (!selectedNode) return [];
+		const upstream = findUpstreamNodes(selectedNode.id, nodes, edges);
+		return buildVariableSourceNodes(upstream);
+	}, [selectedNode, nodes, edges]);
+
+	// Ref to track textarea cursor for variable insertion (Decision/Transform)
+	const conditionTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const transformTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const [showDecisionVarPicker, setShowDecisionVarPicker] = useState(false);
+	const [showTransformVarPicker, setShowTransformVarPicker] = useState(false);
+
 	// Estado local para el input de maxRetries del nodo API
 	const [apiMaxRetriesInput, setApiMaxRetriesInput] = useState<string>("");
 
@@ -190,6 +287,8 @@ export function PropertiesPanel({
 		setShowApiMock(false);
 		setApiMockSimulated(false);
 		setApiMockError(null);
+		setShowDecisionVarPicker(false);
+		setShowTransformVarPicker(false);
 	}, [selectedNode?.id]);
 
 	const handleOpenApiMock = useCallback(() => {
@@ -306,15 +405,147 @@ export function PropertiesPanel({
 		onUpdateNode,
 	]);
 
+	// ── Output schema helpers ─────────────────────────────────────────────
+	const handleUpdateOutputSchema = useCallback(
+		(schema: OutputSchema) => {
+			if (!selectedNode) return;
+			onUpdateNode(selectedNode.id, {
+				config: { ...selectedNode.config, outputSchema: schema },
+			});
+		},
+		[selectedNode, onUpdateNode],
+	);
+
+	const handleInferSchemaFromMock = useCallback(() => {
+		if (!selectedNode) return;
+		const mockJson = (selectedNode.config.mockResponse as string) || "";
+		const schemaName = `${selectedNode.title || "API"}Output`;
+		const inferred = inferSchemaFromJson(mockJson, schemaName);
+		if (inferred) handleUpdateOutputSchema(inferred);
+	}, [selectedNode, handleUpdateOutputSchema]);
+
+	// ── Variable template segment helpers ────────────────────────────────
+	const handleUrlSegmentsChange = useCallback(
+		(segments: TemplateSegment[]) => {
+			if (!selectedNode) return;
+			const rendered = segments
+				.map((s) => (s.type === "variable" ? `\${${s.variablePath}}` : s.value))
+				.join("");
+			onUpdateNode(selectedNode.id, {
+				config: {
+					...selectedNode.config,
+					url: rendered,
+					urlSegments: segments,
+				},
+			});
+		},
+		[selectedNode, onUpdateNode],
+	);
+
+	const handleMessageTemplateSegmentsChange = useCallback(
+		(segments: TemplateSegment[]) => {
+			if (!selectedNode) return;
+			const rendered = segments
+				.map((s) => (s.type === "variable" ? `\${${s.variablePath}}` : s.value))
+				.join("");
+			onUpdateNode(selectedNode.id, {
+				config: {
+					...selectedNode.config,
+					template: rendered,
+					templateSegments: segments,
+				},
+			});
+		},
+		[selectedNode, onUpdateNode],
+	);
+
+	// ── Variable insertion at cursor (Decision / Transform) ───────────────
+	const insertVariableAtCursor = useCallback(
+		(
+			ref: React.RefObject<HTMLTextAreaElement | null>,
+			path: string,
+			configKey: string,
+		) => {
+			if (!selectedNode || !ref.current) return;
+			const el = ref.current;
+			const start = el.selectionStart ?? 0;
+			const end = el.selectionEnd ?? 0;
+			const current = (selectedNode.config[configKey] as string) || "";
+			const token = `\${${path}}`;
+			const next = current.slice(0, start) + token + current.slice(end);
+			onUpdateNode(selectedNode.id, {
+				config: { ...selectedNode.config, [configKey]: next },
+			});
+			// Restore focus and cursor after the inserted token
+			requestAnimationFrame(() => {
+				el.focus();
+				const pos = start + token.length;
+				el.setSelectionRange(pos, pos);
+			});
+		},
+		[selectedNode, onUpdateNode],
+	);
+
 	const panelSideClass = position === "left" ? "border-r" : "border-l";
+	const panelWidth = width ?? 320;
 	const panelContainerClass = cn(
-		"w-80 border-border bg-card overflow-hidden flex flex-col",
+		"border-border bg-card overflow-hidden flex flex-col relative",
 		panelSideClass,
 	);
+	const panelContainerStyle = {
+		width: panelWidth,
+		minWidth: PANEL_MIN_WIDTH,
+		maxWidth: PANEL_MAX_WIDTH,
+	} as const;
 	const panelContainerProps = {
 		className: panelContainerClass,
+		style: panelContainerStyle,
 		"data-workflow-panel": "properties",
 	} as const;
+
+	const handleResizePointerDown = useCallback(
+		(e: React.PointerEvent) => {
+			if (!onWidthChange) return;
+			e.preventDefault();
+			const startX = e.clientX;
+			const startWidth = panelWidth;
+
+			const onPointerMove = (moveEvent: PointerEvent) => {
+				const delta =
+					position === "left"
+						? moveEvent.clientX - startX
+						: startX - moveEvent.clientX;
+				const next = Math.max(
+					PANEL_MIN_WIDTH,
+					Math.min(PANEL_MAX_WIDTH, startWidth + delta),
+				);
+				onWidthChange(next);
+			};
+
+			const onPointerUp = () => {
+				document.removeEventListener("pointermove", onPointerMove);
+				document.removeEventListener("pointerup", onPointerUp);
+				document.body.style.cursor = "";
+				document.body.style.userSelect = "";
+			};
+
+			document.body.style.cursor = "col-resize";
+			document.body.style.userSelect = "none";
+			document.addEventListener("pointermove", onPointerMove);
+			document.addEventListener("pointerup", onPointerUp);
+		},
+		[onWidthChange, panelWidth, position],
+	);
+
+	const resizeHandle = onWidthChange ? (
+		<div
+			onPointerDown={handleResizePointerDown}
+			className={cn(
+				"absolute inset-y-0 w-1.5 z-10 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors",
+				position === "left" ? "right-0" : "left-0",
+			)}
+		/>
+	) : null;
 
 	// Prioridad: Si showWorkflowProperties está activo, mostrar propiedades del flujo
 	// (incluso si hay un nodo o edge seleccionado)
@@ -325,6 +556,7 @@ export function PropertiesPanel({
 	) {
 		return (
 			<div {...panelContainerProps}>
+				{resizeHandle}
 				<div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
 					<h2 className="font-semibold">Propiedades del Flujo</h2>
 					<Button
@@ -350,7 +582,7 @@ export function PropertiesPanel({
 					</Button>
 				</div>
 
-				<ScrollArea className="flex-1 overflow-y-auto overflow-x-hidden">
+				<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 					<div className="space-y-4 p-4">
 						{/* Workflow Name */}
 						<div className="space-y-2">
@@ -472,11 +704,12 @@ export function PropertiesPanel({
 	if (selectedEdge) {
 		return (
 			<div {...panelContainerProps}>
+				{resizeHandle}
 				<div className="border-b border-border p-4 flex-shrink-0">
 					<h2 className="font-semibold">Propiedades de Flecha</h2>
 				</div>
 
-				<ScrollArea className="flex-1 overflow-y-auto overflow-x-hidden">
+				<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 					<div className="space-y-4 p-4">
 						{/* Edge Label */}
 						<div className="space-y-2">
@@ -767,12 +1000,13 @@ export function PropertiesPanel({
 
 	return (
 		<div {...panelContainerProps}>
+			{resizeHandle}
 			<div className="border-b border-border p-4 flex-shrink-0">
 				<h2 className="font-semibold">Propiedades de Nodo</h2>
 			</div>
 
-			<ScrollArea className="flex-1 overflow-y-auto overflow-x-hidden">
-				<div className="space-y-4 p-4">
+			<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+				<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
 					{/* Title */}
 					<div className="space-y-2 w-full">
 						<Label htmlFor="title">Título</Label>
@@ -887,33 +1121,53 @@ export function PropertiesPanel({
 						</div>
 					)}
 
+					{/* Start node: input schema */}
+					{selectedNode.type === "Start" && (
+						<OutputSchemaEditor
+							value={
+								selectedNode.config.outputSchema as OutputSchema | undefined
+							}
+							onChange={handleUpdateOutputSchema}
+							label="Esquema de Entrada del Workflow"
+						/>
+					)}
+
 					{/* Type-specific configuration */}
 					{selectedNode.type === "Form" && (
-						<div className="space-y-2">
-							<Label htmlFor="form-select">Formulario</Label>
-							<Select
-								value={selectedNode.config.formId as string}
-								onValueChange={(value) =>
-									onUpdateNode(selectedNode.id, {
-										config: { ...selectedNode.config, formId: value },
-									})
+						<div className="space-y-3">
+							<div className="space-y-2">
+								<Label htmlFor="form-select">Formulario</Label>
+								<Select
+									value={selectedNode.config.formId as string}
+									onValueChange={(value) =>
+										onUpdateNode(selectedNode.id, {
+											config: { ...selectedNode.config, formId: value },
+										})
+									}
+								>
+									<SelectTrigger id="form-select">
+										<SelectValue placeholder="Seleccionar formulario" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="form-1">
+											Formulario de Solicitud
+										</SelectItem>
+										<SelectItem value="form-2">
+											Formulario de Verificación
+										</SelectItem>
+										<SelectItem value="form-3">
+											Formulario de Documentos
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							<OutputSchemaEditor
+								value={
+									selectedNode.config.outputSchema as OutputSchema | undefined
 								}
-							>
-								<SelectTrigger id="form-select">
-									<SelectValue placeholder="Seleccionar formulario" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="form-1">
-										Formulario de Solicitud
-									</SelectItem>
-									<SelectItem value="form-2">
-										Formulario de Verificación
-									</SelectItem>
-									<SelectItem value="form-3">
-										Formulario de Documentos
-									</SelectItem>
-								</SelectContent>
-							</Select>
+								onChange={handleUpdateOutputSchema}
+								label="Esquema de Salida"
+							/>
 						</div>
 					)}
 
@@ -922,6 +1176,7 @@ export function PropertiesPanel({
 							<Label htmlFor="condition">Condición</Label>
 							<Textarea
 								id="condition"
+								ref={conditionTextareaRef}
 								value={(selectedNode.config.condition as string) || ""}
 								onChange={(e) =>
 									onUpdateNode(selectedNode.id, {
@@ -934,6 +1189,38 @@ export function PropertiesPanel({
 								placeholder="Ej: creditScore > 700"
 								rows={3}
 							/>
+							<div className="rounded-md border border-border/60 overflow-hidden">
+								<button
+									type="button"
+									onClick={() =>
+										setShowDecisionVarPicker(!showDecisionVarPicker)
+									}
+									className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+								>
+									<span className="font-medium">Variables disponibles</span>
+									<span>{showDecisionVarPicker ? "▲" : "▼"}</span>
+								</button>
+								{showDecisionVarPicker &&
+									(upstreamVariableNodes.length > 0 ? (
+										<VariablePicker
+											nodes={upstreamVariableNodes}
+											onSelect={(variable) =>
+												insertVariableAtCursor(
+													conditionTextareaRef,
+													variable.path,
+													"condition",
+												)
+											}
+											className="rounded-none border-0 shadow-none"
+										/>
+									) : (
+										<div className="px-3 py-2 text-xs text-muted-foreground">
+											No hay variables disponibles todavia. Define un esquema de
+											salida en nodos anteriores (o en Inicio) para usarlas en
+											la condicion.
+										</div>
+									))}
+							</div>
 						</div>
 					)}
 
@@ -942,6 +1229,7 @@ export function PropertiesPanel({
 							<Label htmlFor="transform-code">Código TypeScript</Label>
 							<Textarea
 								id="transform-code"
+								ref={transformTextareaRef}
 								value={(selectedNode.config.code as string) || ""}
 								onChange={(e) => {
 									onUpdateNode(selectedNode.id, {
@@ -952,6 +1240,38 @@ export function PropertiesPanel({
 								rows={6}
 								className="font-mono text-xs"
 							/>
+							<div className="rounded-md border border-border/60 overflow-hidden">
+								<button
+									type="button"
+									onClick={() =>
+										setShowTransformVarPicker(!showTransformVarPicker)
+									}
+									className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+								>
+									<span className="font-medium">Variables disponibles</span>
+									<span>{showTransformVarPicker ? "▲" : "▼"}</span>
+								</button>
+								{showTransformVarPicker &&
+									(upstreamVariableNodes.length > 0 ? (
+										<VariablePicker
+											nodes={upstreamVariableNodes}
+											onSelect={(variable) =>
+												insertVariableAtCursor(
+													transformTextareaRef,
+													variable.path,
+													"code",
+												)
+											}
+											className="rounded-none border-0 shadow-none"
+										/>
+									) : (
+										<div className="px-3 py-2 text-xs text-muted-foreground">
+											No hay variables disponibles todavia. Define un esquema de
+											salida en nodos anteriores (o en Inicio) para usarlas en
+											transformaciones.
+										</div>
+									))}
+							</div>
 							<Button
 								size="sm"
 								variant="secondary"
@@ -1011,6 +1331,13 @@ export function PropertiesPanel({
 									)}
 								</div>
 							)}
+							<OutputSchemaEditor
+								value={
+									selectedNode.config.outputSchema as OutputSchema | undefined
+								}
+								onChange={handleUpdateOutputSchema}
+								label="Esquema de Salida"
+							/>
 						</div>
 					)}
 
@@ -1066,17 +1393,14 @@ export function PropertiesPanel({
 
 									<div className="space-y-2">
 										<Label htmlFor="api-url">URL</Label>
-										<Input
-											id="api-url"
-											value={(selectedNode.config.url as string) || ""}
-											onChange={(e) =>
-												onUpdateNode(selectedNode.id, {
-													config: {
-														...selectedNode.config,
-														url: e.target.value,
-													},
-												})
+										<VariableTemplateInput
+											nodes={upstreamVariableNodes}
+											value={
+												(selectedNode.config.urlSegments as
+													| TemplateSegment[]
+													| undefined) ?? undefined
 											}
+											onChange={handleUrlSegmentsChange}
 											placeholder="https://api.example.com/endpoint"
 										/>
 									</div>
@@ -1549,12 +1873,28 @@ export function PropertiesPanel({
 											</div>
 										)}
 									</div>
+
+									{/* Output Schema */}
+									<OutputSchemaEditor
+										value={
+											selectedNode.config.outputSchema as
+												| OutputSchema
+												| undefined
+										}
+										onChange={handleUpdateOutputSchema}
+										label="Esquema de Respuesta"
+										onInferFromJson={
+											(selectedNode.config.mockResponse as string)
+												? handleInferSchemaFromMock
+												: undefined
+										}
+									/>
 								</div>
 							);
 						})()}
 
 					{selectedNode.type === "Message" && (
-						<div className="space-y-2">
+						<div className="space-y-3">
 							<div className="space-y-2">
 								<Label htmlFor="message-channel">Canal</Label>
 								<Select
@@ -1577,19 +1917,15 @@ export function PropertiesPanel({
 
 							<div className="space-y-2">
 								<Label htmlFor="message-template">Template</Label>
-								<Textarea
-									id="message-template"
-									value={(selectedNode.config.template as string) || ""}
-									onChange={(e) =>
-										onUpdateNode(selectedNode.id, {
-											config: {
-												...selectedNode.config,
-												template: e.target.value,
-											},
-										})
+								<VariableTemplateInput
+									nodes={upstreamVariableNodes}
+									value={
+										(selectedNode.config.templateSegments as
+											| TemplateSegment[]
+											| undefined) ?? undefined
 									}
-									placeholder="Hola {{nombre}}, tu solicitud ha sido..."
-									rows={4}
+									onChange={handleMessageTemplateSegmentsChange}
+									placeholder="Hola, tu solicitud ha sido procesada..."
 								/>
 							</div>
 						</div>

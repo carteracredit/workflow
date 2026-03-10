@@ -294,6 +294,71 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain("return { success: false");
 	});
 
+	it("should expand ${nodeId.prop} variable references in Decision conditions to valid JS", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "node-1773093521695",
+				type: "API",
+				title: "Pokemon available",
+				config: {
+					url: "https://pokeapi.co/api/v2/pokemon",
+					method: "GET",
+					outputSchema: {
+						properties: [{ name: "count", type: "number", required: true }],
+					},
+				},
+			}),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Hay resultados",
+				config: { condition: "${node-1773093521695.count} > 0" },
+			}),
+			createNode({ id: "end-yes", type: "End", title: "Hay pokémon" }),
+			createNode({ id: "end-no", type: "Reject", title: "Sin resultados" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "node-1773093521695"),
+			createEdge("node-1773093521695", "decision"),
+			createEdge("decision", "end-yes", { fromPort: "top" }),
+			createEdge("decision", "end-no", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Variable reference should be expanded to valid JS
+		expect(result.code).toContain("if (node_1773093521695.count > 0)");
+		// The original template syntax must NOT appear in generated code
+		expect(result.code).not.toContain("${node-1773093521695.count}");
+		// The API step result should be captured in a variable
+		expect(result.code).toContain("const node_1773093521695 =");
+	});
+
+	it("should NOT capture step result when node has no outputSchema", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "node-api",
+				type: "API",
+				title: "Call API",
+				config: { url: "https://example.com", method: "GET" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "node-api"),
+			createEdge("node-api", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toContain("const node_api =");
+		expect(result.code).toContain("await step.do(");
+	});
+
 	it("should generate Transform step code", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),

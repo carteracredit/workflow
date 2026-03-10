@@ -501,6 +501,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [showFlagManager, setShowFlagManager] = useState(false);
 	const [showWorkflowProperties, setShowWorkflowProperties] = useState(false);
 	const [showPublish, setShowPublish] = useState(false);
+	const [panelWidth, setPanelWidth] = useState(320);
 	const [validationStatus, setValidationStatus] = useState<
 		"idle" | "valid" | "invalid"
 	>("idle");
@@ -1175,11 +1176,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						)}
 
 						<div
-							className={`absolute inset-y-0 left-0 z-30 flex w-80 transition-opacity duration-200 ${
+							className={`absolute inset-y-0 left-0 z-30 flex transition-opacity duration-200 ${
 								shouldShowPropertiesOverlay
 									? "pointer-events-auto opacity-100"
 									: "pointer-events-none opacity-0"
 							}`}
+							style={{ width: panelWidth }}
 						>
 							<PropertiesPanel
 								selectedNodes={
@@ -1214,6 +1216,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 									setShowWorkflowProperties(false)
 								}
 								position="left"
+								width={panelWidth}
+								onWidthChange={setPanelWidth}
 							/>
 						</div>
 					</div>
