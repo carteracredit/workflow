@@ -1,3 +1,10 @@
+# [1.1.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.4...v1.1.0-rc.5) (2026-03-10)
+
+
+### Features
+
+* add Message node support with email and SMS configurations ([5a57851](https://github.com/carteracredit/workflow/commit/5a578514ca8457a4cee6c9dd47bbaba13b966306))
+
 # [1.1.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.3...v1.1.0-rc.4) (2026-03-10)
 
 
