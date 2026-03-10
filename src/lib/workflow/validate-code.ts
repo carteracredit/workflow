@@ -52,6 +52,11 @@ export async function validateTransformCode(
  * it as a complete syntactic unit:
  *
  *   if (<CONDITION>) {}
+ *
+ * Variable references inserted by the variable picker use the template syntax
+ * `${nodeId.property}` (e.g. `${node-123.count}`). These are not valid inside
+ * a plain JS expression, so we substitute them with a valid placeholder
+ * identifier before parsing to avoid false-positive syntax errors.
  */
 export async function validateConditionExpression(
 	condition: string,
@@ -63,8 +68,18 @@ export async function validateConditionExpression(
 		};
 	}
 
-	const wrapped = `if (${condition}) {}`;
+	const normalized = substituteVariableRefs(condition);
+	const wrapped = `if (${normalized}) {}`;
 	return parseTypeScript(wrapped);
+}
+
+/**
+ * Replaces `${some.variable.path}` placeholders (inserted by the variable
+ * picker) with a syntactically-valid identifier so the TypeScript parser can
+ * check the surrounding expression without false-positive errors.
+ */
+export function substituteVariableRefs(expr: string): string {
+	return expr.replace(/\$\{[^}]+\}/g, "__ref__");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

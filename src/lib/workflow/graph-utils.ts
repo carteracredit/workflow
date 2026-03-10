@@ -1,4 +1,10 @@
-import type { WorkflowNode, WorkflowEdge } from "./types";
+import type {
+	WorkflowNode,
+	WorkflowEdge,
+	OutputSchema,
+	OutputSchemaProperty,
+	SchemaPropertyType,
+} from "./types";
 
 /**
  * Encuentra el checkpoint anterior más próximo a un nodo dado.
@@ -130,6 +136,140 @@ export function findAllNearestPreviousCheckpoints(
 	}
 
 	return checkpoints;
+}
+
+/**
+ * Finds all upstream nodes reachable by traversing edges backward from a given nodeId.
+ * Returns them in approximate topological order (closest first).
+ */
+export function findUpstreamNodes(
+	nodeId: string,
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+): WorkflowNode[] {
+	const visited = new Set<string>();
+	const queue: string[] = [nodeId];
+	const result: WorkflowNode[] = [];
+
+	while (queue.length > 0) {
+		const currentId = queue.shift()!;
+		if (visited.has(currentId)) continue;
+		visited.add(currentId);
+
+		if (currentId !== nodeId) {
+			const node = nodes.find((n) => n.id === currentId);
+			if (node) result.push(node);
+		}
+
+		const incomingEdges = edges.filter((e) => e.to === currentId);
+		for (const edge of incomingEdges) {
+			if (!visited.has(edge.from)) {
+				queue.push(edge.from);
+			}
+		}
+	}
+
+	return result;
+}
+
+// ── Variable Source types ──────────────────────────────────────────────────
+// These mirror the variable-picker component types so that graph-utils can
+// produce the data structure the picker consumes without a circular import.
+
+export type VariableNodeType =
+	| "string"
+	| "number"
+	| "boolean"
+	| "object"
+	| "array"
+	| "null"
+	| "any";
+
+export interface VariableLeafNode {
+	name: string;
+	type: VariableNodeType;
+	path: string;
+	children?: VariableLeafNode[];
+	description?: string;
+}
+
+export interface VariableSourceNode {
+	id: string;
+	name: string;
+	variables: VariableLeafNode[];
+}
+
+function schemaTypeToVariableType(t: SchemaPropertyType): VariableNodeType {
+	switch (t) {
+		case "enum":
+			return "string";
+		default:
+			return t as VariableNodeType;
+	}
+}
+
+function schemaPropertyToVariable(
+	prop: OutputSchemaProperty,
+	parentPath: string,
+): VariableLeafNode {
+	const path = parentPath ? `${parentPath}.${prop.name}` : prop.name;
+	const varType = schemaTypeToVariableType(prop.type);
+	const node: VariableLeafNode = {
+		name: prop.name,
+		type: varType,
+		path,
+		description: prop.description,
+	};
+
+	if (prop.type === "object" && prop.properties && prop.properties.length > 0) {
+		node.children = prop.properties.map((child) =>
+			schemaPropertyToVariable(child, path),
+		);
+	} else if (prop.type === "array" && prop.items) {
+		const itemPath = `${path}[0]`;
+		if (
+			prop.items.type === "object" &&
+			prop.items.properties &&
+			prop.items.properties.length > 0
+		) {
+			node.children = prop.items.properties.map((child) =>
+				schemaPropertyToVariable(child, itemPath),
+			);
+		} else {
+			node.children = [schemaPropertyToVariable(prop.items, itemPath)];
+		}
+	}
+
+	return node;
+}
+
+/**
+ * Converts an array of upstream WorkflowNodes (those that have an outputSchema
+ * in their config) into VariableSourceNode[] suitable for the variable picker.
+ */
+export function buildVariableSourceNodes(
+	upstreamNodes: WorkflowNode[],
+): VariableSourceNode[] {
+	const result: VariableSourceNode[] = [];
+
+	for (const node of upstreamNodes) {
+		const schema = node.config.outputSchema as OutputSchema | undefined;
+		if (!schema || !schema.properties || schema.properties.length === 0) {
+			continue;
+		}
+
+		const variables: VariableLeafNode[] = schema.properties.map((prop) =>
+			schemaPropertyToVariable(prop, node.id),
+		);
+
+		result.push({
+			id: node.id,
+			name: node.title || node.type,
+			variables,
+		});
+	}
+
+	return result;
 }
 
 /**
