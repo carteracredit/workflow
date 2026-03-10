@@ -2068,3 +2068,159 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 		expect(result1.code).toBe(result2.code);
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variable interpolation in generated strings
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("generateWorkflowCode – variable interpolation in generated strings", () => {
+	const makeNodes = (apiConfig: Record<string, unknown>) => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "node-1773102326632",
+			type: "API",
+			title: "List Pokemon",
+			config: {
+				url: "https://pokeapi.co/api/v2/pokemon",
+				method: "GET",
+				outputSchema: {
+					properties: [{ name: "results", type: "array", required: true }],
+				},
+			},
+		}),
+		createNode({
+			id: "node-details",
+			type: "API",
+			title: "Get Pokemon Details",
+			config: apiConfig,
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+	];
+	const makeEdges = () => [
+		createEdge("start", "node-1773102326632"),
+		createEdge("node-1773102326632", "node-details"),
+		createEdge("node-details", "end"),
+	];
+
+	it("API URL with variable ref should use backtick template literal", () => {
+		const result = generateWorkflowCode(
+			makeNodes({
+				url: "${node-1773102326632.results[0].url}",
+				method: "GET",
+			}),
+			makeEdges(),
+		);
+
+		// Must use backtick template literal with dehyphenated node ID
+		expect(result.code).toContain(
+			"fetch(`${node_1773102326632.results[0].url}`",
+		);
+		// Must NOT contain the original hyphenated literal string form
+		expect(result.code).not.toContain('"${node-1773102326632.results[0].url}"');
+	});
+
+	it("API URL with mixed static prefix and variable ref uses backtick template literal", () => {
+		const result = generateWorkflowCode(
+			makeNodes({
+				url: "https://api.example.com/${node-1773102326632.id}",
+				method: "GET",
+			}),
+			makeEdges(),
+		);
+
+		expect(result.code).toContain(
+			"fetch(`https://api.example.com/${node_1773102326632.id}`",
+		);
+	});
+
+	it("API URL without variable refs continues to use double quotes", () => {
+		const result = generateWorkflowCode(
+			makeNodes({ url: "https://pokeapi.co/api/v2/pokemon/1", method: "GET" }),
+			makeEdges(),
+		);
+
+		expect(result.code).toContain(
+			'fetch("https://pokeapi.co/api/v2/pokemon/1"',
+		);
+	});
+
+	it("Message template with variable ref should use backtick template literal", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "node-abc",
+				type: "API",
+				title: "Fetch Data",
+				config: {
+					url: "https://api.example.com",
+					method: "GET",
+					outputSchema: {
+						properties: [{ name: "name", type: "string", required: true }],
+					},
+				},
+			}),
+			createNode({
+				id: "message",
+				type: "Message",
+				title: "Notify",
+				config: {
+					type: "email",
+					template: "Hello ${node-abc.name}, welcome!",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [
+			createEdge("start", "node-abc"),
+			createEdge("node-abc", "message"),
+			createEdge("message", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain(
+			"template: `Hello ${node_abc.name}, welcome!`",
+		);
+		expect(result.code).not.toContain('"Hello ${node-abc.name}, welcome!"');
+	});
+
+	it("Transform code with variable ref should have node IDs dehyphenated", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "node-data",
+				type: "API",
+				title: "Fetch Data",
+				config: {
+					url: "https://api.example.com",
+					method: "GET",
+					outputSchema: {
+						properties: [{ name: "items", type: "array", required: true }],
+					},
+				},
+			}),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Process",
+				config: {
+					code: "const count = ${node-data.items}.length;\nreturn { count };",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [
+			createEdge("start", "node-data"),
+			createEdge("node-data", "transform"),
+			createEdge("transform", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// expandVariableRefs strips ${} and dehyphenates, so ${node-data.items}
+		// becomes the plain property access node_data.items in the code body
+		expect(result.code).toContain("const count = node_data.items.length;");
+		// Must NOT contain the original hyphenated template-literal form
+		expect(result.code).not.toContain("${node-data.items}");
+	});
+});

@@ -110,13 +110,54 @@ function nodeIdToVarName(nodeId: string): string {
  * valid JavaScript property-access expressions.
  *
  * The picker stores references using template-literal syntax which is NOT valid
- * in a plain JS expression. This helper converts them so that, for example,
+ * in a plain JS expression (e.g. inside an `if` condition or a code block).
+ * This helper converts them so that, for example,
  * `${node-123.count} > 0` becomes `node_123.count > 0`.
+ *
+ * Use this for Decision conditions and Transform code bodies (bare expressions).
+ * For quoted string values use `emitInterpolatedString` instead.
  */
-function expandConditionVariables(condition: string): string {
-	return condition.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
+function expandVariableRefs(expr: string): string {
+	return expr.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
 		path.replace(/-/g, "_"),
 	);
+}
+
+/**
+ * Returns true when the string contains at least one `${...}` variable reference
+ * inserted by the variable picker.
+ */
+function containsVariableRefs(str: string): boolean {
+	return /\$\{[^}]+\}/.test(str);
+}
+
+/**
+ * Emits a string value for use in generated TypeScript source code.
+ *
+ * - If the string has no variable references it is wrapped in double quotes
+ *   (existing behaviour).
+ * - If the string contains `${nodeId.property}` references it is wrapped in
+ *   backticks so the references become valid template-literal interpolations.
+ *   Node IDs are also dehyphenated (e.g. `node-123` → `node_123`) to produce
+ *   valid JavaScript identifiers.
+ *
+ * Examples:
+ *   "https://api.example.com/items"         → `"https://api.example.com/items"`
+ *   "${node-123.results[0].url}"            → `` `${node_123.results[0].url}` ``
+ *   "https://api.example.com/${node-123.id}" → `` `https://api.example.com/${node_123.id}` ``
+ */
+function emitInterpolatedString(str: string): string {
+	if (!containsVariableRefs(str)) {
+		return `"${escapeString(str)}"`;
+	}
+	// Dehyphenate node IDs inside ${...} so they are valid JS identifiers,
+	// then wrap the whole thing in backticks.
+	const expanded = str.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
+		return `\${${path.replace(/-/g, "_")}}`;
+	});
+	// Escape any backticks inside the literal part (outside ${...}).
+	const escaped = expanded.replace(/`/g, "\\`");
+	return `\`${escaped}\``;
 }
 
 /**
@@ -217,7 +258,7 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 
 	let code = `${indent}// API Call: ${node.title}\n`;
 	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
-	code += `${indent}\tconst response = await fetch("${escapeString(endpoint)}", {\n`;
+	code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
 	code += `${indent}\t\tmethod: "${method}",\n`;
 	if (hasBody) {
 		code += `${indent}\t\theaders: { "Content-Type": "application/json" },\n`;
@@ -259,7 +300,8 @@ function generateTransformStep(node: WorkflowNode, indent: string): string {
 
 	let code = `${indent}// Transform: ${node.title}\n`;
 	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
-	code += `${indent}\t${transformCode.split("\n").join(`\n${indent}\t`)}\n`;
+	const expandedCode = expandVariableRefs(transformCode);
+	code += `${indent}\t${expandedCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}})${resultCast};\n`;
 
 	return code;
@@ -281,7 +323,7 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 	code += `${indent}\tawait notifications.send({\n`;
 	code += `${indent}\t\ttype: "${messageType}",\n`;
 	if (template) {
-		code += `${indent}\t\ttemplate: "${escapeString(template)}",\n`;
+		code += `${indent}\t\ttemplate: ${emitInterpolatedString(template)},\n`;
 	}
 	code += `${indent}\t\tpayload: event.payload,\n`;
 	code += `${indent}\t});\n`;
@@ -553,7 +595,7 @@ function traverseBranch(
 			const innerStop = convergenceNodeId ?? stopAtNodeId;
 
 			code += `${indent}// Decision: ${node.title}\n`;
-			code += `${indent}if (${expandConditionVariables(condition)}) {\n`;
+			code += `${indent}if (${expandVariableRefs(condition)}) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(
