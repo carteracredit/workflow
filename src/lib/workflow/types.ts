@@ -135,6 +135,29 @@ export function isChallengeNode(
 	return node.type === "Challenge";
 }
 
+export type MessageChannel = "email" | "sms";
+
+export interface MessageMergeVar {
+	key: string;
+	value: string;
+}
+
+export interface MessageNodeConfig extends Record<string, unknown> {
+	channel: MessageChannel;
+	// Email-specific
+	templateName?: string;
+	subject?: string;
+	mergeVars?: MessageMergeVar[];
+	// SMS-specific
+	body?: string;
+}
+
+export function isMessageNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "Message"; config: MessageNodeConfig } {
+	return node.type === "Message";
+}
+
 export interface WorkflowEdge {
 	id: string;
 	from: string;

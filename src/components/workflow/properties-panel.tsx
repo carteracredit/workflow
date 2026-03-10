@@ -13,6 +13,9 @@ import type {
 	ChallengeType,
 	ChallengeDeliveryMethod,
 	ChallengeRetryConfig,
+	MessageNodeConfig,
+	MessageMergeVar,
+	MessageChannel,
 	OutputSchema,
 } from "@/lib/workflow/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -149,10 +152,9 @@ interface PropertiesPanelProps {
 	onWidthChange?: (width: number) => void;
 }
 
+const NODES_WITH_ROLES = ["Form", "Challenge", "Message"];
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 560;
-
-const NODES_WITH_ROLES = ["Form", "Challenge"];
 
 const EDGE_COLORS = [
 	{ name: "Predeterminado", value: "default" },
@@ -959,6 +961,47 @@ export function PropertiesPanel({
 		setChallengeRetries({
 			...challengeRetryConfig,
 			roles,
+		});
+	};
+
+	// Message node helpers
+	const messageConfig =
+		selectedNode.type === "Message"
+			? ((selectedNode.config as MessageNodeConfig | undefined) ?? {
+					channel: "email" as MessageChannel,
+					mergeVars: [],
+				})
+			: null;
+
+	const setMessageConfig = (nextConfig: MessageNodeConfig) => {
+		onUpdateNode(selectedNode.id, { config: nextConfig });
+	};
+
+	const handleMessageMergeVarAdd = () => {
+		if (!messageConfig) return;
+		setMessageConfig({
+			...messageConfig,
+			mergeVars: [...(messageConfig.mergeVars ?? []), { key: "", value: "" }],
+		});
+	};
+
+	const handleMessageMergeVarUpdate = (
+		index: number,
+		field: keyof MessageMergeVar,
+		value: string,
+	) => {
+		if (!messageConfig) return;
+		const updated = (messageConfig.mergeVars ?? []).map((v, i) =>
+			i === index ? { ...v, [field]: value } : v,
+		);
+		setMessageConfig({ ...messageConfig, mergeVars: updated });
+	};
+
+	const handleMessageMergeVarRemove = (index: number) => {
+		if (!messageConfig) return;
+		setMessageConfig({
+			...messageConfig,
+			mergeVars: (messageConfig.mergeVars ?? []).filter((_, i) => i !== index),
 		});
 	};
 
@@ -1893,15 +1936,17 @@ export function PropertiesPanel({
 							);
 						})()}
 
-					{selectedNode.type === "Message" && (
-						<div className="space-y-3">
+					{selectedNode.type === "Message" && messageConfig && (
+						<div className="space-y-4">
+							{/* Canal */}
 							<div className="space-y-2">
-								<Label htmlFor="message-channel">Canal</Label>
+								<Label htmlFor="message-channel">Canal de entrega</Label>
 								<Select
-									value={(selectedNode.config.channel as string) || "email"}
+									value={messageConfig.channel ?? "email"}
 									onValueChange={(value) =>
-										onUpdateNode(selectedNode.id, {
-											config: { ...selectedNode.config, channel: value },
+										setMessageConfig({
+											...messageConfig,
+											channel: value as MessageChannel,
 										})
 									}
 								>
@@ -1909,25 +1954,158 @@ export function PropertiesPanel({
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="email">Email</SelectItem>
-										<SelectItem value="sms">SMS</SelectItem>
+										<SelectItem value="email">Email (Mandrill)</SelectItem>
+										<SelectItem value="sms">SMS (Twilio)</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>
 
-							<div className="space-y-2">
-								<Label htmlFor="message-template">Template</Label>
-								<VariableTemplateInput
-									nodes={upstreamVariableNodes}
-									value={
-										(selectedNode.config.templateSegments as
-											| TemplateSegment[]
-											| undefined) ?? undefined
-									}
-									onChange={handleMessageTemplateSegmentsChange}
-									placeholder="Hola, tu solicitud ha sido procesada..."
-								/>
-							</div>
+							{/* Email config */}
+							{messageConfig.channel === "email" && (
+								<>
+									<div className="space-y-2">
+										<Label htmlFor="message-template-name">
+											Nombre del template
+										</Label>
+										<Input
+											id="message-template-name"
+											value={messageConfig.templateName ?? ""}
+											onChange={(e) =>
+												setMessageConfig({
+													...messageConfig,
+													templateName: e.target.value,
+												})
+											}
+											placeholder="mi-template-mandrill"
+										/>
+										<p className="text-xs text-muted-foreground">
+											Nombre exacto del template en Mandrill.
+										</p>
+									</div>
+
+									<div className="space-y-2">
+										<Label htmlFor="message-subject">Asunto</Label>
+										<Input
+											id="message-subject"
+											value={messageConfig.subject ?? ""}
+											onChange={(e) =>
+												setMessageConfig({
+													...messageConfig,
+													subject: e.target.value,
+												})
+											}
+											placeholder="Tu solicitud ha sido procesada"
+										/>
+									</div>
+
+									<div className="space-y-2">
+										<div className="flex items-center justify-between">
+											<Label>Variables del template</Label>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												className="h-7 px-2 text-xs"
+												onClick={handleMessageMergeVarAdd}
+											>
+												+ Agregar
+											</Button>
+										</div>
+										<p className="text-xs text-muted-foreground">
+											Variables que se sustituyen en el template. La{" "}
+											<span className="font-mono">clave</span> corresponde al
+											placeholder <span className="font-mono">*|CLAVE|*</span>{" "}
+											en Mandrill. El <span className="font-mono">valor</span>{" "}
+											puede referenciar datos del evento, p.ej.{" "}
+											<span className="font-mono">event.payload.nombre</span>.
+										</p>
+										{(messageConfig.mergeVars ?? []).length === 0 && (
+											<p className="text-xs text-muted-foreground italic">
+												Sin variables definidas.
+											</p>
+										)}
+										<div className="space-y-2">
+											{(messageConfig.mergeVars ?? []).map((mv, index) => (
+												<div key={index} className="flex items-center gap-1.5">
+													<Input
+														value={mv.key}
+														onChange={(e) =>
+															handleMessageMergeVarUpdate(
+																index,
+																"key",
+																e.target.value,
+															)
+														}
+														placeholder="CLAVE"
+														className="h-7 flex-1 font-mono text-xs uppercase"
+													/>
+													<span className="text-muted-foreground text-xs">
+														=
+													</span>
+													<Input
+														value={mv.value}
+														onChange={(e) =>
+															handleMessageMergeVarUpdate(
+																index,
+																"value",
+																e.target.value,
+															)
+														}
+														placeholder="event.payload.campo"
+														className="h-7 flex-1 font-mono text-xs"
+													/>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon"
+														className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
+														onClick={() => handleMessageMergeVarRemove(index)}
+														aria-label="Eliminar variable"
+													>
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															className="h-3.5 w-3.5"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															strokeWidth="2"
+															strokeLinecap="round"
+															strokeLinejoin="round"
+														>
+															<path d="M18 6 6 18" />
+															<path d="m6 6 12 12" />
+														</svg>
+													</Button>
+												</div>
+											))}
+										</div>
+									</div>
+								</>
+							)}
+
+							{/* SMS config */}
+							{messageConfig.channel === "sms" && (
+								<div className="space-y-2">
+									<Label htmlFor="message-sms-body">Cuerpo del mensaje</Label>
+									<Textarea
+										id="message-sms-body"
+										value={messageConfig.body ?? ""}
+										onChange={(e) =>
+											setMessageConfig({
+												...messageConfig,
+												body: e.target.value,
+											})
+										}
+										placeholder="Hola, tu solicitud {{id}} ha sido procesada."
+										rows={4}
+									/>
+									<p className="text-xs text-muted-foreground">
+										Texto del SMS. Máximo 1,600 caracteres. Usa{" "}
+										<span className="font-mono">{"{{variable}}"}</span> para
+										referenciar datos del evento.
+									</p>
+								</div>
+							)}
 						</div>
 					)}
 

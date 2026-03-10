@@ -413,7 +413,12 @@ describe("generateWorkflowCode", () => {
 				id: "message",
 				type: "Message",
 				title: "Send Notification",
-				config: { type: "email", template: "welcome" },
+				roles: ["Solicitante"],
+				config: {
+					channel: "email",
+					templateName: "welcome",
+					mergeVars: [{ key: "NOMBRE", value: "event.payload.name" }],
+				},
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
 		];
@@ -426,8 +431,8 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain('step.do("send-notification"');
-		expect(result.code).toContain("notifications.send");
-		expect(result.code).toContain('type: "email"');
+		expect(result.code).toContain("sendTemplateEmail");
+		expect(result.code).toContain('templateName: "welcome"');
 	});
 
 	it("should include metadata in comments when provided", () => {
@@ -805,14 +810,23 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).not.toContain("(safe)");
 	});
 
-	it("should handle Message node without template", () => {
+	it("should handle Message node (email) with template and merge vars", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
 				id: "message",
 				type: "Message",
-				title: "Notify",
-				config: { type: "sms" },
+				title: "Notify Email",
+				roles: ["Solicitante"],
+				config: {
+					channel: "email",
+					templateName: "my-template",
+					subject: "Tu solicitud",
+					mergeVars: [
+						{ key: "NOMBRE", value: "event.payload.nombre" },
+						{ key: "MONTO", value: "500" },
+					],
+				},
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
 		];
@@ -824,8 +838,106 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain('type: "sms"');
-		expect(result.code).not.toContain("template:");
+		expect(result.code).toContain("sendTemplateEmail");
+		expect(result.code).toContain('templateName: "my-template"');
+		expect(result.code).toContain('subject: "Tu solicitud"');
+		expect(result.code).toContain("NOMBRE: event.payload.nombre as string");
+		expect(result.code).toContain('MONTO: "500"');
+		expect(result.code).toContain("NOTIFICATIONS_SERVICE");
+		// WorkflowEnv should include NOTIFICATIONS_SERVICE
+		expect(result.code).toContain("NOTIFICATIONS_SERVICE: {");
+	});
+
+	it("should handle Message node (email) without template name", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "message",
+				type: "Message",
+				title: "Notify",
+				config: { channel: "email", mergeVars: [] },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "message"),
+			createEdge("message", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("sendTemplateEmail");
+		expect(result.code).toContain("TODO: set Mandrill template name");
+		expect(result.code).toContain("TODO: add template merge variables");
+		// WorkflowEnv declares both methods; only sendTemplateEmail is called in the step
+		expect(result.code).not.toContain("await notifications.sendSms");
+	});
+
+	it("should handle Message node (sms) with body", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "message",
+				type: "Message",
+				title: "Notify SMS",
+				roles: ["Solicitante"],
+				config: {
+					channel: "sms",
+					body: "Tu solicitud fue procesada",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "message"),
+			createEdge("message", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("sendSms");
+		expect(result.code).toContain('body: "Tu solicitud fue procesada"');
+		expect(result.code).toContain("NOTIFICATIONS_SERVICE");
+		// WorkflowEnv declares both methods; only sendSms is called in the step
+		expect(result.code).not.toContain("await notifications.sendTemplateEmail");
+	});
+
+	it("should handle Message node (sms) without body", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "message",
+				type: "Message",
+				title: "Notify",
+				config: { channel: "sms" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "message"),
+			createEdge("message", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("sendSms");
+		expect(result.code).toContain("TODO: set SMS body");
+	});
+
+	it("should NOT include NOTIFICATIONS_SERVICE in WorkflowEnv when no Message nodes", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toContain("NOTIFICATIONS_SERVICE");
 	});
 
 	it("should handle Decision node without condition", () => {
@@ -2144,7 +2256,7 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 		);
 	});
 
-	it("Message template with variable ref should use backtick template literal", () => {
+	it("Message email node uses sendTemplateEmail with merge var expression referencing upstream node", () => {
 		const nodes = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -2163,9 +2275,11 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 				id: "message",
 				type: "Message",
 				title: "Notify",
+				roles: ["Solicitante"],
 				config: {
-					type: "email",
-					template: "Hello ${node-abc.name}, welcome!",
+					channel: "email",
+					templateName: "welcome-template",
+					mergeVars: [{ key: "NOMBRE", value: "node_abc.name" }],
 				},
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
@@ -2178,10 +2292,9 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain(
-			"template: `Hello ${node_abc.name}, welcome!`",
-		);
-		expect(result.code).not.toContain('"Hello ${node-abc.name}, welcome!"');
+		expect(result.code).toContain("sendTemplateEmail");
+		expect(result.code).toContain('templateName: "welcome-template"');
+		expect(result.code).toContain("NOMBRE: node_abc.name as string");
 	});
 
 	it("Transform code with variable ref should have node IDs dehyphenated", () => {
