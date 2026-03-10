@@ -1,3 +1,10 @@
+# [1.1.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.2...v1.1.0-rc.3) (2026-03-10)
+
+
+### Features
+
+* introduce output schema editor and variable picker components ([8572bcf](https://github.com/carteracredit/workflow/commit/8572bcfc6a858ce43933a0865dac7556a46735d9))
+
 # [1.1.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.1...v1.1.0-rc.2) (2026-03-07)
 
 
