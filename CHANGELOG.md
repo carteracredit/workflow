@@ -1,3 +1,10 @@
+# [1.1.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.3...v1.1.0-rc.4) (2026-03-10)
+
+
+### Features
+
+* implement variable interpolation in generated strings for workflow code ([4161882](https://github.com/carteracredit/workflow/commit/4161882f90c7941bd933dcaf8f1f7689b19cb3fc))
+
 # [1.1.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.2...v1.1.0-rc.3) (2026-03-10)
 
 
