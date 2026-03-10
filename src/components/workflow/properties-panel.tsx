@@ -152,11 +152,9 @@ interface PropertiesPanelProps {
 	onWidthChange?: (width: number) => void;
 }
 
-
 const NODES_WITH_ROLES = ["Form", "Challenge", "Message"];
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 560;
-
 
 const EDGE_COLORS = [
 	{ name: "Predeterminado", value: "default" },

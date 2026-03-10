@@ -2256,7 +2256,7 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 		);
 	});
 
-	it("Message template with variable ref should use backtick template literal", () => {
+	it("Message email node uses sendTemplateEmail with merge var expression referencing upstream node", () => {
 		const nodes = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -2275,9 +2275,11 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 				id: "message",
 				type: "Message",
 				title: "Notify",
+				roles: ["Solicitante"],
 				config: {
-					type: "email",
-					template: "Hello ${node-abc.name}, welcome!",
+					channel: "email",
+					templateName: "welcome-template",
+					mergeVars: [{ key: "NOMBRE", value: "node_abc.name" }],
 				},
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
@@ -2290,10 +2292,9 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain(
-			"template: `Hello ${node_abc.name}, welcome!`",
-		);
-		expect(result.code).not.toContain('"Hello ${node-abc.name}, welcome!"');
+		expect(result.code).toContain("sendTemplateEmail");
+		expect(result.code).toContain('templateName: "welcome-template"');
+		expect(result.code).toContain("NOMBRE: node_abc.name as string");
 	});
 
 	it("Transform code with variable ref should have node IDs dehyphenated", () => {
