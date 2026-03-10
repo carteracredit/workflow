@@ -141,6 +141,9 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	if (type === "Challenge") {
 		return createDefaultChallengeConfig();
 	}
+	if (type === "Message") {
+		return { channel: "email", mergeVars: [] };
+	}
 	return {};
 };
 

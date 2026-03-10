@@ -589,7 +589,111 @@ describe("validateWorkflow", () => {
 	});
 
 	describe("Message node validation", () => {
-		it("should error when Message node has no template", () => {
+		it("should error when Message node has no channel defined", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["Solicitante"],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "message-1" && e.message.includes("canal de entrega"),
+				),
+			).toBe(true);
+		});
+
+		it("should error when email Message node has no templateName", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["Solicitante"],
+					config: { channel: "email" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "message-1" &&
+						e.message.includes("template de Mandrill"),
+				),
+			).toBe(true);
+		});
+
+		it("should error when sms Message node has no body", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["Solicitante"],
+					config: { channel: "sms" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "message-1" &&
+						e.message.includes("cuerpo del mensaje SMS"),
+				),
+			).toBe(true);
+		});
+
+		it("should error when Message node has no roles (destinatarios)", () => {
 			const nodes: WorkflowNode[] = [
 				{
 					id: "start-1",
@@ -607,7 +711,7 @@ describe("validateWorkflow", () => {
 					title: "Message",
 					description: "",
 					roles: [],
-					config: {},
+					config: { channel: "email", templateName: "my-template" },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -618,8 +722,89 @@ describe("validateWorkflow", () => {
 			expect(
 				errors.some(
 					(e) =>
-						e.nodeId === "message-1" &&
-						e.message.includes("template de mensaje"),
+						e.nodeId === "message-1" && e.message.includes("rol destinatario"),
+				),
+			).toBe(true);
+		});
+
+		it("should pass when email Message node has all required fields", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["Solicitante"],
+					config: {
+						channel: "email",
+						templateName: "my-template",
+						mergeVars: [],
+					},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const messageErrors = errors.filter((e) => e.nodeId === "message-1");
+			// Only connectivity/structural errors (no End node), no Message-specific errors
+			expect(
+				messageErrors.every(
+					(e) =>
+						!e.message.includes("canal") &&
+						!e.message.includes("template") &&
+						!e.message.includes("rol"),
+				),
+			).toBe(true);
+		});
+
+		it("should pass when sms Message node has all required fields", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["Vendedor"],
+					config: {
+						channel: "sms",
+						body: "Tu solicitud fue procesada",
+					},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const messageErrors = errors.filter((e) => e.nodeId === "message-1");
+			expect(
+				messageErrors.every(
+					(e) =>
+						!e.message.includes("canal") &&
+						!e.message.includes("SMS") &&
+						!e.message.includes("rol"),
 				),
 			).toBe(true);
 		});

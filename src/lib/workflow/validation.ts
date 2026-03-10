@@ -5,6 +5,7 @@ import type {
 	APIFailureHandling,
 	ChallengeNodeConfig,
 	Flag,
+	MessageNodeConfig,
 } from "./types";
 import { MAX_CHALLENGE_RETRIES } from "./types";
 import { findNearestPreviousCheckpoint } from "./graph-utils";
@@ -317,12 +318,43 @@ export function validateWorkflow(
 			}
 		}
 
-		if (node.type === "Message" && !node.config.template) {
-			errors.push({
-				nodeId: node.id,
-				message: `"${node.title}" debe tener un template de mensaje`,
-				severity: "error",
-			});
+		if (node.type === "Message") {
+			const config = node.config as MessageNodeConfig | undefined;
+			const channel = config?.channel ?? "email";
+
+			if (!config?.channel) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener un canal de entrega definido`,
+					severity: "error",
+				});
+			}
+
+			if (node.roles.length === 0) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener al menos un rol destinatario`,
+					severity: "error",
+				});
+			}
+
+			if (channel === "email") {
+				if (!config?.templateName) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener un nombre de template de Mandrill`,
+						severity: "error",
+					});
+				}
+			} else if (channel === "sms") {
+				if (!config?.body) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener el cuerpo del mensaje SMS`,
+						severity: "error",
+					});
+				}
+			}
 		}
 
 		if (node.type === "Challenge") {
