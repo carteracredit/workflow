@@ -129,6 +129,25 @@ describe("validateConditionExpression", () => {
 		expect(result.valid).toBe(false);
 		expect(result.error).toBe("La condición no puede estar vacía");
 	});
+
+	it("should accept a condition with a variable-picker reference (${nodeId.prop})", async () => {
+		const result = await validateConditionExpression(
+			"${node-1773093521695.count} > 0",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept a complex condition with multiple variable-picker references", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc123.amount} > 1000 && ${node-def456.status} === 'approved'",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should still reject syntactically invalid conditions containing variable references", async () => {
+		const result = await validateConditionExpression("${node-abc.count} >");
+		expect(result.valid).toBe(false);
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

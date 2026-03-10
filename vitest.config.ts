@@ -25,6 +25,9 @@ export default defineConfig({
 			"src/components/workflow/properties-panel.tsx",
 			"src/components/workflow/canvas.tsx",
 			"src/components/WorkflowEditor.tsx",
+			// New UI-only components: output schema editor & variable picker
+			"src/components/workflow/output-schema-editor.tsx",
+			"src/components/workflow/variable-picker/**",
 			// Auth - files requiring complex mocking / auth-client context
 			"src/lib/auth/getServerSession.ts",
 			"src/lib/auth/actions.ts",

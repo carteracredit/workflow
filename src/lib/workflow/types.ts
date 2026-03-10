@@ -175,6 +175,30 @@ export interface Flag {
 	options: FlagOption[];
 }
 
+// Output Schema Types
+export type SchemaPropertyType =
+	| "string"
+	| "number"
+	| "boolean"
+	| "object"
+	| "array"
+	| "enum";
+
+export interface OutputSchemaProperty {
+	id: string;
+	name: string;
+	type: SchemaPropertyType;
+	description?: string;
+	enumValues?: string[]; // only when type === "enum"
+	items?: OutputSchemaProperty; // only when type === "array"
+	properties?: OutputSchemaProperty[]; // only when type === "object"
+}
+
+export interface OutputSchema {
+	name: string;
+	properties: OutputSchemaProperty[];
+}
+
 export interface WorkflowState {
 	metadata: WorkflowMetadata; // Added metadata to workflow state
 	nodes: WorkflowNode[];

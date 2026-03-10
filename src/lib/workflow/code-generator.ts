@@ -4,6 +4,7 @@ import type {
 	WorkflowMetadata,
 	ChallengeNodeConfig,
 	APIFailureHandling,
+	OutputSchema,
 } from "./types";
 import { slugify } from "../slugify";
 import {
@@ -97,6 +98,37 @@ function escapeString(str: string): string {
 }
 
 /**
+ * Converts a node ID into a valid JavaScript identifier by replacing hyphens
+ * with underscores. E.g. "node-1773093521695" → "node_1773093521695".
+ */
+function nodeIdToVarName(nodeId: string): string {
+	return nodeId.replace(/-/g, "_");
+}
+
+/**
+ * Expands variable-picker references of the form `${nodeId.property}` into
+ * valid JavaScript property-access expressions.
+ *
+ * The picker stores references using template-literal syntax which is NOT valid
+ * in a plain JS expression. This helper converts them so that, for example,
+ * `${node-123.count} > 0` becomes `node_123.count > 0`.
+ */
+function expandConditionVariables(condition: string): string {
+	return condition.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
+		path.replace(/-/g, "_"),
+	);
+}
+
+/**
+ * Returns true when the node has an output schema with at least one property,
+ * meaning its step result should be captured in a variable.
+ */
+function nodeHasOutputSchema(node: WorkflowNode): boolean {
+	const schema = node.config.outputSchema as OutputSchema | undefined;
+	return !!(schema?.properties && schema.properties.length > 0);
+}
+
+/**
  * Comparator for deterministic edge ordering.
  * Edges are sorted by (from, to, fromPort, toPort) so that deleting and
  * re-creating an equivalent edge yields the same generated code.
@@ -148,9 +180,12 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const fields = (node.config.fields as string[]) || [];
+	const captureResult = nodeHasOutputSchema(node);
+	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
+	const resultCast = captureResult ? " as Record<string, unknown>" : "";
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
-	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
 	if (fields.length > 0) {
 		code += `${indent}\t// Fields: ${fields.join(", ")}\n`;
 	}
@@ -158,8 +193,7 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	code += `${indent}\treturn await forms.collect({\n`;
 	code += `${indent}\t\tformId: "${stepName}",\n`;
 	code += `${indent}\t\troles: [${node.roles.map((r) => `"${escapeString(r)}"`).join(", ")}],\n`;
-	code += `${indent}\t});\n`;
-	code += `${indent}});\n`;
+	code += `${indent}\t})${resultCast};\n`;
 
 	return code;
 }
@@ -178,9 +212,11 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 		| APIFailureHandling
 		| undefined;
 	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
+	const captureResult = nodeHasOutputSchema(node);
+	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
 
 	let code = `${indent}// API Call: ${node.title}\n`;
-	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
 	code += `${indent}\tconst response = await fetch("${escapeString(endpoint)}", {\n`;
 	code += `${indent}\t\tmethod: "${method}",\n`;
 	if (hasBody) {
@@ -217,11 +253,14 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
 	const transformCode = (node.config.code as string) || "// Transform logic";
+	const captureResult = nodeHasOutputSchema(node);
+	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
+	const resultCast = captureResult ? " as Record<string, unknown>" : "";
 
 	let code = `${indent}// Transform: ${node.title}\n`;
-	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
 	code += `${indent}\t${transformCode.split("\n").join(`\n${indent}\t`)}\n`;
-	code += `${indent}});\n`;
+	code += `${indent}})${resultCast};\n`;
 
 	return code;
 }
@@ -514,7 +553,7 @@ function traverseBranch(
 			const innerStop = convergenceNodeId ?? stopAtNodeId;
 
 			code += `${indent}// Decision: ${node.title}\n`;
-			code += `${indent}if (${condition}) {\n`;
+			code += `${indent}if (${expandConditionVariables(condition)}) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(

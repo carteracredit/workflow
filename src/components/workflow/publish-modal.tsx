@@ -206,8 +206,14 @@ export function PublishModal({
 	const [isRunning, setIsRunning] = useState(true);
 
 	const run = useCallback(async () => {
+		// Reset all state so a retry starts with a clean slate.
 		setIsRunning(true);
 		setSkipped(false);
+		setPhases([]);
+		setTranspileResult(null);
+		setDeployStatus("idle");
+		setDeployResult(null);
+		setDeployError(undefined);
 
 		// Step 1: Auto-save if needed
 		if (!workflowApiId) {
