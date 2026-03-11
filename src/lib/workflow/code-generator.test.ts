@@ -222,6 +222,58 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain('formId: "datos-personales"');
 	});
 
+	it("should include formVersion in generated code when set", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos Personales",
+				roles: ["Solicitante"],
+				config: {
+					formId: "550e8400-e29b-41d4-a716-446655440000",
+					formVersion: 3,
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain(
+			'formId: "550e8400-e29b-41d4-a716-446655440000"',
+		);
+		expect(result.code).toContain("formVersion: 3");
+	});
+
+	it("should omit formVersion when not set in node config", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos Personales",
+				roles: ["Solicitante"],
+				config: { formId: "550e8400-e29b-41d4-a716-446655440000" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toContain("formVersion");
+	});
+
 	it("should generate API step code", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),

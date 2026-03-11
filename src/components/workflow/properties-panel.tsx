@@ -61,7 +61,10 @@ import {
 } from "@/components/workflow/variable-picker";
 import type { TemplateSegment } from "@/components/workflow/variable-picker";
 import type { OutputSchemaProperty } from "@/lib/workflow/types";
-import { listFormsAction } from "@/lib/workflow-api/forms-actions";
+import {
+	listFormsAction,
+	getFormAction,
+} from "@/lib/workflow-api/forms-actions";
 import type { Form as WorkflowForm } from "@/lib/workflow-api/forms";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -269,6 +272,10 @@ export function PropertiesPanel({
 	// Estado para formularios disponibles (nodo Form)
 	const [availableForms, setAvailableForms] = useState<WorkflowForm[]>([]);
 	const [formsLoading, setFormsLoading] = useState(false);
+	const [selectedFormFull, setSelectedFormFull] = useState<WorkflowForm | null>(
+		null,
+	);
+	const [formVersionsLoading, setFormVersionsLoading] = useState(false);
 
 	// Cargar forms publicados cuando hay un nodo Form seleccionado
 	useEffect(() => {
@@ -279,6 +286,24 @@ export function PropertiesPanel({
 			.catch(() => setAvailableForms([]))
 			.finally(() => setFormsLoading(false));
 	}, [selectedNode?.type]);
+
+	// Cargar el formulario completo (con versiones) cuando ya hay un formId en el config
+	useEffect(() => {
+		if (selectedNode?.type !== "Form") {
+			setSelectedFormFull(null);
+			return;
+		}
+		const formId = selectedNode.config.formId as string | undefined;
+		if (!formId) {
+			setSelectedFormFull(null);
+			return;
+		}
+		setFormVersionsLoading(true);
+		getFormAction(formId)
+			.then((form) => setSelectedFormFull(form))
+			.catch(() => setSelectedFormFull(null))
+			.finally(() => setFormVersionsLoading(false));
+	}, [selectedNode?.type, selectedNode?.id, selectedNode?.config?.formId]);
 
 	// Limpiar resultado de validacion cuando cambia el nodo seleccionado o su codigo
 	useEffect(() => {
@@ -1198,21 +1223,29 @@ export function PropertiesPanel({
 								<Label htmlFor="form-select">Formulario</Label>
 								<Select
 									value={(selectedNode.config.formId as string) || ""}
-									onValueChange={(value) => {
-										const selectedForm = availableForms.find(
-											(f) => f.id === value,
-										);
+									onValueChange={async (value) => {
 										const updates: Partial<WorkflowNode> = {
-											config: { ...selectedNode.config, formId: value },
+											config: {
+												...selectedNode.config,
+												formId: value,
+												formVersion: undefined,
+											},
 										};
-										// Sync outputSchema from form's current version
-										if (selectedForm) {
-											const currentVersion = selectedForm.versions.find(
-												(v) => v.version === selectedForm.currentVersion,
-											);
-											if (currentVersion?.schema?.output) {
+										// Fetch full form to get versions and auto-select latest
+										try {
+											setFormVersionsLoading(true);
+											const fullForm = await getFormAction(value);
+											setSelectedFormFull(fullForm);
+											// Auto-select the highest published version
+											const latestVersion =
+												fullForm.versions.length > 0
+													? fullForm.versions.reduce((a, b) =>
+															a.version > b.version ? a : b,
+														)
+													: null;
+											if (latestVersion?.schema?.output) {
 												const outputProperties = Object.entries(
-													currentVersion.schema.output,
+													latestVersion.schema.output,
 												).map(([key, type]) => ({
 													id: `form_field_${key}`,
 													name: key,
@@ -1223,12 +1256,17 @@ export function PropertiesPanel({
 												}));
 												updates.config = {
 													...updates.config,
+													formVersion: latestVersion.version,
 													outputSchema: {
-														name: `${selectedForm.name}Output`,
+														name: `${fullForm.name}Output`,
 														properties: outputProperties,
 													},
 												};
 											}
+										} catch {
+											setSelectedFormFull(null);
+										} finally {
+											setFormVersionsLoading(false);
 										}
 										onUpdateNode(selectedNode.id, updates);
 									}}
@@ -1264,6 +1302,79 @@ export function PropertiesPanel({
 									</p>
 								)}
 							</div>
+							{/* Version selector — shown once a form is selected and has versions */}
+							{!!(selectedNode.config.formId as string | undefined) &&
+								(selectedFormFull?.versions?.length ?? 0) > 0 && (
+									<div className="space-y-2">
+										<Label htmlFor="form-version-select">Versión</Label>
+										<Select
+											value={
+												(
+													selectedNode.config.formVersion as number | undefined
+												)?.toString() ?? ""
+											}
+											onValueChange={(val) => {
+												const versionNumber = Number(val);
+												const version = selectedFormFull?.versions.find(
+													(v) => v.version === versionNumber,
+												);
+												const updates: Partial<WorkflowNode> = {
+													config: {
+														...selectedNode.config,
+														formVersion: versionNumber,
+													},
+												};
+												if (version?.schema?.output) {
+													const outputProperties = Object.entries(
+														version.schema.output,
+													).map(([key, type]) => ({
+														id: `form_field_${key}`,
+														name: key,
+														type:
+															type === "array"
+																? ("array" as const)
+																: ("string" as const),
+													}));
+													updates.config = {
+														...updates.config,
+														outputSchema: {
+															name: `${selectedFormFull?.name ?? "Form"}Output`,
+															properties: outputProperties,
+														},
+													};
+												}
+												onUpdateNode(selectedNode.id, updates);
+											}}
+											disabled={formVersionsLoading}
+										>
+											<SelectTrigger id="form-version-select">
+												<SelectValue
+													placeholder={
+														formVersionsLoading
+															? "Cargando versiones..."
+															: "Seleccionar versión"
+													}
+												/>
+											</SelectTrigger>
+											<SelectContent>
+												{selectedFormFull?.versions
+													.slice()
+													.sort((a, b) => b.version - a.version)
+													.map((v) => (
+														<SelectItem key={v.id} value={v.version.toString()}>
+															v{v.version}
+															{v.version ===
+																selectedFormFull.currentVersion && (
+																<span className="ml-2 text-xs text-muted-foreground">
+																	(última)
+																</span>
+															)}
+														</SelectItem>
+													))}
+											</SelectContent>
+										</Select>
+									</div>
+								)}
 							<OutputSchemaEditor
 								value={
 									selectedNode.config.outputSchema as OutputSchema | undefined
