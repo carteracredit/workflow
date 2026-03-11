@@ -243,6 +243,7 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	}
 	code += `${indent}\t\troles: [${node.roles.map((r) => `"${escapeString(r)}"`).join(", ")}],\n`;
 	code += `${indent}\t})${resultCast};\n`;
+	code += `${indent}});\n`;
 
 	return code;
 }

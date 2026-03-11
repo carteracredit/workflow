@@ -172,6 +172,8 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain('step.do("datos-personales"');
 		expect(result.code).toContain("forms.collect");
 		expect(result.code).toContain("Solicitante");
+		// Verify the step.do callback is properly closed
+		expect(result.code).toContain("});");
 	});
 
 	it("should use real UUID formId when set in node config", () => {
