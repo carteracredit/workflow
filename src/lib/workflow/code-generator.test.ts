@@ -174,6 +174,54 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain("Solicitante");
 	});
 
+	it("should use real UUID formId when set in node config", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos Personales",
+				roles: ["Solicitante"],
+				config: { formId: "550e8400-e29b-41d4-a716-446655440000" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain(
+			'formId: "550e8400-e29b-41d4-a716-446655440000"',
+		);
+		expect(result.code).toContain('step.do("datos-personales"');
+	});
+
+	it("should fallback to stepName when no formId in node config", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos Personales",
+				roles: [],
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain('formId: "datos-personales"');
+	});
+
 	it("should generate API step code", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),

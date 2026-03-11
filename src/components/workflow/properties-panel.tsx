@@ -61,6 +61,8 @@ import {
 } from "@/components/workflow/variable-picker";
 import type { TemplateSegment } from "@/components/workflow/variable-picker";
 import type { OutputSchemaProperty } from "@/lib/workflow/types";
+import { listFormsAction } from "@/lib/workflow-api/forms-actions";
+import type { Form as WorkflowForm } from "@/lib/workflow-api/forms";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -263,6 +265,20 @@ export function PropertiesPanel({
 		valid: boolean;
 		error?: string;
 	} | null>(null);
+
+	// Estado para formularios disponibles (nodo Form)
+	const [availableForms, setAvailableForms] = useState<WorkflowForm[]>([]);
+	const [formsLoading, setFormsLoading] = useState(false);
+
+	// Cargar forms publicados cuando hay un nodo Form seleccionado
+	useEffect(() => {
+		if (selectedNode?.type !== "Form") return;
+		setFormsLoading(true);
+		listFormsAction({ status: "published" })
+			.then((forms) => setAvailableForms(forms))
+			.catch(() => setAvailableForms([]))
+			.finally(() => setFormsLoading(false));
+	}, [selectedNode?.type]);
 
 	// Limpiar resultado de validacion cuando cambia el nodo seleccionado o su codigo
 	useEffect(() => {
@@ -1181,28 +1197,72 @@ export function PropertiesPanel({
 							<div className="space-y-2">
 								<Label htmlFor="form-select">Formulario</Label>
 								<Select
-									value={selectedNode.config.formId as string}
-									onValueChange={(value) =>
-										onUpdateNode(selectedNode.id, {
+									value={(selectedNode.config.formId as string) || ""}
+									onValueChange={(value) => {
+										const selectedForm = availableForms.find(
+											(f) => f.id === value,
+										);
+										const updates: Partial<WorkflowNode> = {
 											config: { ...selectedNode.config, formId: value },
-										})
-									}
+										};
+										// Sync outputSchema from form's current version
+										if (selectedForm) {
+											const currentVersion = selectedForm.versions.find(
+												(v) => v.version === selectedForm.currentVersion,
+											);
+											if (currentVersion?.schema?.output) {
+												const outputProperties = Object.entries(
+													currentVersion.schema.output,
+												).map(([key, type]) => ({
+													id: `form_field_${key}`,
+													name: key,
+													type:
+														type === "array"
+															? ("array" as const)
+															: ("string" as const),
+												}));
+												updates.config = {
+													...updates.config,
+													outputSchema: {
+														name: `${selectedForm.name}Output`,
+														properties: outputProperties,
+													},
+												};
+											}
+										}
+										onUpdateNode(selectedNode.id, updates);
+									}}
+									disabled={formsLoading}
 								>
 									<SelectTrigger id="form-select">
-										<SelectValue placeholder="Seleccionar formulario" />
+										<SelectValue
+											placeholder={
+												formsLoading
+													? "Cargando formularios..."
+													: "Seleccionar formulario"
+											}
+										/>
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="form-1">
-											Formulario de Solicitud
-										</SelectItem>
-										<SelectItem value="form-2">
-											Formulario de Verificación
-										</SelectItem>
-										<SelectItem value="form-3">
-											Formulario de Documentos
-										</SelectItem>
+										{availableForms.length === 0 && !formsLoading ? (
+											<SelectItem value="__empty__" disabled>
+												No hay formularios publicados
+											</SelectItem>
+										) : (
+											availableForms.map((form) => (
+												<SelectItem key={form.id} value={form.id}>
+													{form.name}
+												</SelectItem>
+											))
+										)}
 									</SelectContent>
 								</Select>
+								{availableForms.length === 0 && !formsLoading && (
+									<p className="text-xs text-muted-foreground">
+										Publica un formulario en la app de Formularios para poder
+										seleccionarlo aquí.
+									</p>
+								)}
 							</div>
 							<OutputSchemaEditor
 								value={

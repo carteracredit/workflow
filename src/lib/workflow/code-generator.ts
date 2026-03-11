@@ -225,6 +225,8 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	const captureResult = nodeHasOutputSchema(node);
 	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
 	const resultCast = captureResult ? " as Record<string, unknown>" : "";
+	// Use the real UUID formId from node config, fallback to stepName for legacy nodes
+	const formId = (node.config.formId as string) || stepName;
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
 	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
@@ -233,7 +235,7 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	}
 	code += `${indent}\tconst forms = this.env.FORMS as { collect: (opts: unknown) => Promise<unknown> };\n`;
 	code += `${indent}\treturn await forms.collect({\n`;
-	code += `${indent}\t\tformId: "${stepName}",\n`;
+	code += `${indent}\t\tformId: "${escapeString(formId)}",\n`;
 	code += `${indent}\t\troles: [${node.roles.map((r) => `"${escapeString(r)}"`).join(", ")}],\n`;
 	code += `${indent}\t})${resultCast};\n`;
 
