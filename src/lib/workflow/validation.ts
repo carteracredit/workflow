@@ -480,7 +480,26 @@ export function validateWorkflow(
 		}
 	});
 
-	// Validación 8: FlagChange nodes no pueden referenciar flags u opciones inexistentes
+	// Validación 8: El título de un nodo no debe empezar con número o carácter especial
+	nodes.forEach((node) => {
+		if (
+			node.type === "Start" ||
+			node.type === "End" ||
+			node.type === "Reject"
+		) {
+			return;
+		}
+		const trimmedTitle = node.title.trim();
+		if (trimmedTitle.length > 0 && /^[^a-zA-Z_]/.test(trimmedTitle)) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" no debe empezar con un número o carácter especial`,
+				severity: "warning",
+			});
+		}
+	});
+
+	// Validación 9: FlagChange nodes no pueden referenciar flags u opciones inexistentes
 	if (flags.length > 0) {
 		const flagMap = new Map(flags.map((f) => [f.id, f]));
 

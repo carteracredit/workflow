@@ -1268,3 +1268,127 @@ describe("validateWorkflow – FlagChange orphan references", () => {
 		expect(flagErrors).toHaveLength(0);
 	});
 });
+
+describe("node title validation", () => {
+	const makeMinimalWorkflow = (title: string) => {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "form",
+				type: "Form",
+				title,
+				description: "",
+				roles: ["Admin"],
+				config: { formId: "form-id-1" },
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 200, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form", label: null },
+			{ id: "e2", from: "form", to: "end", label: null },
+		];
+		return { nodes, edges };
+	};
+
+	it("should warn when a node title starts with a digit", () => {
+		const { nodes, edges } = makeMinimalWorkflow("1er Formulario");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.severity === "warning" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(true);
+	});
+
+	it("should warn when a node title starts with a special character", () => {
+		const { nodes, edges } = makeMinimalWorkflow("@Formulario");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.severity === "warning" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn when a node title starts with a letter", () => {
+		const { nodes, edges } = makeMinimalWorkflow("Formulario de datos");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(false);
+	});
+
+	it("should not warn when a node title starts with an underscore", () => {
+		const { nodes, edges } = makeMinimalWorkflow("_internal");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(false);
+	});
+
+	it("should not apply title validation to Start, End, or Reject nodes", () => {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "1Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "2Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some((e) => e.message.includes("número o carácter especial")),
+		).toBe(false);
+	});
+});
