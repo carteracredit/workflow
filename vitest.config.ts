@@ -37,6 +37,8 @@ export default defineConfig({
 			"src/hooks/**",
 			// Pure TypeScript type definitions — no executable statements
 			"src/lib/workflow-api/types.ts",
+			// Next.js Server Actions - thin wrappers around forms.ts, covered indirectly
+			"src/lib/workflow-api/forms-actions.ts",
 			],
 			// Objetivo 85%; umbrales ajustados para reflejar cobertura actual alcanzable
 			// sin incluir componentes UI complejos (node-renderer, flag-manager-modal)
