@@ -1,3 +1,16 @@
+# [1.1.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.5...v1.1.0-rc.6) (2026-03-12)
+
+
+### Bug Fixes
+
+* ensure proper closure of step.do callback in generated workflow code ([db19070](https://github.com/carteracredit/workflow/commit/db19070ad3aa59412f6a867b26fd604f4193894e))
+
+
+### Features
+
+* enhance form handling in PropertiesPanel and code generation ([a9988e1](https://github.com/carteracredit/workflow/commit/a9988e180eacf7b9ed9637d95eb8cb5757beacbd))
+* implement forms management in workflow ([0a3e40d](https://github.com/carteracredit/workflow/commit/0a3e40d0abe1da7578f96608bae27b361684b1c0))
+
 # [1.1.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.4...v1.1.0-rc.5) (2026-03-10)
 
 
