@@ -181,6 +181,9 @@ function PropertyRow({
 	const update = (patch: Partial<OutputSchemaProperty>) =>
 		onUpdate({ ...property, ...patch });
 
+	const isInvalidName =
+		property.name.length > 0 && /^[^a-zA-Z_]/.test(property.name);
+
 	const handleTypeChange = (newType: SchemaPropertyType) => {
 		const patch: Partial<OutputSchemaProperty> = { type: newType };
 		if (newType !== "enum") patch.enumValues = undefined;
@@ -242,12 +245,23 @@ function PropertyRow({
 				<TypeBadgeInline type={property.type} />
 
 				{/* Name input */}
-				<Input
-					value={property.name}
-					onChange={(e) => update({ name: e.target.value })}
-					placeholder="nombre"
-					className="h-7 text-xs flex-1 min-w-0 font-mono"
-				/>
+				<div className="flex flex-col flex-1 min-w-0">
+					<Input
+						value={property.name}
+						onChange={(e) => update({ name: e.target.value })}
+						placeholder="nombre"
+						className={cn(
+							"h-7 text-xs font-mono",
+							isInvalidName &&
+								"border-destructive focus-visible:ring-destructive",
+						)}
+					/>
+					{isInvalidName && (
+						<p className="text-[10px] text-destructive mt-0.5 leading-tight">
+							Debe empezar con una letra
+						</p>
+					)}
+				</div>
 
 				{/* Type select */}
 				<Select value={property.type} onValueChange={handleTypeChange}>

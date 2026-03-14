@@ -66,6 +66,7 @@ import {
 	getFormAction,
 } from "@/lib/workflow-api/forms-actions";
 import type { Form as WorkflowForm } from "@/lib/workflow-api/forms";
+import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1243,24 +1244,14 @@ export function PropertiesPanel({
 															a.version > b.version ? a : b,
 														)
 													: null;
-											if (latestVersion?.schema?.output) {
-												const outputProperties = Object.entries(
-													latestVersion.schema.output,
-												).map(([key, type]) => ({
-													id: `form_field_${key}`,
-													name: key,
-													type:
-														type === "array"
-															? ("array" as const)
-															: ("string" as const),
-												}));
+											if (latestVersion?.fields) {
 												updates.config = {
 													...updates.config,
 													formVersion: latestVersion.version,
-													outputSchema: {
-														name: `${fullForm.name}Output`,
-														properties: outputProperties,
-													},
+													outputSchema: buildOutputSchemaFromFields(
+														latestVersion.fields,
+														fullForm.name,
+													),
 												};
 											}
 										} catch {
@@ -1324,23 +1315,13 @@ export function PropertiesPanel({
 														formVersion: versionNumber,
 													},
 												};
-												if (version?.schema?.output) {
-													const outputProperties = Object.entries(
-														version.schema.output,
-													).map(([key, type]) => ({
-														id: `form_field_${key}`,
-														name: key,
-														type:
-															type === "array"
-																? ("array" as const)
-																: ("string" as const),
-													}));
+												if (version?.fields) {
 													updates.config = {
 														...updates.config,
-														outputSchema: {
-															name: `${selectedFormFull?.name ?? "Form"}Output`,
-															properties: outputProperties,
-														},
+														outputSchema: buildOutputSchemaFromFields(
+															version.fields,
+															selectedFormFull?.name ?? "Form",
+														),
 													};
 												}
 												onUpdateNode(selectedNode.id, updates);
