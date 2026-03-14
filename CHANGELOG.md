@@ -1,3 +1,10 @@
+# [1.1.0-rc.7](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.6...v1.1.0-rc.7) (2026-03-14)
+
+
+### Features
+
+* enhance output schema handling and validation ([3080daf](https://github.com/carteracredit/workflow/commit/3080daf45c1887f3d5fc611982b5113a18e98463))
+
 # [1.1.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.5...v1.1.0-rc.6) (2026-03-12)
 
 
