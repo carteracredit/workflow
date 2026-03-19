@@ -15,6 +15,10 @@ export interface FormField {
 	placeholderEs?: string;
 	required: boolean;
 	options?: string[];
+	properties?: {
+		includeMiddleName?: boolean;
+		enableAutocomplete?: boolean;
+	};
 }
 
 export interface FormVersion {
