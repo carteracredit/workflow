@@ -36,6 +36,7 @@ import {
 	Pencil,
 	Keyboard,
 	ArrowLeft,
+	Loader2,
 } from "lucide-react";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
@@ -184,6 +185,8 @@ interface TopBarProps {
 		zoom: number;
 		pan: { x: number; y: number };
 	};
+	/** Whether a save operation is in progress */
+	isSaving?: boolean;
 }
 
 export function TopBar({
@@ -200,6 +203,7 @@ export function TopBar({
 	workflowStatus,
 	currentMajorVersion,
 	paletteProps,
+	isSaving,
 }: TopBarProps) {
 	const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
@@ -301,6 +305,24 @@ export function TopBar({
 						<Bell className="h-4 w-4 text-muted-foreground" />
 					</Button>
 
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={onSave}
+						disabled={isSaving}
+						title="Guardar (Ctrl/Cmd+S)"
+						className="gap-2 rounded-md px-3"
+					>
+						{isSaving ? (
+							<Loader2 className="h-4 w-4 animate-spin" />
+						) : (
+							<Save className="h-4 w-4" />
+						)}
+						<span className="text-sm font-semibold">
+							{isSaving ? "Guardando..." : "Guardar"}
+						</span>
+					</Button>
+
 					{workflowStatus === "published" ? (
 						<Button
 							variant="outline"
@@ -338,10 +360,6 @@ export function TopBar({
 								</Button>
 							</MenubarTrigger>
 							<MenubarContent align="end">
-								<MenubarItem onClick={onSave}>
-									<Save className="mr-2 h-4 w-4" />
-									Guardar
-								</MenubarItem>
 								<MenubarItem onClick={onNew}>
 									<Trash2 className="mr-2 h-4 w-4" />
 									Reiniciar flujo
