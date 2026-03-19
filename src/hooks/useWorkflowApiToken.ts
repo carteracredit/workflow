@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { getClientJwt } from "@/lib/auth/authClient";
+import { useStore } from "@nanostores/react";
+import { useEffect, useCallback } from "react";
+import { getClientJwtCached, tokenStore } from "@/lib/auth/tokenStore";
 
 interface UseWorkflowApiTokenResult {
 	token: string | null;
@@ -13,8 +14,9 @@ interface UseWorkflowApiTokenResult {
 /**
  * React hook for client components to get a JWT token for workflow-svc API calls.
  *
- * Uses the Better Auth jwtClient plugin to exchange the session cookie for a JWT,
- * which is then passed as `Authorization: Bearer <token>` to workflow-svc.
+ * Uses the token store singleton so all consumers share one token. Token is
+ * invalidated when session changes (clearSession/setSession) and refetched when
+ * the tab becomes visible, so no hard refresh is needed.
  *
  * @example
  * ```tsx
@@ -29,27 +31,36 @@ interface UseWorkflowApiTokenResult {
  * ```
  */
 export function useWorkflowApiToken(): UseWorkflowApiTokenResult {
-	const [token, setToken] = useState<string | null>(null);
-	const [isLoading, setIsLoading] = useState(true);
-	const [error, setError] = useState<Error | null>(null);
+	const { token, isPending, error } = useStore(tokenStore);
 
-	const fetchToken = useCallback(async () => {
-		try {
-			setIsLoading(true);
-			setError(null);
-			const jwt = await getClientJwt();
-			setToken(jwt);
-		} catch (err) {
-			setError(err instanceof Error ? err : new Error("Failed to fetch token"));
-			setToken(null);
-		} finally {
-			setIsLoading(false);
-		}
+	const refetch = useCallback(async () => {
+		await getClientJwtCached(true);
 	}, []);
 
+	// Ensure token is loaded on mount (or when store was invalidated)
 	useEffect(() => {
-		fetchToken();
-	}, [fetchToken]);
+		void getClientJwtCached();
+	}, []);
 
-	return { token, isLoading, error, refetch: fetchToken };
+	// Refetch when tab becomes visible so re-auth or session refresh elsewhere is picked up
+	useEffect(() => {
+		const handleVisibility = () => {
+			if (
+				typeof document !== "undefined" &&
+				document.visibilityState === "visible"
+			) {
+				void getClientJwtCached(true);
+			}
+		};
+		document.addEventListener("visibilitychange", handleVisibility);
+		return () =>
+			document.removeEventListener("visibilitychange", handleVisibility);
+	}, []);
+
+	return {
+		token,
+		isLoading: isPending,
+		error,
+		refetch,
+	};
 }

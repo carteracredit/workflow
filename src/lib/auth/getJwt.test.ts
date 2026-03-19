@@ -5,7 +5,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { cookies } from "next/headers";
-import { getJwt } from "./getJwt";
+import { getJwt, __resetTokenCacheForTests } from "./getJwt";
 
 const AUTH_SERVICE_URL = "https://auth-svc.carteracredit.workers.dev";
 const AUTH_APP_URL = "https://auth.carteracredit.workers.dev";
@@ -36,6 +36,7 @@ function mockFetchResponse(options: {
 describe("getJwt", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		__resetTokenCacheForTests();
 		delete process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
 		delete process.env.NEXT_PUBLIC_AUTH_APP_URL;
 	});
@@ -155,5 +156,19 @@ describe("getJwt", () => {
 				}),
 			}),
 		);
+	});
+
+	it("returns cached token on second call within TTL without second fetch", async () => {
+		mockCookies("better-auth.session_token=abc123");
+		mockFetchResponse({ ok: true, json: { token: "cached-jwt" } });
+
+		const first = await getJwt();
+		expect(first).toBe("cached-jwt");
+		const fetchCountAfterFirst = (fetch as ReturnType<typeof vi.fn>).mock.calls
+			.length;
+
+		const second = await getJwt();
+		expect(second).toBe("cached-jwt");
+		expect(fetch).toHaveBeenCalledTimes(fetchCountAfterFirst);
 	});
 });

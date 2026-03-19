@@ -1,8 +1,22 @@
 import { cookies } from "next/headers";
 import { getAuthServiceUrl, getAuthAppUrl } from "./config";
 
+/** In-process cache with TTL so multiple server actions reuse one token. */
+const JWT_TTL_MS = 50_000;
+let serverTokenCache: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Resets the server-side token cache. Only for use in tests.
+ * @internal
+ */
+export function __resetTokenCacheForTests(): void {
+	serverTokenCache = null;
+}
+
 /**
  * Retrieves a JWT token from the auth service using session cookies.
+ * Uses an in-process cache with TTL so multiple getJwt() calls within
+ * the same window reuse one token.
  *
  * Calls the `/api/auth/token` endpoint provided by better-auth's
  * JWT plugin to exchange session cookies for a JWT token that can be used
@@ -24,6 +38,11 @@ import { getAuthServiceUrl, getAuthAppUrl } from "./config";
  * }
  */
 export async function getJwt(): Promise<string | null> {
+	const now = Date.now();
+	if (serverTokenCache && serverTokenCache.expiresAt > now) {
+		return serverTokenCache.token;
+	}
+
 	const cookieStore = await cookies();
 	const cookieHeader = cookieStore.toString();
 
@@ -52,7 +71,16 @@ export async function getJwt(): Promise<string | null> {
 		}
 
 		const data = (await response.json()) as { token?: string };
-		return data.token ?? null;
+		const token = data.token ?? null;
+		if (token) {
+			serverTokenCache = {
+				token,
+				expiresAt: now + JWT_TTL_MS,
+			};
+		} else {
+			serverTokenCache = null;
+		}
+		return token;
 	} catch (error) {
 		console.error("Error fetching JWT:", error);
 		return null;
