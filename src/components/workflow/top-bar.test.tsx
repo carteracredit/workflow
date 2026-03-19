@@ -439,6 +439,94 @@ describe("TopBar Integration", () => {
 	});
 });
 
+describe("TopBar Save button", () => {
+	const mockWorkflowMetadata: WorkflowMetadata = {
+		name: "Test Workflow",
+		version: "1.0.0",
+		description: "Test description",
+		author: "Test Author",
+		tags: [],
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	};
+
+	const defaultProps = {
+		onNew: vi.fn(),
+		onSave: vi.fn(),
+		onPublish: vi.fn(),
+		onExportJSON: vi.fn(),
+		onImportJSON: vi.fn(),
+		onLoadExample: vi.fn(),
+		onManageFlags: vi.fn(),
+		onToggleWorkflowProperties: vi.fn(),
+		workflowMetadata: mockWorkflowMetadata,
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("should render a visible Save button in the top bar", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} />
+			</LanguageProvider>,
+		);
+
+		const saveButton = screen.getByTitle("Guardar (Ctrl/Cmd+S)");
+		expect(saveButton).toBeInTheDocument();
+		expect(saveButton).toBeEnabled();
+	});
+
+	it("should show 'Guardar' text on the Save button", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} />
+			</LanguageProvider>,
+		);
+
+		const saveButton = screen.getByTitle("Guardar (Ctrl/Cmd+S)");
+		expect(saveButton).toHaveTextContent("Guardar");
+	});
+
+	it("should call onSave when Save button is clicked", async () => {
+		const user = userEvent.setup();
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} />
+			</LanguageProvider>,
+		);
+
+		const saveButton = screen.getByTitle("Guardar (Ctrl/Cmd+S)");
+		await user.click(saveButton);
+		expect(defaultProps.onSave).toHaveBeenCalledOnce();
+	});
+
+	it("should show loading state when isSaving is true", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} isSaving={true} />
+			</LanguageProvider>,
+		);
+
+		const saveButton = screen.getByTitle("Guardar (Ctrl/Cmd+S)");
+		expect(saveButton).toBeDisabled();
+		expect(saveButton).toHaveTextContent("Guardando...");
+	});
+
+	it("should not be disabled when isSaving is false", () => {
+		render(
+			<LanguageProvider defaultLanguage="es">
+				<TopBar {...defaultProps} isSaving={false} />
+			</LanguageProvider>,
+		);
+
+		const saveButton = screen.getByTitle("Guardar (Ctrl/Cmd+S)");
+		expect(saveButton).toBeEnabled();
+		expect(saveButton).toHaveTextContent("Guardar");
+	});
+});
+
 describe("TopBar version badge", () => {
 	const baseMetadata: WorkflowMetadata = {
 		name: "Test Workflow",

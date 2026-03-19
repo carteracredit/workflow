@@ -506,6 +506,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		"idle" | "valid" | "invalid"
 	>("idle");
 	const [lastValidationErrorCount, setLastValidationErrorCount] = useState(0);
+	const [isValidating, setIsValidating] = useState(false);
+	const [isSaving, setIsSaving] = useState(false);
 	const hasMountedRef = useRef(false);
 
 	useEffect(() => {
@@ -555,6 +557,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		}
 		setValidationStatus("idle");
 		setLastValidationErrorCount(0);
+		setValidationErrors([]);
 	}, [
 		workflowState.nodes,
 		workflowState.edges,
@@ -778,17 +781,36 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	}, [setWorkflowState]);
 
 	const handleValidate = useCallback(async () => {
-		const errors = await validateWorkflowWithSyntax(
-			workflowState.nodes,
-			workflowState.edges,
-			workflowState.flags,
-		);
-		setValidationErrors(errors);
-		const isValid = errors.length === 0;
-		setLastValidationErrorCount(errors.length);
-		setValidationStatus(isValid ? "valid" : "invalid");
-		return isValid;
-	}, [workflowState.nodes, workflowState.edges]);
+		setIsValidating(true);
+		try {
+			const errors = await validateWorkflowWithSyntax(
+				workflowState.nodes,
+				workflowState.edges,
+				workflowState.flags,
+			);
+			setValidationErrors(errors);
+			const isValid = errors.length === 0;
+			setLastValidationErrorCount(errors.length);
+			setValidationStatus(isValid ? "valid" : "invalid");
+			if (isValid) {
+				toast.success("Validación exitosa", {
+					description: "El workflow no tiene errores.",
+				});
+			}
+			return isValid;
+		} catch (error) {
+			toast.error("Error de validación", {
+				description:
+					error instanceof Error
+						? error.message
+						: "Ocurrió un error inesperado durante la validación.",
+			});
+			setValidationStatus("invalid");
+			return false;
+		} finally {
+			setIsValidating(false);
+		}
+	}, [workflowState.nodes, workflowState.edges, workflowState.flags]);
 
 	const handleSave = useCallback(async () => {
 		if (!apiToken) {
@@ -797,6 +819,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			});
 			return;
 		}
+
+		setIsSaving(true);
 
 		const definitionObj = buildDefinitionObject(
 			workflowState.nodes,
@@ -837,7 +861,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				toast.success("Workflow guardado", {
 					description: `"${payload.name}" creado correctamente.`,
 				});
-				// Redirect to the per-workflow editor URL
 				router.replace(`/editor/${created.id}`);
 			}
 		} catch (error) {
@@ -858,6 +881,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					description: extractApiErrorMessage(error),
 				});
 			}
+		} finally {
+			setIsSaving(false);
 		}
 	}, [apiToken, workflowApiId, workflowState, router]);
 
@@ -918,6 +943,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		const isValid = await handleValidate();
 		if (isValid) {
 			setShowPublish(true);
+		} else {
+			toast.error("No se puede publicar", {
+				description:
+					"El workflow tiene errores de validación. Corrígelos antes de publicar.",
+			});
 		}
 	}, [handleValidate]);
 
@@ -1110,6 +1140,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					zoom: workflowState.zoom,
 					pan: workflowState.pan,
 				}}
+				isSaving={isSaving}
 			/>
 
 			<div className="flex flex-1 flex-col overflow-hidden">
@@ -1153,6 +1184,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 							onValidate={handleValidate}
 							onPreview={() => setShowPreview(true)}
 							onGenerateCode={() => setShowCode(true)}
+							isValidating={isValidating}
 							validationState={{
 								status: validationStatus,
 							}}
