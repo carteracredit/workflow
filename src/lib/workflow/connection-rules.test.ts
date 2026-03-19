@@ -408,6 +408,32 @@ describe("connection-rules", () => {
 			expect(result.reason).toContain("ya tiene una conexión");
 		});
 
+		it("should allow connection from Challenge to top port (accepted)", () => {
+			const sourceNode: WorkflowNode = {
+				id: "challenge-1",
+				type: "Challenge",
+				title: "Review",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+			const targetNode: WorkflowNode = {
+				id: "form-1",
+				type: "Form",
+				title: "Form 1",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 100, y: 0 },
+				groupId: null,
+			};
+			const edges: WorkflowEdge[] = [];
+			const result = canCreateConnection(sourceNode, targetNode, edges, "top");
+			expect(result.allowed).toBe(true);
+		});
+
 		it("should allow connection from Decision to different port", () => {
 			const sourceNode: WorkflowNode = {
 				id: "decision-1",

@@ -169,11 +169,10 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain('step.do("datos-personales"');
-		expect(result.code).toContain("forms.collect");
+		expect(result.code).toContain("step.waitForEvent");
+		expect(result.code).toContain("form-submission:datos-personales");
 		expect(result.code).toContain("Solicitante");
-		// Verify the step.do callback is properly closed
-		expect(result.code).toContain("});");
+		expect(result.code).toContain('"datos-personales"');
 	});
 
 	it("should use real UUID formId when set in node config", () => {
@@ -196,13 +195,12 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain(
-			'formId: "550e8400-e29b-41d4-a716-446655440000"',
-		);
-		expect(result.code).toContain('step.do("datos-personales"');
+		// Form step name comes from slugified title; formId config is no longer emitted
+		expect(result.code).toContain("step.waitForEvent");
+		expect(result.code).toContain('"datos-personales"');
 	});
 
-	it("should fallback to stepName when no formId in node config", () => {
+	it("should use slugified title as step name for Form nodes", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -221,10 +219,12 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain('formId: "datos-personales"');
+		// Step name is slugified title (no formId in generated code)
+		expect(result.code).toContain("step.waitForEvent");
+		expect(result.code).toContain('"datos-personales"');
 	});
 
-	it("should include formVersion in generated code when set", () => {
+	it("should generate waitForEvent for Form when formVersion is set in config", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -247,10 +247,9 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain(
-			'formId: "550e8400-e29b-41d4-a716-446655440000"',
-		);
-		expect(result.code).toContain("formVersion: 3");
+		// formId/formVersion are no longer emitted; verify waitForEvent pattern is present
+		expect(result.code).toContain("step.waitForEvent");
+		expect(result.code).toContain("form-submission:datos-personales");
 	});
 
 	it("should omit formVersion when not set in node config", () => {
@@ -1145,10 +1144,11 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Step names should use kebab-case
-		expect(result.code).toContain('step.do("formulario-a"');
-		expect(result.code).toContain('step.do("formulario-b"');
-		expect(result.code).toContain('step.do("formulario-c"');
+		// Step names should use kebab-case (Form nodes use waitForEvent)
+		expect(result.code).toContain("step.waitForEvent");
+		expect(result.code).toContain('"formulario-a"');
+		expect(result.code).toContain('"formulario-b"');
+		expect(result.code).toContain('"formulario-c"');
 
 		// Should not contain invalid JavaScript identifiers
 		expect(result.code).not.toContain("const formulario-a");
@@ -1228,6 +1228,34 @@ describe("generateWorkflowCodeWithProgress", () => {
 		expect(result.code).toBe("");
 		const validatePhase = result.phases.find((p) => p.id === "validate");
 		expect(validatePhase?.status).toBe("error");
+	});
+
+	it("should include warning logs in transpile phase when workflow has warnings", async () => {
+		// Form with multiple outgoing edges triggers a warning (not a Decision/Challenge)
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "form", type: "Form", title: "Formulario" }),
+			createNode({ id: "end1", type: "End", title: "Fin 1" }),
+			createNode({ id: "end2", type: "End", title: "Fin 2" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end1"),
+			createEdge("form", "end2"),
+		];
+
+		const { generateWorkflowCodeWithProgress } =
+			await import("./code-generator");
+		const result = await generateWorkflowCodeWithProgress(nodes, edges);
+
+		expect(result.valid).toBe(true);
+		expect(result.warnings.length).toBeGreaterThan(0);
+		const transpilePhase = result.phases.find((p) => p.id === "transpile");
+		expect(
+			transpilePhase?.logs.some(
+				(log) => log.includes("Advertencias") || log.includes("⚠️"),
+			),
+		).toBe(true);
 	});
 
 	it("should include detailed logs in phases", async () => {
@@ -1403,8 +1431,9 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.warnings).toHaveLength(0);
-		expect(result.code).toContain('step.do("formulario-a"');
-		expect(result.code).toContain('step.do("formulario-b"');
+		expect(result.code).toContain("step.waitForEvent");
+		expect(result.code).toContain('"formulario-a"');
+		expect(result.code).toContain('"formulario-b"');
 
 		const ifIdx = result.code.indexOf("if (amount > 1000)");
 		const joinIdx = result.code.indexOf('step.do("union"');
@@ -2061,8 +2090,9 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 		expect(result.code).not.toContain("let formularioInicial");
 		expect(result.code).not.toContain("let pokemonApi");
 
-		// Steps are generated with plain await (no captured variable)
-		expect(result.code).toContain('await step.do("formulario-inicial"');
+		// Form uses waitForEvent; API uses step.do
+		expect(result.code).toContain("step.waitForEvent");
+		expect(result.code).toContain('"formulario-inicial"');
 		expect(result.code).toContain('await step.do("pokemon-api"');
 	});
 

@@ -7,6 +7,7 @@ import {
 	deleteWorkflow,
 	publishWorkflow,
 	listWorkflowVersions,
+	cloneWorkflow,
 } from "./workflows";
 import type { PublishWorkflowDeployedResponse } from "./types";
 import { ApiError } from "./http";
@@ -364,6 +365,24 @@ describe("workflow API functions", () => {
 			const result = await listWorkflowVersions("wf-uuid-404");
 
 			expect(result).toEqual([]);
+		});
+	});
+
+	describe("cloneWorkflow", () => {
+		it("clones workflow and returns the new workflow", async () => {
+			const clonedWorkflow = {
+				...mockWorkflow,
+				id: "wf-uuid-cloned",
+				name: "Copy of Credit App",
+			};
+			mockFetch({ success: true, result: clonedWorkflow });
+
+			const result = await cloneWorkflow("wf-uuid-001", { jwt: "token" });
+
+			const url = vi.mocked(fetch).mock.calls[0][0] as string;
+			expect(url).toContain("/workflows/wf-uuid-001/clone");
+			expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBe("POST");
+			expect(result).toEqual(clonedWorkflow);
 		});
 	});
 });

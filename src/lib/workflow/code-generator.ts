@@ -216,34 +216,23 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
 }
 
 /**
- * Generate code for a Form node
+ * Generate code for a Form node.
+ * Uses step.waitForEvent so the workflow pauses until the client sends form data
+ * via sendEvent({ type: "form-submission:<stepName>", payload }). No FORMS binding.
  */
 function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
-	const fields = (node.config.fields as string[]) || [];
 	const captureResult = nodeHasOutputSchema(node);
 	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
-	const resultCast = captureResult ? " as Record<string, unknown>" : "";
-	// Use the real UUID formId from node config, fallback to stepName for legacy nodes
-	const formId = (node.config.formId as string) || stepName;
-	// Use the pinned formVersion if set, otherwise omit (runtime uses latest)
-	const formVersion = node.config.formVersion as number | undefined;
+	const eventType = `form-submission:${stepName}`;
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
-	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
-	if (fields.length > 0) {
-		code += `${indent}\t// Fields: ${fields.join(", ")}\n`;
-	}
-	code += `${indent}\tconst forms = this.env.FORMS as { collect: (opts: unknown) => Promise<unknown> };\n`;
-	code += `${indent}\treturn await forms.collect({\n`;
-	code += `${indent}\t\tformId: "${escapeString(formId)}",\n`;
-	if (formVersion !== undefined) {
-		code += `${indent}\t\tformVersion: ${formVersion},\n`;
-	}
-	code += `${indent}\t\troles: [${node.roles.map((r) => `"${escapeString(r)}"`).join(", ")}],\n`;
-	code += `${indent}\t})${resultCast};\n`;
-	code += `${indent}});\n`;
+	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload }) from cases-svc\n`;
+	code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
+	code += `${indent}\t"${escapeString(stepName)}",\n`;
+	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
+	code += `${indent})).payload as Record<string, unknown>;\n`;
 
 	return code;
 }
