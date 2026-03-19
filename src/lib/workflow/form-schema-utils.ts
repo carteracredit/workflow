@@ -54,6 +54,7 @@ export function labelToCamelCase(label: string): string {
 
 /**
  * Maps a form field type to the corresponding output schema property type.
+ * Compound field types (name, address) map to "object".
  */
 export function formFieldTypeToSchemaType(
 	fieldType: string,
@@ -67,9 +68,109 @@ export function formFieldTypeToSchemaType(
 		case "checkbox-group":
 		case "file":
 			return "array";
+		case "name":
+		case "address":
+			return "object";
 		default:
 			return "string";
 	}
+}
+
+/**
+ * Generates a unique property id for compound sub-fields.
+ */
+function makeSubPropId(fieldId: string, subName: string): string {
+	return `${fieldId}_${subName}`;
+}
+
+/**
+ * Returns the sub-properties for a compound field type.
+ * For "name" fields, `includeMiddleName` controls whether middleName is included.
+ * Returns null for non-compound field types.
+ */
+export function getCompoundFieldSubProperties(
+	fieldId: string,
+	fieldType: string,
+	fieldProperties?: { includeMiddleName?: boolean },
+): OutputSchemaProperty[] | null {
+	if (fieldType === "name") {
+		const props: OutputSchemaProperty[] = [
+			{
+				id: makeSubPropId(fieldId, "firstName"),
+				name: "firstName",
+				type: "string",
+				description: "First name",
+			},
+			{
+				id: makeSubPropId(fieldId, "lastName"),
+				name: "lastName",
+				type: "string",
+				description: "Last name",
+			},
+			{
+				id: makeSubPropId(fieldId, "fullName"),
+				name: "fullName",
+				type: "string",
+				description: "Full name (computed)",
+			},
+		];
+		if (fieldProperties?.includeMiddleName) {
+			props.splice(2, 0, {
+				id: makeSubPropId(fieldId, "middleName"),
+				name: "middleName",
+				type: "string",
+				description: "Middle name",
+			});
+		}
+		return props;
+	}
+	if (fieldType === "address") {
+		return [
+			{
+				id: makeSubPropId(fieldId, "street"),
+				name: "street",
+				type: "string",
+				description: "Street address",
+			},
+			{
+				id: makeSubPropId(fieldId, "street2"),
+				name: "street2",
+				type: "string",
+				description: "Street address line 2",
+			},
+			{
+				id: makeSubPropId(fieldId, "city"),
+				name: "city",
+				type: "string",
+				description: "City",
+			},
+			{
+				id: makeSubPropId(fieldId, "state"),
+				name: "state",
+				type: "string",
+				description: "State / Province",
+			},
+			{
+				id: makeSubPropId(fieldId, "zip"),
+				name: "zip",
+				type: "string",
+				description: "ZIP / Postal code",
+			},
+			{
+				id: makeSubPropId(fieldId, "country"),
+				name: "country",
+				type: "string",
+				description: "Country",
+			},
+			{
+				id: makeSubPropId(fieldId, "fullAddress"),
+				name: "fullAddress",
+				type: "string",
+				description: "Full address (computed)",
+			},
+		];
+	}
+	return null;
 }
 
 /**
@@ -77,6 +178,7 @@ export function formFieldTypeToSchemaType(
  * Uses the English label to generate lowerCamelCase property names,
  * maps field types to schema types, and sets the label as description.
  * Handles duplicate names by appending a numeric suffix.
+ * Compound fields (name, address) are expanded to nested object properties.
  */
 export function buildOutputSchemaFromFields(
 	fields: FormField[],
@@ -91,12 +193,25 @@ export function buildOutputSchemaFromFields(
 		seenNames.set(baseName, count + 1);
 		const name = count === 0 ? baseName : `${baseName}${count + 1}`;
 
-		return {
+		const schemaType = formFieldTypeToSchemaType(field.type);
+		const subProperties = getCompoundFieldSubProperties(
+			field.id,
+			field.type,
+			field.properties,
+		);
+
+		const prop: OutputSchemaProperty = {
 			id: field.id,
 			name,
-			type: formFieldTypeToSchemaType(field.type),
+			type: schemaType,
 			description: field.label,
 		};
+
+		if (subProperties) {
+			prop.properties = subProperties;
+		}
+
+		return prop;
 	});
 
 	return {

@@ -501,6 +501,139 @@ describe("graph-utils", () => {
 			const statusVar = result[0].variables.find((v) => v.name === "status");
 			expect(statusVar?.type).toBe("string");
 		});
+
+		it("should expand compound name field into children in the variable tree", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Personal Data",
+					description: "",
+					roles: [],
+					config: {
+						outputSchema: {
+							name: "personalDataOutput",
+							properties: [
+								{
+									id: "f1",
+									name: "userName",
+									type: "object",
+									description: "User Name",
+									properties: [
+										{
+											id: "f1_firstName",
+											name: "firstName",
+											type: "string",
+											description: "First name",
+										},
+										{
+											id: "f1_lastName",
+											name: "lastName",
+											type: "string",
+											description: "Last name",
+										},
+										{
+											id: "f1_fullName",
+											name: "fullName",
+											type: "string",
+											description: "Full name (computed)",
+										},
+									],
+								},
+							],
+						},
+					},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+
+			const result = buildVariableSourceNodes(nodes);
+			expect(result).toHaveLength(1);
+
+			const userNameVar = result[0].variables.find(
+				(v) => v.name === "userName",
+			);
+			expect(userNameVar).toBeDefined();
+			expect(userNameVar?.type).toBe("object");
+			expect(userNameVar?.children).toHaveLength(3);
+
+			const firstNameChild = userNameVar?.children?.find(
+				(c) => c.name === "firstName",
+			);
+			expect(firstNameChild).toBeDefined();
+			expect(firstNameChild?.path).toBe("form-1.userName.firstName");
+			expect(firstNameChild?.type).toBe("string");
+
+			const lastNameChild = userNameVar?.children?.find(
+				(c) => c.name === "lastName",
+			);
+			expect(lastNameChild?.path).toBe("form-1.userName.lastName");
+
+			const fullNameChild = userNameVar?.children?.find(
+				(c) => c.name === "fullName",
+			);
+			expect(fullNameChild?.path).toBe("form-1.userName.fullName");
+		});
+
+		it("should expand compound address field into children in the variable tree", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "form-2",
+					type: "Form",
+					title: "Contact Form",
+					description: "",
+					roles: [],
+					config: {
+						outputSchema: {
+							name: "contactFormOutput",
+							properties: [
+								{
+									id: "f2",
+									name: "homeAddress",
+									type: "object",
+									description: "Home Address",
+									properties: [
+										{
+											id: "f2_street",
+											name: "street",
+											type: "string",
+											description: "Street address",
+										},
+										{
+											id: "f2_city",
+											name: "city",
+											type: "string",
+											description: "City",
+										},
+										{
+											id: "f2_fullAddress",
+											name: "fullAddress",
+											type: "string",
+											description: "Full address (computed)",
+										},
+									],
+								},
+							],
+						},
+					},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+
+			const result = buildVariableSourceNodes(nodes);
+			const addressVar = result[0].variables.find(
+				(v) => v.name === "homeAddress",
+			);
+			expect(addressVar?.type).toBe("object");
+			expect(addressVar?.children).toHaveLength(3);
+
+			const streetChild = addressVar?.children?.find(
+				(c) => c.name === "street",
+			);
+			expect(streetChild?.path).toBe("form-2.homeAddress.street");
+		});
 	});
 
 	describe("getCheckpointNode", () => {

@@ -3,6 +3,7 @@ import {
 	labelToCamelCase,
 	formFieldTypeToSchemaType,
 	buildOutputSchemaFromFields,
+	getCompoundFieldSubProperties,
 } from "./form-schema-utils";
 import type { FormField } from "@/lib/workflow-api/forms";
 
@@ -103,6 +104,71 @@ describe("formFieldTypeToSchemaType", () => {
 
 	it("maps unknown type to string", () => {
 		expect(formFieldTypeToSchemaType("unknown-type")).toBe("string");
+	});
+
+	it("maps name to object", () => {
+		expect(formFieldTypeToSchemaType("name")).toBe("object");
+	});
+
+	it("maps address to object", () => {
+		expect(formFieldTypeToSchemaType("address")).toBe("object");
+	});
+});
+
+describe("getCompoundFieldSubProperties", () => {
+	it("returns null for non-compound field types", () => {
+		expect(getCompoundFieldSubProperties("f1", "text")).toBeNull();
+		expect(getCompoundFieldSubProperties("f1", "email")).toBeNull();
+		expect(getCompoundFieldSubProperties("f1", "number")).toBeNull();
+		expect(getCompoundFieldSubProperties("f1", "date")).toBeNull();
+	});
+
+	it("returns firstName, lastName, fullName for name field without middleName", () => {
+		const props = getCompoundFieldSubProperties("f1", "name");
+		expect(props).not.toBeNull();
+		const names = props!.map((p) => p.name);
+		expect(names).toEqual(["firstName", "lastName", "fullName"]);
+		expect(props!.every((p) => p.type === "string")).toBe(true);
+	});
+
+	it("includes middleName when includeMiddleName is true", () => {
+		const props = getCompoundFieldSubProperties("f1", "name", {
+			includeMiddleName: true,
+		});
+		expect(props).not.toBeNull();
+		const names = props!.map((p) => p.name);
+		expect(names).toEqual(["firstName", "lastName", "middleName", "fullName"]);
+	});
+
+	it("does not include middleName when includeMiddleName is false", () => {
+		const props = getCompoundFieldSubProperties("f1", "name", {
+			includeMiddleName: false,
+		});
+		expect(props).not.toBeNull();
+		const names = props!.map((p) => p.name);
+		expect(names).not.toContain("middleName");
+	});
+
+	it("uses fieldId as prefix for sub-property ids", () => {
+		const props = getCompoundFieldSubProperties("myField123", "name");
+		expect(props![0].id).toBe("myField123_firstName");
+		expect(props![1].id).toBe("myField123_lastName");
+	});
+
+	it("returns all address sub-fields", () => {
+		const props = getCompoundFieldSubProperties("f2", "address");
+		expect(props).not.toBeNull();
+		const names = props!.map((p) => p.name);
+		expect(names).toEqual([
+			"street",
+			"street2",
+			"city",
+			"state",
+			"zip",
+			"country",
+			"fullAddress",
+		]);
+		expect(props!.every((p) => p.type === "string")).toBe(true);
 	});
 });
 
@@ -214,5 +280,60 @@ describe("buildOutputSchemaFromFields", () => {
 			type: "string",
 			description: "Email",
 		});
+	});
+
+	it("expands name field to object type with sub-properties", () => {
+		const fields = [makeField({ id: "f1", label: "User Name", type: "name" })];
+		const result = buildOutputSchemaFromFields(fields, "form");
+		const prop = result.properties[0];
+		expect(prop.type).toBe("object");
+		expect(prop.properties).toBeDefined();
+		const subNames = prop.properties!.map((p) => p.name);
+		expect(subNames).toContain("firstName");
+		expect(subNames).toContain("lastName");
+		expect(subNames).toContain("fullName");
+		expect(subNames).not.toContain("middleName");
+	});
+
+	it("includes middleName sub-property when includeMiddleName is true", () => {
+		const fields = [
+			makeField({
+				id: "f1",
+				label: "Full Name",
+				type: "name",
+				properties: { includeMiddleName: true },
+			}),
+		];
+		const result = buildOutputSchemaFromFields(fields, "form");
+		const prop = result.properties[0];
+		expect(prop.type).toBe("object");
+		const subNames = prop.properties!.map((p) => p.name);
+		expect(subNames).toContain("middleName");
+	});
+
+	it("expands address field to object type with sub-properties", () => {
+		const fields = [
+			makeField({ id: "f2", label: "Home Address", type: "address" }),
+		];
+		const result = buildOutputSchemaFromFields(fields, "form");
+		const prop = result.properties[0];
+		expect(prop.type).toBe("object");
+		expect(prop.properties).toBeDefined();
+		const subNames = prop.properties!.map((p) => p.name);
+		expect(subNames).toEqual([
+			"street",
+			"street2",
+			"city",
+			"state",
+			"zip",
+			"country",
+			"fullAddress",
+		]);
+	});
+
+	it("name field has no properties key for non-compound field", () => {
+		const fields = [makeField({ id: "f1", label: "Email", type: "email" })];
+		const result = buildOutputSchemaFromFields(fields, "form");
+		expect(result.properties[0].properties).toBeUndefined();
 	});
 });
