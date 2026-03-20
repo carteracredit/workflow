@@ -9,17 +9,12 @@ import type {
 	ApiResponse,
 	WorkflowFlag,
 } from "./types";
-import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 
 // ---------------------------------------------------------------------------
 // SWR key builders
 // ---------------------------------------------------------------------------
 
-function workflowsKey(
-	jwt: string | null,
-	params?: { search?: string; status?: string },
-): string | null {
-	if (!jwt) return null;
+function workflowsKey(params?: { search?: string; status?: string }): string {
 	const base = `${getWorkflowServiceUrl()}/workflows`;
 	const url = new URL(base);
 	if (params?.search) url.searchParams.set("search", params.search);
@@ -27,33 +22,27 @@ function workflowsKey(
 	return url.toString();
 }
 
-function workflowKey(jwt: string | null, id: string | null): string | null {
-	if (!jwt || !id) return null;
+function workflowKey(id: string | null): string | null {
+	if (!id) return null;
 	return `${getWorkflowServiceUrl()}/workflows/${id}`;
 }
 
-function workflowVersionsKey(
-	jwt: string | null,
-	workflowId: string | null,
-): string | null {
-	if (!jwt || !workflowId) return null;
+function workflowVersionsKey(workflowId: string | null): string | null {
+	if (!workflowId) return null;
 	return `${getWorkflowServiceUrl()}/workflow-versions?workflow_id=${workflowId}`;
 }
 
-function workflowFlagsKey(
-	jwt: string | null,
-	workflowId: string | null,
-): string | null {
-	if (!jwt || !workflowId) return null;
+function workflowFlagsKey(workflowId: string | null): string | null {
+	if (!workflowId) return null;
 	return `${getWorkflowServiceUrl()}/workflows/${workflowId}/flags`;
 }
 
 // ---------------------------------------------------------------------------
-// Generic fetcher with JWT
+// Generic fetcher (JWT from tokenCache via fetchJson auto-JWT)
 // ---------------------------------------------------------------------------
 
-async function apiFetcher<T>(url: string, jwt: string): Promise<T> {
-	const { json } = await fetchJson<ApiResponse<T>>(url, { jwt });
+async function apiFetcher<T>(url: string): Promise<T> {
+	const { json } = await fetchJson<ApiResponse<T>>(url);
 	return json.result;
 }
 
@@ -65,22 +54,19 @@ async function apiFetcher<T>(url: string, jwt: string): Promise<T> {
  * Hook to list workflows with optional search and status filter.
  */
 export function useWorkflows(params?: { search?: string; status?: string }) {
-	const { token, isLoading: isTokenLoading } = useWorkflowApiToken();
-	const key = workflowsKey(token, params);
+	const key = workflowsKey(params);
 
 	const { data, error, isLoading, mutate } = useSWR<Workflow[]>(
 		key,
-		(url: string) => apiFetcher<Workflow[]>(url, token!),
+		(url: string) => apiFetcher<Workflow[]>(url),
 	);
 
 	return {
 		workflows: data ?? [],
 		data,
 		isLoading,
-		isTokenLoading,
 		error,
 		mutate,
-		hasValidKey: key !== null,
 	};
 }
 
@@ -88,12 +74,11 @@ export function useWorkflows(params?: { search?: string; status?: string }) {
  * Hook to load a single workflow by ID.
  */
 export function useWorkflow(id: string | null) {
-	const { token } = useWorkflowApiToken();
-	const key = workflowKey(token, id);
+	const key = workflowKey(id);
 
 	const { data, error, isLoading, mutate } = useSWR<Workflow>(
 		key,
-		(url: string) => apiFetcher<Workflow>(url, token!),
+		(url: string) => apiFetcher<Workflow>(url),
 	);
 
 	return {
@@ -108,12 +93,11 @@ export function useWorkflow(id: string | null) {
  * Hook to list all published versions of a workflow.
  */
 export function useWorkflowVersions(workflowId: string | null) {
-	const { token } = useWorkflowApiToken();
-	const key = workflowVersionsKey(token, workflowId);
+	const key = workflowVersionsKey(workflowId);
 
 	const { data, error, isLoading, mutate } = useSWR<WorkflowVersion[]>(
 		key,
-		(url: string) => apiFetcher<WorkflowVersion[]>(url, token!),
+		(url: string) => apiFetcher<WorkflowVersion[]>(url),
 	);
 
 	return {
@@ -129,12 +113,11 @@ export function useWorkflowVersions(workflowId: string | null) {
  * Polls every 10 seconds to show up-to-date flag states.
  */
 export function useWorkflowFlags(workflowId: string | null) {
-	const { token } = useWorkflowApiToken();
-	const key = workflowFlagsKey(token, workflowId);
+	const key = workflowFlagsKey(workflowId);
 
 	const { data, error, isLoading, mutate } = useSWR<WorkflowFlag[]>(
 		key,
-		(url: string) => apiFetcher<WorkflowFlag[]>(url, token!),
+		(url: string) => apiFetcher<WorkflowFlag[]>(url),
 		{ refreshInterval: 10_000 },
 	);
 

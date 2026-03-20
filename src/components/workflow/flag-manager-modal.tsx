@@ -29,7 +29,6 @@ import { toast } from "sonner";
 
 interface FlagManagerModalProps {
 	workflowId: string;
-	apiToken: string;
 	flags: Flag[];
 	onClose: () => void;
 	onUpdateFlags: (flags: Flag[]) => void;
@@ -37,7 +36,6 @@ interface FlagManagerModalProps {
 
 export function FlagManagerModal({
 	workflowId,
-	apiToken,
 	flags,
 	onClose,
 	onUpdateFlags,
@@ -74,7 +72,7 @@ export function FlagManagerModal({
 
 			setDeletingId(flagId);
 			try {
-				await deleteFlag(workflowId, flagId, { jwt: apiToken });
+				await deleteFlag(workflowId, flagId);
 				onUpdateFlags(flags.filter((f) => f.id !== flagId));
 				toast.success("Flag eliminado correctamente");
 			} catch (err) {
@@ -84,7 +82,7 @@ export function FlagManagerModal({
 				setDeletingId(null);
 			}
 		},
-		[workflowId, apiToken, flags, onUpdateFlags],
+		[workflowId, flags, onUpdateFlags],
 	);
 
 	const handleSaveFlag = useCallback(async () => {
@@ -111,15 +109,11 @@ export function FlagManagerModal({
 
 		try {
 			if (isCreating) {
-				const created = await createFlag(
-					workflowId,
-					{
-						id: editingFlag.id,
-						name: editingFlag.name,
-						options: editingFlag.options,
-					},
-					{ jwt: apiToken },
-				);
+				const created = await createFlag(workflowId, {
+					id: editingFlag.id,
+					name: editingFlag.name,
+					options: editingFlag.options,
+				});
 				// Sync backend response (preserves sort_order, created_at, etc.)
 				const newFlag: Flag = {
 					id: created.id,
@@ -133,15 +127,10 @@ export function FlagManagerModal({
 				onUpdateFlags([...flags, newFlag]);
 				toast.success("Flag creado correctamente");
 			} else {
-				const updated = await updateFlag(
-					workflowId,
-					editingFlag.id,
-					{
-						name: editingFlag.name,
-						options: editingFlag.options,
-					},
-					{ jwt: apiToken },
-				);
+				const updated = await updateFlag(workflowId, editingFlag.id, {
+					name: editingFlag.name,
+					options: editingFlag.options,
+				});
 				const updatedFlag: Flag = {
 					id: updated.id,
 					name: updated.name,
@@ -165,7 +154,7 @@ export function FlagManagerModal({
 		} finally {
 			setIsSaving(false);
 		}
-	}, [editingFlag, isCreating, flags, workflowId, apiToken, onUpdateFlags]);
+	}, [editingFlag, isCreating, flags, workflowId, onUpdateFlags]);
 
 	const handleCancelEdit = () => {
 		setEditingFlag(null);

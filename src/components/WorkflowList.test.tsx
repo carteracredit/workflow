@@ -48,11 +48,6 @@ vi.mock("sonner", () => ({
 	Toaster: () => null,
 }));
 
-const mockUseApiToken = vi.fn();
-vi.mock("@/hooks/useWorkflowApiToken", () => ({
-	useWorkflowApiToken: () => mockUseApiToken(),
-}));
-
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -63,10 +58,8 @@ function makeHooksReturn(
 	workflows: Workflow[],
 	opts: {
 		isLoading?: boolean;
-		isTokenLoading?: boolean;
 		error?: Error;
 		data?: Workflow[];
-		hasValidKey?: boolean;
 	} = {},
 ) {
 	const data = opts.data ?? (opts.isLoading ? undefined : workflows);
@@ -74,19 +67,8 @@ function makeHooksReturn(
 		workflows,
 		data,
 		isLoading: opts.isLoading ?? false,
-		isTokenLoading: opts.isTokenLoading ?? false,
 		error: opts.error,
 		mutate: mockMutate,
-		hasValidKey: opts.hasValidKey ?? true,
-	});
-}
-
-function withoutToken() {
-	mockUseApiToken.mockReturnValue({
-		token: null,
-		isLoading: false,
-		error: null,
-		refetch: vi.fn(),
 	});
 }
 
@@ -116,13 +98,6 @@ function makeWorkflow(overrides: Partial<Workflow> = {}): Workflow {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	// Default: token is available
-	mockUseApiToken.mockReturnValue({
-		token: "test-jwt",
-		isLoading: false,
-		error: null,
-		refetch: vi.fn(),
-	});
 });
 
 afterEach(() => {
@@ -495,7 +470,6 @@ describe("WorkflowList – diálogo de creación", () => {
 		await waitFor(() => {
 			expect(mockCreateWorkflow).toHaveBeenCalledWith(
 				expect.objectContaining({ name: "Nuevo WF", status: "draft" }),
-				{ jwt: "test-jwt" },
 			);
 		});
 		// definition must NOT be sent at creation time — the editor initialises
@@ -534,15 +508,16 @@ describe("WorkflowList – diálogo de creación", () => {
 		await waitFor(() => {
 			expect(mockCreateWorkflow).toHaveBeenCalledWith(
 				expect.objectContaining({ description: "Una descripción" }),
-				{ jwt: "test-jwt" },
 			);
 		});
 	});
 
-	it("muestra error 'No autenticado' cuando no hay token", async () => {
+	it("muestra error cuando createWorkflow falla con 401", async () => {
 		const { toast } = await import("sonner");
-		withoutToken();
 		makeHooksReturn([]);
+		mockCreateWorkflow.mockRejectedValue(
+			new ApiError("Unauthorized", { status: 401, body: null }),
+		);
 		render(<WorkflowList />);
 
 		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
@@ -550,13 +525,12 @@ describe("WorkflowList – diálogo de creación", () => {
 			"Ej: Aprobación de Crédito",
 		);
 		await userEvent.type(input, "Test");
-
-		// Force-click the button even though token is null (button is enabled)
-		const createBtn = screen.getByText("Crear workflow");
-		fireEvent.click(createBtn);
+		fireEvent.click(screen.getByText("Crear workflow"));
 
 		await waitFor(() => {
-			expect(toast.error).toHaveBeenCalledWith("No autenticado");
+			expect(toast.error).toHaveBeenCalledWith("Error al crear workflow", {
+				description: expect.any(String),
+			});
 		});
 	});
 
@@ -669,7 +643,6 @@ describe("WorkflowList – archivar y restaurar", () => {
 			expect(mockUpdateWorkflow).toHaveBeenCalledWith(
 				"wf-uuid-001",
 				expect.objectContaining({ status: "archived", name: "WF1" }),
-				{ jwt: "test-jwt" },
 			);
 		});
 		await waitFor(() => {
@@ -694,7 +667,6 @@ describe("WorkflowList – archivar y restaurar", () => {
 			expect(mockUpdateWorkflow).toHaveBeenCalledWith(
 				"wf-uuid-002",
 				expect.objectContaining({ status: "draft", name: "WF2" }),
-				{ jwt: "test-jwt" },
 			);
 		});
 		await waitFor(() => {
@@ -778,9 +750,7 @@ describe("WorkflowList – eliminar", () => {
 		fireEvent.click(deleteBtn);
 
 		await waitFor(() => {
-			expect(mockDeleteWorkflow).toHaveBeenCalledWith("wf-uuid-007", {
-				jwt: "test-jwt",
-			});
+			expect(mockDeleteWorkflow).toHaveBeenCalledWith("wf-uuid-007");
 		});
 		await waitFor(() => {
 			expect(toast.success).toHaveBeenCalledWith('"WFDel2" eliminado');
@@ -883,9 +853,7 @@ describe("WorkflowList – clonar", () => {
 		fireEvent.click(cloneBtn);
 
 		await waitFor(() => {
-			expect(mockCloneWorkflow).toHaveBeenCalledWith("wf-uuid-041", {
-				jwt: "test-jwt",
-			});
+			expect(mockCloneWorkflow).toHaveBeenCalledWith("wf-uuid-041");
 		});
 		await waitFor(() => {
 			expect(toast.success).toHaveBeenCalledWith('Copia de "WFClone2" creada');

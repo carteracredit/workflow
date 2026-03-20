@@ -24,9 +24,7 @@ describe("FlagStatePanel", () => {
 			mutate: vi.fn(),
 		} as ReturnType<typeof useSWR>);
 
-		const { container } = render(
-			<FlagStatePanel workflowId="wf-1" apiToken="token" />,
-		);
+		const { container } = render(<FlagStatePanel workflowId="wf-1" />);
 
 		expect(container.firstChild).toBeNull();
 	});
@@ -40,9 +38,7 @@ describe("FlagStatePanel", () => {
 			mutate: vi.fn(),
 		} as ReturnType<typeof useSWR>);
 
-		const { container } = render(
-			<FlagStatePanel workflowId="wf-1" apiToken="token" />,
-		);
+		const { container } = render(<FlagStatePanel workflowId="wf-1" />);
 
 		expect(container.firstChild).toBeNull();
 	});
@@ -56,9 +52,7 @@ describe("FlagStatePanel", () => {
 			mutate: vi.fn(),
 		} as ReturnType<typeof useSWR>);
 
-		const { container } = render(
-			<FlagStatePanel workflowId="wf-1" apiToken="token" />,
-		);
+		const { container } = render(<FlagStatePanel workflowId="wf-1" />);
 
 		expect(container.firstChild).toBeNull();
 	});
@@ -94,7 +88,7 @@ describe("FlagStatePanel", () => {
 			mutate: vi.fn(),
 		} as ReturnType<typeof useSWR>);
 
-		render(<FlagStatePanel workflowId="wf-1" apiToken="token" />);
+		render(<FlagStatePanel workflowId="wf-1" />);
 
 		expect(screen.getByText("Estado de Flags")).toBeInTheDocument();
 		expect(screen.getByText("Prioridad")).toBeInTheDocument();
@@ -121,7 +115,7 @@ describe("FlagStatePanel", () => {
 			mutate: vi.fn(),
 		} as ReturnType<typeof useSWR>);
 
-		render(<FlagStatePanel workflowId="wf-1" apiToken="token" />);
+		render(<FlagStatePanel workflowId="wf-1" />);
 
 		expect(screen.getByText("Sin estado")).toBeInTheDocument();
 		expect(screen.getByText("—")).toBeInTheDocument();

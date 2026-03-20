@@ -60,7 +60,6 @@ import {
 	updateWorkflow,
 	cloneWorkflow,
 } from "@/lib/workflow-api/workflows";
-import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 import { slugify } from "@/lib/slugify";
 import type { Workflow } from "@/lib/workflow-api/types";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
@@ -320,14 +319,12 @@ interface CreateWorkflowDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onCreated: (id: string) => void;
-	apiToken: string | null;
 }
 
 function CreateWorkflowDialog({
 	open,
 	onOpenChange,
 	onCreated,
-	apiToken,
 }: CreateWorkflowDialogProps) {
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
@@ -338,26 +335,19 @@ function CreateWorkflowDialog({
 			toast.error("El nombre es requerido");
 			return;
 		}
-		if (!apiToken) {
-			toast.error("No autenticado");
-			return;
-		}
 		setIsCreating(true);
 		try {
-			const workflow = await createWorkflow(
-				{
-					name: name.trim(),
-					slug: slugify(name.trim()),
-					description: description.trim(),
-					status: "draft",
-					class_name: toClassName(name.trim()),
-					current_major_version: 0,
-					// No definition on creation — the editor initialises with a default
-					// Start node when definition is null. That state gets persisted to
-					// localStorage automatically and to the DB on first explicit Save.
-				},
-				{ jwt: apiToken },
-			);
+			const workflow = await createWorkflow({
+				name: name.trim(),
+				slug: slugify(name.trim()),
+				description: description.trim(),
+				status: "draft",
+				class_name: toClassName(name.trim()),
+				current_major_version: 0,
+				// No definition on creation — the editor initialises with a default
+				// Start node when definition is null. That state gets persisted to
+				// localStorage automatically and to the DB on first explicit Save.
+			});
 			toast.success(`Workflow "${workflow.name}" creado`);
 			setName("");
 			setDescription("");
@@ -451,7 +441,6 @@ type VersionFilter = "all" | "unpublished" | number;
 
 export function WorkflowList() {
 	const router = useRouter();
-	const { token } = useWorkflowApiToken();
 	const [search, setSearch] = useState("");
 	const [searchScope, setSearchScope] = useState<SearchScope>("all");
 	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
@@ -460,15 +449,7 @@ export function WorkflowList() {
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [cloningId, setCloningId] = useState<string | null>(null);
 
-	const {
-		workflows,
-		data,
-		isLoading,
-		isTokenLoading,
-		error,
-		mutate,
-		hasValidKey,
-	} = useWorkflows();
+	const { workflows, data, isLoading, error, mutate } = useWorkflows();
 
 	// Client-side filter
 	const filtered = useMemo(() => {
@@ -522,29 +503,21 @@ export function WorkflowList() {
 	};
 
 	const handleArchive = async (wf: Workflow) => {
-		if (!token) {
-			toast.error("No autenticado");
-			return;
-		}
 		const newStatus = wf.status === "archived" ? "draft" : "archived";
 		try {
 			// PUT requires all non-optional fields — send the full workflow object
 			// with only status changed to avoid validation errors.
-			await updateWorkflow(
-				wf.id,
-				{
-					name: wf.name,
-					slug: wf.slug,
-					description: wf.description,
-					status: newStatus,
-					class_name: wf.class_name,
-					current_major_version: wf.current_major_version,
-					...(wf.github_repo_url != null && {
-						github_repo_url: wf.github_repo_url,
-					}),
-				},
-				{ jwt: token },
-			);
+			await updateWorkflow(wf.id, {
+				name: wf.name,
+				slug: wf.slug,
+				description: wf.description,
+				status: newStatus,
+				class_name: wf.class_name,
+				current_major_version: wf.current_major_version,
+				...(wf.github_repo_url != null && {
+					github_repo_url: wf.github_repo_url,
+				}),
+			});
 			toast.success(
 				newStatus === "archived"
 					? `"${wf.name}" archivado`
@@ -559,15 +532,11 @@ export function WorkflowList() {
 	};
 
 	const handleDelete = async (wf: Workflow) => {
-		if (!token) {
-			toast.error("No autenticado");
-			return;
-		}
 		if (!confirm(`¿Eliminar "${wf.name}"? Esta acción no se puede deshacer.`))
 			return;
 		setDeletingId(wf.id);
 		try {
-			await deleteWorkflow(wf.id, { jwt: token });
+			await deleteWorkflow(wf.id);
 			toast.success(`"${wf.name}" eliminado`);
 			mutate();
 		} catch (err) {
@@ -580,13 +549,9 @@ export function WorkflowList() {
 	};
 
 	const handleClone = async (wf: Workflow) => {
-		if (!token) {
-			toast.error("No autenticado");
-			return;
-		}
 		setCloningId(wf.id);
 		try {
-			const cloned = await cloneWorkflow(wf.id, { jwt: token });
+			const cloned = await cloneWorkflow(wf.id);
 			toast.success(`Copia de "${wf.name}" creada`);
 			mutate();
 			router.push(`/editor/${cloned.id}`);
@@ -601,8 +566,7 @@ export function WorkflowList() {
 
 	// Skeleton until we have received a response (data defined) or error. Show empty
 	// state only when loading is done and data is available (possibly empty array).
-	const showSkeleton =
-		!error && data === undefined && (hasValidKey || isTokenLoading);
+	const showSkeleton = !error && data === undefined;
 
 	if (showSkeleton) {
 		return <WorkflowListSkeleton />;
@@ -966,7 +930,6 @@ export function WorkflowList() {
 				open={createDialogOpen}
 				onOpenChange={setCreateDialogOpen}
 				onCreated={handleCreated}
-				apiToken={token}
 			/>
 		</div>
 	);

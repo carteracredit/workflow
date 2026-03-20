@@ -13,11 +13,9 @@ vi.mock("@/lib/workflow-api/flags", () => ({
 import { createFlag, deleteFlag } from "@/lib/workflow-api/flags";
 
 const MOCK_WORKFLOW_ID = "00000000-0000-0000-0000-000000000001";
-const MOCK_TOKEN = "mock-jwt-token";
 
 const defaultProps = {
 	workflowId: MOCK_WORKFLOW_ID,
-	apiToken: MOCK_TOKEN,
 };
 
 describe("FlagManagerModal", () => {

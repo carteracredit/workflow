@@ -49,8 +49,6 @@ export interface PublishModalProps {
 	workflowApiId: string | null;
 	/** Callback to save the workflow first if workflowApiId is null */
 	onSave: () => Promise<void>;
-	/** JWT token for authenticated API calls */
-	apiToken: string | null;
 	onClose: () => void;
 	/** Called with the new status and version when publish completes successfully */
 	onPublished?: (status: "published", majorVersion?: number) => void;
@@ -191,7 +189,6 @@ export function PublishModal({
 	pan = { x: 0, y: 0 },
 	workflowApiId,
 	onSave,
-	apiToken,
 	onClose,
 	onPublished,
 }: PublishModalProps) {
@@ -265,14 +262,6 @@ export function PublishModal({
 		}
 
 		// Step 3: Publish to Cloudflare via workflow-svc → GitHub → GitHub Actions
-		if (!apiToken) {
-			toast.error("No autenticado", {
-				description: "Debes iniciar sesión para publicar.",
-			});
-			setIsRunning(false);
-			return;
-		}
-
 		// workflowApiId should now be set (either was already set or saved above)
 		// We re-read from localStorage since onSave() may have updated it
 		let currentWorkflowId = workflowApiId;
@@ -299,15 +288,11 @@ export function PublishModal({
 
 		setDeployStatus("running");
 		try {
-			const result = await publishWorkflow(
-				currentWorkflowId,
-				{
-					code: generatedCode,
-					environment: "development",
-					definition: definitionSnapshot,
-				},
-				{ jwt: apiToken },
-			);
+			const result = await publishWorkflow(currentWorkflowId, {
+				code: generatedCode,
+				environment: "development",
+				definition: definitionSnapshot,
+			});
 
 			if (result.skipped) {
 				setSkipped(true);
@@ -343,7 +328,6 @@ export function PublishModal({
 		pan,
 		workflowApiId,
 		onSave,
-		apiToken,
 		onPublished,
 	]);
 
