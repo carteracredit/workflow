@@ -704,16 +704,17 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("Flag Change: Update Status");
-		expect(result.code).toContain("WORKFLOW_SVC.fetch");
-		expect(result.code).toContain("batch-update-state");
+		expect(result.code).toContain("WORKFLOW_SVC.batchUpdateFlagState");
+		expect(result.code).toContain("workflowId: this.env.WORKFLOW_ID");
 		expect(result.code).toContain('"status"');
 		expect(result.code).toContain('"approved"');
 		expect(result.code).toContain('"priority"');
 		expect(result.code).toContain('"high"');
-		expect(result.code).toContain("svcResponse.ok");
-		// Should NOT use old FLAGS pattern
+		expect(result.code).toContain("instanceId: event.instanceId");
+		// Should NOT use old FLAGS or fetch patterns
 		expect(result.code).not.toContain("this.env.FLAGS");
 		expect(result.code).not.toContain("flags.set(");
+		expect(result.code).not.toContain("WORKFLOW_SVC.fetch");
 	});
 
 	it("should handle FlagChange with no flag changes", () => {
@@ -741,7 +742,7 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		);
 	});
 
-	it("should generate WorkflowEnv with WORKFLOW_SVC and WORKFLOW_ID bindings", () => {
+	it("should generate WorkflowEnv with WORKFLOW_SVC RPC type and WORKFLOW_ID bindings", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({ id: "end", type: "End", title: "Fin" }),
@@ -750,9 +751,11 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("WORKFLOW_SVC: Fetcher");
+		expect(result.code).toContain("WORKFLOW_SVC: {");
+		expect(result.code).toContain("batchUpdateFlagState");
 		expect(result.code).toContain("WORKFLOW_ID: string");
-		// Should NOT contain old bindings
+		// Should NOT contain old bindings or Fetcher type
+		expect(result.code).not.toContain("WORKFLOW_SVC: Fetcher");
 		expect(result.code).not.toContain("FLAGS?: unknown");
 		expect(result.code).not.toContain("FORMS?: unknown");
 	});
