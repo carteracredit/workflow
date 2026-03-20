@@ -1,7 +1,7 @@
 import { atom } from "nanostores";
 import type { Session } from "./types";
 import { isAdminRole } from "./types";
-import { clearTokenStore } from "./tokenStore";
+import { tokenCache } from "./tokenCache";
 
 /**
  * Session state for client-side state management.
@@ -41,7 +41,7 @@ export function setSession(session: Session) {
 		isPending: false,
 		isAdmin: session ? isAdminRole(session.user.role) : false,
 	});
-	clearTokenStore();
+	tokenCache.clear();
 }
 
 /**
@@ -54,7 +54,7 @@ export function clearSession() {
 		isPending: false,
 		isAdmin: false,
 	});
-	clearTokenStore();
+	tokenCache.clear();
 }
 
 /**

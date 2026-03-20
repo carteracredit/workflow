@@ -1,8 +1,7 @@
 "use client";
 
-import { useStore } from "@nanostores/react";
-import { useEffect, useCallback } from "react";
-import { getClientJwtCached, tokenStore } from "@/lib/auth/tokenStore";
+import { useState, useEffect, useCallback } from "react";
+import { tokenCache } from "@/lib/auth/tokenCache";
 
 interface UseWorkflowApiTokenResult {
 	token: string | null;
@@ -14,9 +13,10 @@ interface UseWorkflowApiTokenResult {
 /**
  * React hook for client components to get a JWT token for workflow-svc API calls.
  *
- * Uses the token store singleton so all consumers share one token. Token is
- * invalidated when session changes (clearSession/setSession) and refetched when
- * the tab becomes visible, so no hard refresh is needed.
+ * Uses the shared token cache so all consumers share one token. Token is
+ * invalidated when session changes (clearSession/setSession). Visibility and
+ * a 10-min interval keep the token fresh without forcing a network call on
+ * every tab focus.
  *
  * @example
  * ```tsx
@@ -31,36 +31,57 @@ interface UseWorkflowApiTokenResult {
  * ```
  */
 export function useWorkflowApiToken(): UseWorkflowApiTokenResult {
-	const { token, isPending, error } = useStore(tokenStore);
+	const [token, setToken] = useState<string | null>(null);
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<Error | null>(null);
 
-	const refetch = useCallback(async () => {
-		await getClientJwtCached(true);
+	const fetchJwt = useCallback(async (forceRefresh: boolean = false) => {
+		try {
+			setIsLoading(true);
+			setError(null);
+			const t = await tokenCache.getToken(null, forceRefresh);
+			setToken(t);
+		} catch (err) {
+			setError(err instanceof Error ? err : new Error("Failed to fetch JWT"));
+			setToken(null);
+		} finally {
+			setIsLoading(false);
+		}
 	}, []);
 
-	// Ensure token is loaded on mount (or when store was invalidated)
+	// Load token on mount (uses cache if valid)
 	useEffect(() => {
-		void getClientJwtCached();
-	}, []);
+		void fetchJwt(false);
+	}, [fetchJwt]);
 
-	// Refetch when tab becomes visible so re-auth or session refresh elsewhere is picked up
+	// Refresh when tab becomes visible — cache-respecting, no forced network call
 	useEffect(() => {
-		const handleVisibility = () => {
-			if (
-				typeof document !== "undefined" &&
-				document.visibilityState === "visible"
-			) {
-				void getClientJwtCached(true);
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === "visible") {
+				void fetchJwt();
 			}
 		};
-		document.addEventListener("visibilitychange", handleVisibility);
-		return () =>
-			document.removeEventListener("visibilitychange", handleVisibility);
-	}, []);
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () => {
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
+	}, [fetchJwt]);
+
+	// Proactively refresh every 10 minutes (JWT TTL 15 min; cache stale 5 min)
+	useEffect(() => {
+		const interval = setInterval(
+			() => {
+				void fetchJwt();
+			},
+			10 * 60 * 1000,
+		);
+		return () => clearInterval(interval);
+	}, [fetchJwt]);
 
 	return {
 		token,
-		isLoading: isPending,
+		isLoading,
 		error,
-		refetch,
+		refetch: () => fetchJwt(true),
 	};
 }
