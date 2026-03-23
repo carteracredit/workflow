@@ -59,6 +59,7 @@ import {
 	VariableTemplateInput,
 	VariablePicker,
 } from "@/components/workflow/variable-picker";
+import { FieldLabel } from "@/components/workflow/field-label";
 import type { TemplateSegment } from "@/components/workflow/variable-picker";
 import type { OutputSchemaProperty } from "@/lib/workflow/types";
 import {
@@ -1125,11 +1126,12 @@ export function PropertiesPanel({
 						<div className="space-y-3 rounded-md border border-border/60 p-3">
 							<div className="flex items-center justify-between gap-4">
 								<div>
-									<Label htmlFor="stale-toggle">Timeout Stale</Label>
-									<p className="text-xs text-muted-foreground">
-										Activa un recordatorio para nodos que llevan mucho tiempo
-										sin resolverse.
-									</p>
+									<FieldLabel
+										htmlFor="stale-toggle"
+										description="Activa un recordatorio para nodos que llevan mucho tiempo sin resolverse."
+									>
+										Timeout Stale
+									</FieldLabel>
 								</div>
 								<Switch
 									id="stale-toggle"
@@ -1806,9 +1808,12 @@ export function PropertiesPanel({
 										{/* Reintentos - Solo para retry */}
 										{failureHandling.onFailure === "retry" && (
 											<div className="mt-3 space-y-2">
-												<Label htmlFor="api-max-retries">
+												<FieldLabel
+													htmlFor="api-max-retries"
+													description="Máximo 2 reintentos. Después de agotarlos, el workflow se detendrá."
+												>
 													Número de Reintentos
-												</Label>
+												</FieldLabel>
 												<Input
 													id="api-max-retries"
 													type="number"
@@ -1885,18 +1890,16 @@ export function PropertiesPanel({
 														}
 													}}
 												/>
-												<p className="text-xs text-muted-foreground">
-													Máximo 2 reintentos. Después de agotarlos, el workflow
-													se detendrá.
-												</p>
 											</div>
 										)}
 
-										{/* Estrategia de caché */}
 										<div className="mt-3 space-y-2">
-											<Label htmlFor="api-cache-strategy">
+											<FieldLabel
+												htmlFor="api-cache-strategy"
+												description="Controla si este nodo API puede reutilizar resultados previos en el mismo workflow."
+											>
 												Estrategia de Ejecución
-											</Label>
+											</FieldLabel>
 											<Select
 												value={failureHandling.cacheStrategy}
 												onValueChange={(value) =>
@@ -1926,21 +1929,16 @@ export function PropertiesPanel({
 													</SelectItem>
 												</SelectContent>
 											</Select>
-											<p className="text-xs text-muted-foreground">
-												{failureHandling.cacheStrategy === "always-execute" &&
-													"Se ejecutará cada vez que el flujo pase por este nodo"}
-												{failureHandling.cacheStrategy ===
-													"cache-until-checkpoint-reset" &&
-													"Se ejecutará solo una vez por ciclo de checkpoint"}
-												{failureHandling.cacheStrategy ===
-													"cache-until-workflow-end" &&
-													"Se ejecutará solo una vez en todo el workflow"}
-											</p>
 										</div>
 
 										{/* Timeout */}
 										<div className="mt-3 space-y-2">
-											<Label htmlFor="api-timeout">Timeout (segundos)</Label>
+											<FieldLabel
+												htmlFor="api-timeout"
+												description="Tiempo máximo de espera para la respuesta (5-300 segundos)"
+											>
+												Timeout (segundos)
+											</FieldLabel>
 											<Input
 												id="api-timeout"
 												type="number"
@@ -1963,10 +1961,6 @@ export function PropertiesPanel({
 													});
 												}}
 											/>
-											<p className="text-xs text-muted-foreground">
-												Tiempo máximo de espera para la respuesta (5-300
-												segundos)
-											</p>
 										</div>
 
 										{/* Selector de checkpoint si return-to-checkpoint */}
@@ -2116,9 +2110,12 @@ export function PropertiesPanel({
 							{messageConfig.channel === "email" && (
 								<>
 									<div className="space-y-2">
-										<Label htmlFor="message-template-name">
+										<FieldLabel
+											htmlFor="message-template-name"
+											description="Nombre exacto del template en Mandrill."
+										>
 											Nombre del template
-										</Label>
+										</FieldLabel>
 										<Input
 											id="message-template-name"
 											value={messageConfig.templateName ?? ""}
@@ -2130,9 +2127,6 @@ export function PropertiesPanel({
 											}
 											placeholder="mi-template-mandrill"
 										/>
-										<p className="text-xs text-muted-foreground">
-											Nombre exacto del template en Mandrill.
-										</p>
 									</div>
 
 									<div className="space-y-2">
@@ -2152,7 +2146,9 @@ export function PropertiesPanel({
 
 									<div className="space-y-2">
 										<div className="flex items-center justify-between">
-											<Label>Variables del template</Label>
+											<FieldLabel description="Variables que se sustituyen en el template. La clave corresponde al placeholder *|CLAVE|* en Mandrill. El valor puede referenciar datos del evento, p.ej. event.payload.nombre.">
+												Variables del template
+											</FieldLabel>
 											<Button
 												type="button"
 												variant="outline"
@@ -2163,14 +2159,6 @@ export function PropertiesPanel({
 												+ Agregar
 											</Button>
 										</div>
-										<p className="text-xs text-muted-foreground">
-											Variables que se sustituyen en el template. La{" "}
-											<span className="font-mono">clave</span> corresponde al
-											placeholder <span className="font-mono">*|CLAVE|*</span>{" "}
-											en Mandrill. El <span className="font-mono">valor</span>{" "}
-											puede referenciar datos del evento, p.ej.{" "}
-											<span className="font-mono">event.payload.nombre</span>.
-										</p>
 										{(messageConfig.mergeVars ?? []).length === 0 && (
 											<p className="text-xs text-muted-foreground italic">
 												Sin variables definidas.

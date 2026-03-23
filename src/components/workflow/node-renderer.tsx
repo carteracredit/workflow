@@ -35,6 +35,7 @@ interface NodeRendererProps {
 	selected: boolean;
 	errors: ValidationError[];
 	connecting: boolean;
+	isAnyConnectionInProgress?: boolean;
 	highlightCheckpoint?: boolean; // Para iluminar checkpoint cuando API apunta a él
 	flags?: Flag[]; // Flags disponibles para mostrar en nodos FlagChange
 	onMouseDown: (e: React.MouseEvent) => void;
@@ -43,6 +44,7 @@ interface NodeRendererProps {
 		e: React.MouseEvent,
 		port?: "top" | "bottom" | "middle",
 	) => void;
+	onHeightMeasured?: (nodeId: string, height: number) => void;
 }
 
 const NODE_ICONS = {
@@ -100,15 +102,18 @@ export function NodeRenderer({
 	selected,
 	errors,
 	connecting,
+	isAnyConnectionInProgress = false,
 	highlightCheckpoint,
 	flags = [],
 	onMouseDown,
 	onConnectorClick,
+	onHeightMeasured,
 }: NodeRendererProps) {
 	const nodeRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const [hoveredConnector, setHoveredConnector] = useState<string | null>(null);
 	const [actualNodeHeight, setActualNodeHeight] = useState<number>(0);
+	const [isNodeHovered, setIsNodeHovered] = useState(false);
 	const rightConnectorRef = useRef<HTMLDivElement>(null);
 	const Icon = NODE_ICONS[node.type];
 	const baseIconBackground = NODE_BG_COLORS[node.type];
@@ -339,18 +344,24 @@ export function NodeRenderer({
 					// Solo actualizar si hay un cambio significativo (más de 1px de diferencia)
 					if (Math.abs(height - actualNodeHeight) > 1) {
 						setActualNodeHeight(height);
+						onHeightMeasured?.(node.id, height);
 					}
 				}
 			});
 		}
 	}, [
+		node.id,
 		node.title,
 		node.description,
 		node.roles,
 		node.config,
 		flags,
 		actualNodeHeight,
+		onHeightMeasured,
 	]);
+
+	const showConnectors =
+		selected || isNodeHovered || connecting || isAnyConnectionInProgress;
 
 	return (
 		<div
@@ -363,10 +374,12 @@ export function NodeRenderer({
 				pointerEvents: "auto",
 			}}
 			onMouseDown={onMouseDown}
+			onMouseEnter={() => setIsNodeHovered(true)}
+			onMouseLeave={() => setIsNodeHovered(false)}
 		>
 			<div
 				className={cn(
-					"workflow-node relative cursor-move select-none rounded-lg border bg-card shadow-md transition-all",
+					"workflow-node relative cursor-pointer select-none rounded-lg border bg-card shadow-md transition-all",
 					selected && "selected ring-2 ring-ring ring-offset-1",
 					hasErrors && "border-destructive",
 					connecting && "ring-2 ring-primary",
@@ -599,9 +612,12 @@ export function NodeRenderer({
 							<>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
 										right: `${-CONNECTOR_SIZE / 2}px`,
@@ -623,9 +639,12 @@ export function NodeRenderer({
 								/>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
 										right: `${-CONNECTOR_SIZE / 2}px`,
@@ -650,9 +669,12 @@ export function NodeRenderer({
 							<>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
 										right: `${-CONNECTOR_SIZE / 2}px`,
@@ -674,9 +696,12 @@ export function NodeRenderer({
 								/>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
 										right: `${-CONNECTOR_SIZE / 2}px`,
@@ -701,9 +726,12 @@ export function NodeRenderer({
 							<div
 								ref={rightConnectorRef}
 								className={cn(
-									"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-transform",
+									"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
 									connecting &&
 										"scale-125 animate-pulse border-primary bg-primary",
+									showConnectors
+										? "pointer-events-auto opacity-100"
+										: "pointer-events-none scale-75 opacity-0",
 								)}
 								style={{
 									right: `${-CONNECTOR_SIZE / 2}px`,
@@ -727,8 +755,11 @@ export function NodeRenderer({
 				{!isStartNode && (
 					<div
 						className={cn(
-							"workflow-connector pointer-events-auto absolute z-30 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-transform",
+							"workflow-connector absolute z-30 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
 							connecting && "scale-125 animate-pulse border-primary bg-primary",
+							showConnectors
+								? "pointer-events-auto opacity-100"
+								: "pointer-events-none scale-75 opacity-0",
 						)}
 						style={{
 							left: `${-CONNECTOR_SIZE / 2}px`,

@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { LanguageProvider } from "@/components/LanguageProvider";
 import { SessionHydrator } from "@/lib/auth/useAuthSession";
 import { getServerSession } from "@/lib/auth/getServerSession";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -43,9 +44,11 @@ export default async function RootLayout({
 			>
 				<ThemeProvider>
 					<LanguageProvider>
-						<SessionHydrator serverSession={session}>
-							{children}
-						</SessionHydrator>
+						<TooltipProvider delayDuration={300}>
+							<SessionHydrator serverSession={session}>
+								{children}
+							</SessionHydrator>
+						</TooltipProvider>
 					</LanguageProvider>
 				</ThemeProvider>
 			</body>

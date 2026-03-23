@@ -4,6 +4,7 @@ import type React from "react";
 
 import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
 import { Trash2 } from "lucide-react";
+import { estimateNodeDimensions } from "./node-metrics";
 
 const ARROW_MARKER_WIDTH = 12;
 const ARROW_MARKER_HEIGHT = 8;
@@ -17,6 +18,7 @@ interface EdgeRendererProps {
 	selected: boolean;
 	onSelect: (e: React.MouseEvent) => void;
 	onDelete: () => void;
+	measuredNodeHeights?: Record<string, number>;
 	dragState?: {
 		nodeId: string;
 		offsetX: number;
@@ -31,6 +33,7 @@ export function EdgeRenderer({
 	selected,
 	onSelect,
 	onDelete,
+	measuredNodeHeights = {},
 	dragState,
 }: EdgeRendererProps) {
 	const fromNode = nodes.find((n) => n.id === edge.from);
@@ -53,94 +56,14 @@ export function EdgeRenderer({
 	const toNodeX = toNode.position.x + toNodeDragOffset.x;
 	const toNodeY = toNode.position.y + toNodeDragOffset.y;
 
-	// Tamaños dinámicos - deben coincidir con node-renderer
-	const MIN_NODE_WIDTH = 180; // Reducido para permitir nodos más estrechos
-	const MAX_NODE_WIDTH = 320;
-	const MIN_NODE_HEIGHT = 60;
-	const PADDING_X = 16; // Restaurado
-	const ICON_CONTAINER_SIZE = 40;
-
-	// Calcular tamaños aproximados para los nodos (debe coincidir con node-renderer)
-	// Nota: No tenemos acceso a flags aquí, así que usamos aproximación
+	// Calcular tamaños para los nodos usando alturas reales medidas cuando estén disponibles
 	const calculateNodeSize = (node: WorkflowNode) => {
-		const titleWidth = node.title.length * 9;
-		const descWidth = node.description ? node.description.length * 7.5 : 0;
-
-		// Calcular ancho aproximado de badges de flags
-		// En edge-renderer no tenemos acceso a flags, así que usamos aproximación
-		let flagsMaxWidth = 0;
-		if (node.type === "FlagChange" && node.config.flagChanges) {
-			const flagChanges = node.config.flagChanges as Array<{
-				flagId: string;
-				optionId: string;
-			}>;
-			// Aproximación conservadora basada en texto promedio
-			flagChanges.forEach(() => {
-				flagsMaxWidth = Math.max(flagsMaxWidth, 150);
-			});
-		}
-
-		const contentWidth =
-			Math.max(titleWidth, descWidth, flagsMaxWidth) +
-			ICON_CONTAINER_SIZE +
-			12 +
-			PADDING_X * 2;
-		const NODE_WIDTH = Math.max(
-			MIN_NODE_WIDTH,
-			Math.min(MAX_NODE_WIDTH, contentWidth),
-		);
-
-		const hasDescription = !!node.description;
-		const hasRoles = node.roles.length > 0;
-		const flagChangesCount =
-			node.type === "FlagChange" && node.config.flagChanges
-				? (
-						node.config.flagChanges as Array<{
-							flagId: string;
-							optionId: string;
-						}>
-					).length
-				: 0;
-		const hasSpecialBadges =
-			(node.type === "Reject" &&
-				(node.config.allowRetry as boolean) === true) ||
-			flagChangesCount > 0 ||
-			(node.type === "API" && node.config.failureHandling) ||
-			node.type === "Challenge";
-
-		// Calcular altura estimada - DEBE COINCIDIR EXACTAMENTE con node-renderer
-		// Usar exactamente la misma lógica que en node-renderer.tsx líneas 162-175
-		let estimatedHeight = MIN_NODE_HEIGHT;
-		if (hasDescription) estimatedHeight += 22;
-		if (hasRoles) {
-			const rolesRows = Math.ceil(node.roles.length / 3); // Aproximación: 3 roles por fila
-			estimatedHeight += rolesRows * 28;
-		}
-		if (hasSpecialBadges) {
-			if (flagChangesCount > 0) {
-				const flagRows = Math.ceil(flagChangesCount / 2); // Aproximación: 2 flags por fila
-				estimatedHeight += flagRows * 28;
-			} else {
-				estimatedHeight += 28;
-			}
-		}
-
-		// IMPORTANTE: Añadir un margen de seguridad para compensar diferencias entre altura estimada y real
-		// cuando el nodo tiene mucho contenido que puede hacer que crezca más de lo estimado
-		// Esto asegura que las flechas siempre apunten al círculo o más abajo, nunca más arriba
-		if (flagChangesCount > 2) {
-			estimatedHeight += 8; // Margen adicional para nodos con muchos flags (más conservador)
-		} else if (node.roles.length > 2 || hasDescription) {
-			estimatedHeight += 3; // Margen pequeño para otros nodos con contenido
-		}
-
-		// Añadir un pequeño margen de seguridad para asegurar que las flechas apunten correctamente
-		// cuando hay contenido que puede hacer que el nodo crezca más de lo estimado
-		if (flagChangesCount > 3 || node.roles.length > 3) {
-			estimatedHeight += 4; // Margen adicional para nodos con mucho contenido
-		}
-
-		return { width: NODE_WIDTH, height: estimatedHeight };
+		const estimated = estimateNodeDimensions(node);
+		const realHeight = measuredNodeHeights[node.id];
+		return {
+			width: estimated.width,
+			height: realHeight ?? estimated.height,
+		};
 	};
 
 	const hasDualOutputs =

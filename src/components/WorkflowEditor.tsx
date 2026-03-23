@@ -46,6 +46,7 @@ import {
 import { listFlags } from "@/lib/workflow-api/flags";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import type { Workflow, WorkflowFlag } from "@/lib/workflow-api/types";
+import { Monitor } from "lucide-react";
 
 // Legacy keys for backward compatibility (single-workflow editor mode)
 const LEGACY_STORAGE_KEY = "cartera-workflow-state";
@@ -340,6 +341,19 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [isLoadingFromApi, setIsLoadingFromApi] = useState(
 		workflowId !== undefined,
 	);
+	const [isSmallScreen, setIsSmallScreen] = useState(false);
+	const [isTablet, setIsTablet] = useState(false);
+
+	useEffect(() => {
+		const checkScreenSize = () => {
+			const w = window.innerWidth;
+			setIsSmallScreen(w < 768);
+			setIsTablet(w >= 768 && w < 1024);
+		};
+		checkScreenSize();
+		window.addEventListener("resize", checkScreenSize);
+		return () => window.removeEventListener("resize", checkScreenSize);
+	}, []);
 
 	// Initial state — overridden by API load when workflowId is set
 	const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
@@ -1101,6 +1115,24 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		return <WorkflowEditorSkeleton showBack={workflowId !== undefined} />;
 	}
 
+	if (isSmallScreen) {
+		return (
+			<div className="flex h-screen flex-col items-center justify-center gap-6 bg-background p-8 text-center">
+				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+					<Monitor className="h-8 w-8 text-muted-foreground" />
+				</div>
+				<div className="space-y-2">
+					<h2 className="text-xl font-semibold">Pantalla demasiado pequeña</h2>
+					<p className="max-w-xs text-sm text-muted-foreground">
+						El editor de workflows requiere una pantalla más grande para
+						funcionar correctamente. Por favor, accede desde una computadora o
+						tablet en modo horizontal.
+					</p>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex h-screen flex-col bg-background">
 			<TopBar
@@ -1207,13 +1239,28 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 							/>
 						)}
 
+						{/* Backdrop para tablet cuando el panel está abierto */}
+						{isTablet && shouldShowPropertiesOverlay && (
+							<div
+								className="absolute inset-0 z-20 bg-black/30 backdrop-blur-sm"
+								onClick={() => {
+									updateWorkflow({ selectedNodeIds: [], selectedEdgeIds: [] });
+									setShowWorkflowProperties(false);
+								}}
+							/>
+						)}
+
 						<div
 							className={`absolute inset-y-0 left-0 z-30 flex transition-opacity duration-200 ${
 								shouldShowPropertiesOverlay
 									? "pointer-events-auto opacity-100"
 									: "pointer-events-none opacity-0"
 							}`}
-							style={{ width: panelWidth }}
+							style={{
+								width: isTablet
+									? Math.min(panelWidth, window.innerWidth * 0.85)
+									: panelWidth,
+							}}
 						>
 							<PropertiesPanel
 								selectedNodes={
@@ -1248,8 +1295,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 									setShowWorkflowProperties(false)
 								}
 								position="left"
-								width={panelWidth}
-								onWidthChange={setPanelWidth}
+								width={
+									isTablet
+										? Math.min(panelWidth, window.innerWidth * 0.85)
+										: panelWidth
+								}
+								onWidthChange={isTablet ? undefined : setPanelWidth}
 							/>
 						</div>
 					</div>

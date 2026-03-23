@@ -204,3 +204,6 @@ dist
 ### OpenNext ###
 .open-next/
 next-env.d.ts
+
+### pnpm store (local fallback) ###
+.pnpm-store/

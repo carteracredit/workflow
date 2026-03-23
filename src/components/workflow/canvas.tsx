@@ -257,6 +257,19 @@ export function Canvas({
 	const hasAutoPositionedEmptyState = useRef(false);
 	const [hasCopiedData, setHasCopiedData] = useState(false);
 	const [justCopied, setJustCopied] = useState(false);
+	const [measuredNodeHeights, setMeasuredNodeHeights] = useState<
+		Record<string, number>
+	>({});
+
+	const handleNodeHeightMeasured = useCallback(
+		(nodeId: string, height: number) => {
+			setMeasuredNodeHeights((prev) => {
+				if (prev[nodeId] === height) return prev;
+				return { ...prev, [nodeId]: height };
+			});
+		},
+		[],
+	);
 	const editorContainerRef = useRef<HTMLDivElement>(null);
 	const [isEditorFocused, setIsEditorFocused] = useState(true);
 	useEffect(() => {
@@ -1417,6 +1430,7 @@ export function Canvas({
 							nodes={nodes}
 							edges={edges}
 							selected={selectedEdgeIds.includes(edge.id)}
+							measuredNodeHeights={measuredNodeHeights}
 							onSelect={(e) => {
 								e.stopPropagation();
 								console.warn("[v0] Edge selected:", edge.id);
@@ -1538,12 +1552,14 @@ export function Canvas({
 								selected={selectedNodeIds.includes(node.id)}
 								errors={nodeErrors}
 								connecting={connectingFrom?.nodeId === node.id}
+								isAnyConnectionInProgress={!!connectingFrom}
 								highlightCheckpoint={isReferencedCheckpoint}
 								flags={flags}
 								onMouseDown={(e) => handleNodeMouseDown(node.id, e)}
 								onConnectorClick={(position, e, port) =>
 									handleConnectorClick(node.id, position, e, port)
 								}
+								onHeightMeasured={handleNodeHeightMeasured}
 							/>
 						);
 					})}
