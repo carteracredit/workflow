@@ -61,6 +61,7 @@ import {
 	cloneWorkflow,
 } from "@/lib/workflow-api/workflows";
 import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
+import { useLanguage } from "@/components/LanguageProvider";
 import { slugify } from "@/lib/slugify";
 import type { Workflow } from "@/lib/workflow-api/types";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
@@ -85,19 +86,30 @@ type WorkflowStatus = "draft" | "published" | "archived";
 
 const STATUS_CONFIG: Record<
 	WorkflowStatus,
-	{ label: string; variant: "secondary" | "success" | "outline" }
+	{ labelKey: string; variant: "secondary" | "success" | "outline" }
 > = {
-	draft: { label: "Borrador", variant: "secondary" },
-	published: { label: "Publicado", variant: "success" },
-	archived: { label: "Archivado", variant: "outline" },
+	draft: { labelKey: "status.draft", variant: "secondary" },
+	published: { labelKey: "status.published", variant: "success" },
+	archived: { labelKey: "status.archived", variant: "outline" },
 };
 
 function StatusBadge({ status }: { status: WorkflowStatus | string }) {
-	const config = STATUS_CONFIG[status as WorkflowStatus] ?? {
-		label: status,
-		variant: "outline" as const,
-	};
-	return <Badge variant={config.variant}>{config.label}</Badge>;
+	const { t } = useLanguage();
+	const config = STATUS_CONFIG[status as WorkflowStatus];
+	if (!config) {
+		return <Badge variant="outline">{status}</Badge>;
+	}
+	if (status === "draft") {
+		return (
+			<Badge
+				variant="outline"
+				className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+			>
+				{t(config.labelKey)}
+			</Badge>
+		);
+	}
+	return <Badge variant={config.variant}>{t(config.labelKey)}</Badge>;
 }
 
 // ---------------------------------------------------------------------------

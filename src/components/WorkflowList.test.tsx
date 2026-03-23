@@ -17,6 +17,20 @@ import type { Workflow } from "@/lib/workflow-api/types";
 vi.mock("@/components/SessionControls", () => ({
 	SessionControls: () => null,
 }));
+vi.mock("@/components/LanguageProvider", () => ({
+	useLanguage: () => ({
+		language: "es",
+		setLanguage: vi.fn(),
+		t: (key: string) => {
+			const map: Record<string, string> = {
+				"status.draft": "Borrador",
+				"status.published": "Publicado",
+				"status.archived": "Archivado",
+			};
+			return map[key] ?? key;
+		},
+	}),
+}));
 // ---------------------------------------------------------------------------
 
 const mockPush = vi.fn();
