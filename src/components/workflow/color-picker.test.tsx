@@ -2,6 +2,31 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ColorPicker } from "./color-picker";
 
+vi.mock("@/components/LanguageProvider", async () => {
+	const { translations } = await import("@/lib/translations");
+	const tFn = (key: string, params?: Record<string, string | number>) => {
+		const parts = key.split(".");
+		let val: unknown = translations.es;
+		for (const part of parts) {
+			if (val && typeof val === "object") {
+				val = (val as Record<string, unknown>)[part];
+			} else {
+				return key;
+			}
+		}
+		if (typeof val !== "string") return key;
+		if (params) {
+			return val.replace(/\{(\w+)\}/g, (_, k) =>
+				params[k] !== undefined ? String(params[k]) : `{${k}}`,
+			);
+		}
+		return val;
+	};
+	return {
+		useLanguage: () => ({ language: "es", setLanguage: vi.fn(), t: tFn }),
+	};
+});
+
 describe("ColorPicker", () => {
 	it("renders trigger with selected color", () => {
 		render(<ColorPicker color="blue-500" onColorChange={vi.fn()} />);

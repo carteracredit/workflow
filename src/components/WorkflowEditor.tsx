@@ -47,6 +47,7 @@ import { listFlags } from "@/lib/workflow-api/flags";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import type { Workflow, WorkflowFlag } from "@/lib/workflow-api/types";
 import { Monitor } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 // Legacy keys for backward compatibility (single-workflow editor mode)
 const LEGACY_STORAGE_KEY = "cartera-workflow-state";
@@ -322,6 +323,7 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const router = useRouter();
 	const { token: apiToken } = useWorkflowApiToken();
+	const { t } = useLanguage();
 
 	// When workflowId prop is given, it is the authoritative API ID.
 	// Otherwise fall back to legacy localStorage key.
@@ -491,7 +493,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			.catch((err) => {
 				if (cancelled) return;
 				console.error("[WorkflowEditor] Failed to load from API:", err);
-				toast.error("No se pudo cargar el workflow", {
+				toast.error(t("workflowEditor.toastLoadError"), {
 					description: extractApiErrorMessage(err),
 				});
 			})
@@ -807,13 +809,13 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			setLastValidationErrorCount(errors.length);
 			setValidationStatus(isValid ? "valid" : "invalid");
 			if (isValid) {
-				toast.success("Validación exitosa", {
-					description: "El workflow no tiene errores.",
+				toast.success(t("workflowEditor.toastValidationSuccess"), {
+					description: t("workflowEditor.toastValidationSuccessDesc"),
 				});
 			}
 			return isValid;
 		} catch (error) {
-			toast.error("Error de validación", {
+			toast.error(t("workflowEditor.toastValidationError"), {
 				description:
 					error instanceof Error
 						? error.message
@@ -828,8 +830,8 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 
 	const handleSave = useCallback(async () => {
 		if (!apiToken) {
-			toast.error("No autenticado", {
-				description: "Debes iniciar sesión para guardar el workflow.",
+			toast.error(t("workflowEditor.toastNotAuthenticated"), {
+				description: t("workflowEditor.toastNotAuthenticatedDesc"),
 			});
 			return;
 		}
@@ -860,7 +862,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		try {
 			if (workflowApiId !== null) {
 				await updateWorkflowApi(workflowApiId, payload, { jwt: apiToken });
-				toast.success("Workflow actualizado", {
+				toast.success(t("workflowEditor.toastWorkflowUpdated"), {
 					description: `"${payload.name}" guardado correctamente.`,
 				});
 			} else {
@@ -872,26 +874,26 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				if (typeof window !== "undefined") {
 					localStorage.setItem(WORKFLOW_API_ID_KEY, String(created.id));
 				}
-				toast.success("Workflow guardado", {
+				toast.success(t("workflowEditor.toastWorkflowSaved"), {
 					description: `"${payload.name}" creado correctamente.`,
 				});
 				router.replace(`/editor/${created.id}`);
 			}
 		} catch (error) {
 			if (error instanceof ApiError && error.status === 401) {
-				toast.error("No autorizado", {
+				toast.error(t("workflowEditor.toastUnauthorized"), {
 					description: "Tu sesión expiró. Por favor inicia sesión nuevamente.",
 				});
 			} else if (error instanceof ApiError && error.status === 403) {
-				toast.error("Acceso denegado", {
+				toast.error(t("workflowEditor.toastForbidden"), {
 					description: "Solo los administradores pueden guardar workflows.",
 				});
 			} else if (error instanceof ApiError && error.status === 409) {
-				toast.error("Nombre duplicado", {
+				toast.error(t("workflowEditor.toastDuplicateName"), {
 					description: extractApiErrorMessage(error),
 				});
 			} else {
-				toast.error("Error al guardar", {
+				toast.error(t("workflowEditor.toastSaveError"), {
 					description: extractApiErrorMessage(error),
 				});
 			}
@@ -910,9 +912,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			router.push("/editor");
 			return;
 		}
-		const confirmed = window.confirm(
-			"¿Estás seguro de que deseas eliminar el flujo actual? Esta acción no se puede deshacer.",
-		);
+		const confirmed = window.confirm(t("workflowEditor.confirmReset"));
 		if (confirmed) {
 			setWorkflowState(createEmptyWorkflowState());
 			setWorkflowApiId(null);
@@ -958,7 +958,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		if (isValid) {
 			setShowPublish(true);
 		} else {
-			toast.error("No se puede publicar", {
+			toast.error(t("workflowEditor.toastCannotPublish"), {
 				description:
 					"El workflow tiene errores de validación. Corrígelos antes de publicar.",
 			});
@@ -1122,11 +1122,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					<Monitor className="h-8 w-8 text-muted-foreground" />
 				</div>
 				<div className="space-y-2">
-					<h2 className="text-xl font-semibold">Pantalla demasiado pequeña</h2>
+					<h2 className="text-xl font-semibold">
+						{t("workflowEditor.smallScreenTitle")}
+					</h2>
 					<p className="max-w-xs text-sm text-muted-foreground">
-						El editor de workflows requiere una pantalla más grande para
-						funcionar correctamente. Por favor, accede desde una computadora o
-						tablet en modo horizontal.
+						{t("workflowEditor.smallScreenMessage")}
 					</p>
 				</div>
 			</div>
@@ -1144,9 +1144,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				onLoadExample={handleLoadExample}
 				onManageFlags={() => {
 					if (!workflowApiId) {
-						toast.warning(
-							"Guarda el workflow primero antes de gestionar flags.",
-						);
+						toast.warning(t("workflowEditor.toastSaveBeforeFlags"));
 						return;
 					}
 					setShowFlagManager(true);

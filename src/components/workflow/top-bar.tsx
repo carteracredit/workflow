@@ -40,127 +40,128 @@ import {
 } from "lucide-react";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
+import { useLanguage } from "@/components/LanguageProvider";
 
 type ShortcutDefinition = {
-	label: string;
+	labelKey: string;
 	mac: string[];
 	win: string[];
 	altWin?: string[];
 	description?: string;
-	category?: string;
+	categoryKey: string;
 };
 
 const KEYBOARD_SHORTCUTS: ShortcutDefinition[] = [
 	// Barra superior - Acciones principales
 	{
-		label: "Guardar workflow",
+		labelKey: "topBar.shortcutSaveWorkflow",
 		mac: ["⌘", "S"],
 		win: ["Ctrl", "S"],
-		category: "Barra superior",
+		categoryKey: "topBar.shortcutsCategoryTop",
 	},
 	{
-		label: "Reiniciar flujo",
+		labelKey: "topBar.shortcutResetFlow",
 		mac: ["⌘", "⇧", "R"],
 		win: ["Ctrl", "⇧", "R"],
-		category: "Barra superior",
+		categoryKey: "topBar.shortcutsCategoryTop",
 	},
 	{
-		label: "Validar",
+		labelKey: "topBar.shortcutValidate",
 		mac: ["⌘", "⇧", "V"],
 		win: ["Ctrl", "⇧", "V"],
-		category: "Barra superior",
+		categoryKey: "topBar.shortcutsCategoryTop",
 	},
 	{
-		label: "Preview",
+		labelKey: "topBar.shortcutPreview",
 		mac: ["⌘", "P"],
 		win: ["Ctrl", "P"],
-		category: "Barra superior",
+		categoryKey: "topBar.shortcutsCategoryTop",
 	},
 	// Barra inferior - Herramientas de canvas
 	{
-		label: "Herramienta de pan (mano)",
+		labelKey: "topBar.shortcutPanTool",
 		mac: ["Space"],
 		win: ["Space"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Herramienta de selección",
+		labelKey: "topBar.shortcutSelectTool",
 		mac: ["V"],
 		win: ["V"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Deshacer",
+		labelKey: "topBar.shortcutUndo",
 		mac: ["⌘", "Z"],
 		win: ["Ctrl", "Z"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Rehacer",
+		labelKey: "topBar.shortcutRedo",
 		mac: ["⌘", "Y"],
 		win: ["Ctrl", "Y"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Copiar selección",
+		labelKey: "topBar.shortcutCopySelection",
 		mac: ["⌘", "C"],
 		win: ["Ctrl", "C"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Pegar selección",
+		labelKey: "topBar.shortcutPasteSelection",
 		mac: ["⌘", "V"],
 		win: ["Ctrl", "V"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Acercar (Zoom +)",
+		labelKey: "topBar.shortcutZoomIn",
 		mac: ["2"],
 		win: ["2"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Alejar (Zoom -)",
+		labelKey: "topBar.shortcutZoomOut",
 		mac: ["1"],
 		win: ["1"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	{
-		label: "Ajustar a la vista",
+		labelKey: "topBar.shortcutFitView",
 		mac: ["F"],
 		win: ["F"],
-		category: "Barra inferior",
+		categoryKey: "topBar.shortcutsCategoryBottom",
 	},
 	// Herramientas - Acciones adicionales
 	{
-		label: "Publicar",
+		labelKey: "topBar.shortcutPublish",
 		mac: ["⌘", "⇧", "P"],
 		win: ["Ctrl", "⇧", "P"],
-		category: "Herramientas",
+		categoryKey: "topBar.shortcutsCategoryTools",
 	},
 	{
-		label: "Exportar JSON",
+		labelKey: "topBar.shortcutExportJson",
 		mac: ["⌘", "E"],
 		win: ["Ctrl", "E"],
-		category: "Herramientas",
+		categoryKey: "topBar.shortcutsCategoryTools",
 	},
 	{
-		label: "Importar JSON",
+		labelKey: "topBar.shortcutImportJson",
 		mac: ["⌘", "I"],
 		win: ["Ctrl", "I"],
-		category: "Herramientas",
+		categoryKey: "topBar.shortcutsCategoryTools",
 	},
 	{
-		label: "Gestionar Flags",
+		labelKey: "topBar.shortcutManageFlags",
 		mac: ["⌘", "⇧", "F"],
 		win: ["Ctrl", "⇧", "F"],
-		category: "Herramientas",
+		categoryKey: "topBar.shortcutsCategoryTools",
 	},
 	{
-		label: "Propiedades del flujo",
+		labelKey: "topBar.shortcutFlowProperties",
 		mac: ["⌘", ","],
 		win: ["Ctrl", ","],
-		category: "Herramientas",
+		categoryKey: "topBar.shortcutsCategoryTools",
 	},
 ];
 
@@ -206,6 +207,7 @@ export function TopBar({
 	isSaving,
 }: TopBarProps) {
 	const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+	const { t } = useLanguage();
 
 	const displayVersion = (() => {
 		// Show version badge only when the workflow has been published at least once
@@ -224,7 +226,7 @@ export function TopBar({
 						size="icon"
 						className="h-8 w-8 flex-shrink-0"
 						onClick={onBack}
-						title="Volver a la lista"
+						title={t("topBar.backTitle")}
 					>
 						<ArrowLeft className="h-4 w-4" />
 					</Button>
@@ -239,14 +241,14 @@ export function TopBar({
 						/>
 						<div className="flex items-center gap-1.5">
 							<h1 className="truncate text-base font-semibold text-foreground">
-								{workflowMetadata.name || "Your Workflow"}
+								{workflowMetadata.name || t("topBar.defaultWorkflowName")}
 							</h1>
 							<Button
 								variant="ghost"
 								size="icon"
 								className="h-5 w-5"
 								onClick={onToggleWorkflowProperties}
-								title="Editar nombre del workflow"
+								title={t("topBar.editNameTitle")}
 							>
 								<Pencil className="h-3 w-3" />
 							</Button>
@@ -299,7 +301,7 @@ export function TopBar({
 					<Button
 						variant="ghost"
 						size="sm"
-						title="Notificaciones"
+						title={t("topBar.notificationsTitle")}
 						className="rounded-md bg-muted/50"
 					>
 						<Bell className="h-4 w-4 text-muted-foreground" />
@@ -310,7 +312,7 @@ export function TopBar({
 						size="sm"
 						onClick={onSave}
 						disabled={isSaving}
-						title="Guardar (Ctrl/Cmd+S)"
+						title={t("topBar.saveTitle")}
 						className="gap-2 rounded-md px-3"
 					>
 						{isSaving ? (
@@ -319,7 +321,7 @@ export function TopBar({
 							<Save className="h-4 w-4" />
 						)}
 						<span className="text-sm font-semibold">
-							{isSaving ? "Guardando..." : "Guardar"}
+							{isSaving ? t("topBar.savingLabel") : t("topBar.saveLabel")}
 						</span>
 					</Button>
 
@@ -328,22 +330,26 @@ export function TopBar({
 							variant="outline"
 							size="sm"
 							onClick={onPublish}
-							title="Publicar nueva versión"
+							title={t("topBar.updateTitle")}
 							className="gap-2 rounded-md border-primary/40 px-3 text-primary hover:border-primary hover:bg-primary/10 hover:text-primary"
 						>
 							<RefreshCw className="h-4 w-4" />
-							<span className="text-sm font-semibold">Actualizar</span>
+							<span className="text-sm font-semibold">
+								{t("topBar.updateLabel")}
+							</span>
 						</Button>
 					) : (
 						<Button
 							variant="default"
 							size="sm"
 							onClick={onPublish}
-							title="Publicar flujo"
+							title={t("topBar.publishTitle")}
 							className="gap-2 rounded-md px-3"
 						>
 							<Rocket className="h-4 w-4" />
-							<span className="text-sm font-semibold">Publicar</span>
+							<span className="text-sm font-semibold">
+								{t("topBar.publishLabel")}
+							</span>
 						</Button>
 					)}
 
@@ -353,7 +359,7 @@ export function TopBar({
 								<Button
 									variant="ghost"
 									size="sm"
-									title="Más opciones"
+									title={t("topBar.moreOptionsTitle")}
 									className="rounded-md bg-muted/50"
 								>
 									<MoreVertical className="h-4 w-4 text-muted-foreground" />
@@ -362,44 +368,44 @@ export function TopBar({
 							<MenubarContent align="end">
 								<MenubarItem onClick={onNew}>
 									<Trash2 className="mr-2 h-4 w-4" />
-									Reiniciar flujo
+									{t("topBar.menuResetFlow")}
 								</MenubarItem>
 								<MenubarSub>
 									<MenubarSubTrigger>
 										<FolderOpen className="mr-2 h-4 w-4" />
-										Cargar ejemplo
+										{t("topBar.menuLoadExample")}
 									</MenubarSubTrigger>
 									<MenubarSubContent>
 										<MenubarItem onClick={() => onLoadExample("basic")}>
-											Flujo Básico
+											{t("topBar.menuExampleBasic")}
 										</MenubarItem>
 										<MenubarItem onClick={() => onLoadExample("api")}>
-											Flujo con API
+											{t("topBar.menuExampleApi")}
 										</MenubarItem>
 										<MenubarItem onClick={() => onLoadExample("manual")}>
-											Revisión Humana
+											{t("topBar.menuExampleManual")}
 										</MenubarItem>
 									</MenubarSubContent>
 								</MenubarSub>
 								<MenubarItem onClick={onManageFlags}>
 									<Flag className="mr-2 h-4 w-4" />
-									Gestionar Flags
+									{t("topBar.menuManageFlags")}
 								</MenubarItem>
 								<MenubarItem onClick={onExportJSON}>
 									<Download className="mr-2 h-4 w-4" />
-									Exportar JSON
+									{t("topBar.menuExportJson")}
 								</MenubarItem>
 								<MenubarItem onClick={onImportJSON}>
 									<Upload className="mr-2 h-4 w-4" />
-									Importar JSON
+									{t("topBar.menuImportJson")}
 								</MenubarItem>
 								<MenubarItem onClick={onToggleWorkflowProperties}>
 									<Settings className="mr-2 h-4 w-4" />
-									Propiedades del flujo
+									{t("topBar.menuWorkflowProperties")}
 								</MenubarItem>
 								<MenubarItem>
 									<HelpCircle className="mr-2 h-4 w-4" />
-									Ayuda
+									{t("topBar.menuHelp")}
 								</MenubarItem>
 								<MenubarSeparator />
 								<MenubarItem
@@ -409,7 +415,7 @@ export function TopBar({
 									}}
 								>
 									<Keyboard className="mr-2 h-4 w-4" />
-									Atajos de teclado
+									{t("topBar.menuShortcuts")}
 								</MenubarItem>
 							</MenubarContent>
 						</MenubarMenu>
@@ -433,6 +439,7 @@ export function KeyboardShortcutsModal({
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }) {
+	const { t } = useLanguage();
 	const normalizeKeys = (keys: string[]) =>
 		keys.map((k) => (k === "Shift" ? "⇧" : k));
 
@@ -450,11 +457,11 @@ export function KeyboardShortcutsModal({
 
 		return (
 			<div
-				key={shortcut.label}
+				key={shortcut.labelKey}
 				className="flex items-center justify-between gap-6 py-1.5"
 			>
 				<span className="text-sm text-foreground/90 flex-shrink-0 min-w-[160px]">
-					{shortcut.label}
+					{t(shortcut.labelKey)}
 				</span>
 				<div className="flex items-center gap-1.5 flex-shrink-0">
 					{areIdentical ? (
@@ -490,13 +497,13 @@ export function KeyboardShortcutsModal({
 	};
 
 	const barraSuperior = KEYBOARD_SHORTCUTS.filter(
-		(shortcut) => shortcut.category === "Barra superior",
+		(shortcut) => shortcut.categoryKey === "topBar.shortcutsCategoryTop",
 	);
 	const barraInferior = KEYBOARD_SHORTCUTS.filter(
-		(shortcut) => shortcut.category === "Barra inferior",
+		(shortcut) => shortcut.categoryKey === "topBar.shortcutsCategoryBottom",
 	);
 	const herramientas = KEYBOARD_SHORTCUTS.filter(
-		(shortcut) => shortcut.category === "Herramientas",
+		(shortcut) => shortcut.categoryKey === "topBar.shortcutsCategoryTools",
 	);
 
 	return (
@@ -505,7 +512,7 @@ export function KeyboardShortcutsModal({
 				<DialogHeader className="px-8 pt-5 pb-4 border-b flex-shrink-0">
 					<DialogTitle className="flex items-center gap-2 text-lg">
 						<Keyboard className="h-5 w-5" />
-						Atajos de teclado
+						{t("topBar.shortcutsTitle")}
 					</DialogTitle>
 				</DialogHeader>
 
@@ -514,7 +521,7 @@ export function KeyboardShortcutsModal({
 						{/* Columna 1: Barra Superior */}
 						<div className="flex flex-col gap-1.5">
 							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-								BARRA SUPERIOR
+								{t("topBar.shortcutsCategoryTop")}
 							</h3>
 							{barraSuperior.map(renderShortcutRow)}
 						</div>
@@ -522,7 +529,7 @@ export function KeyboardShortcutsModal({
 						{/* Columna 2: Barra Inferior */}
 						<div className="flex flex-col gap-1.5">
 							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-								BARRA INFERIOR
+								{t("topBar.shortcutsCategoryBottom")}
 							</h3>
 							{barraInferior.map(renderShortcutRow)}
 						</div>
@@ -530,7 +537,7 @@ export function KeyboardShortcutsModal({
 						{/* Columna 3: Herramientas */}
 						<div className="flex flex-col gap-1.5">
 							<h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-								HERRAMIENTAS
+								{t("topBar.shortcutsCategoryTools")}
 							</h3>
 							{herramientas.map(renderShortcutRow)}
 						</div>

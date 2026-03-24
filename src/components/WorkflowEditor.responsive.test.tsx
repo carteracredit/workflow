@@ -20,6 +20,25 @@ vi.mock("@/lib/workflow-api/flags", () => ({
 vi.mock("@/components/SessionControls", () => ({
 	SessionControls: () => null,
 }));
+vi.mock("@/components/LanguageProvider", async () => {
+	const { translations } = await import("@/lib/translations");
+	const tFn = (key: string) => {
+		const parts = key.split(".");
+		let val: unknown = translations.es;
+		for (const part of parts) {
+			if (val && typeof val === "object") {
+				val = (val as Record<string, unknown>)[part];
+			} else {
+				return key;
+			}
+		}
+		return typeof val === "string" ? val : key;
+	};
+	return {
+		useLanguage: () => ({ language: "es", setLanguage: vi.fn(), t: tFn }),
+		LanguageProvider: ({ children }: { children: React.ReactNode }) => children,
+	};
+});
 
 describe("WorkflowEditor responsive behavior", () => {
 	afterEach(() => {

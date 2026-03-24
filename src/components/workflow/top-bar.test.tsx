@@ -5,6 +5,39 @@ import { TopBar, KeyboardShortcutsModal } from "./top-bar";
 import { LanguageProvider } from "@/components/LanguageProvider";
 import type { WorkflowMetadata } from "@/lib/workflow/types";
 
+vi.mock("@/components/LanguageProvider", async () => {
+	const actual = await vi.importActual<
+		typeof import("@/components/LanguageProvider")
+	>("@/components/LanguageProvider");
+	const { translations } = await import("@/lib/translations");
+	const tFn = (key: string, params?: Record<string, string | number>) => {
+		const parts = key.split(".");
+		let val: unknown = translations.es;
+		for (const part of parts) {
+			if (val && typeof val === "object") {
+				val = (val as Record<string, unknown>)[part];
+			} else {
+				return key;
+			}
+		}
+		if (typeof val !== "string") return key;
+		if (params) {
+			return val.replace(/\{(\w+)\}/g, (_, k) =>
+				params[k] !== undefined ? String(params[k]) : `{${k}}`,
+			);
+		}
+		return val;
+	};
+	return {
+		...actual,
+		useLanguage: () => ({
+			language: "es",
+			setLanguage: vi.fn(),
+			t: tFn,
+		}),
+	};
+});
+
 // Mock session store and auth
 vi.mock("@/lib/auth/useAuthSession", () => ({
 	useAuthSession: () => ({
@@ -39,23 +72,6 @@ vi.mock("@/lib/cookies", () => ({
 }));
 
 // Mock translations
-vi.mock("@/lib/translations", () => ({
-	translations: {
-		en: {
-			languageToggle: "Toggle language",
-			userAccount: "My Account",
-			userLogout: "Log Out",
-		},
-		es: {
-			languageToggle: "Cambiar idioma",
-			userAccount: "Mi Cuenta",
-			userLogout: "Cerrar Sesión",
-		},
-	},
-	detectBrowserLanguage: vi.fn(() => "es"),
-}));
-
-// Mock the Dialog component to avoid portal issues
 vi.mock("@/components/ui/dialog", () => ({
 	Dialog: ({ children, open }: { children: React.ReactNode; open: boolean }) =>
 		open ? <div data-testid="dialog">{children}</div> : null,

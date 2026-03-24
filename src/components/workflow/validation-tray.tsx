@@ -4,6 +4,7 @@ import type { ValidationError } from "@/lib/workflow/types";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertCircle, X } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface ValidationTrayProps {
 	errors: ValidationError[];
@@ -16,13 +17,14 @@ export function ValidationTray({
 	onClose,
 	onSelectNode,
 }: ValidationTrayProps) {
+	const { t } = useLanguage();
 	const errorCount = errors.filter(
 		(error) => error.severity === "error",
 	).length;
 	const warningCount = errors.length - errorCount;
 	const severityCopy = {
-		error: "Error",
-		warning: "Advertencia",
+		error: t("validationTray.severityError"),
+		warning: t("validationTray.severityWarning"),
 	} as const;
 
 	return (
@@ -34,18 +36,25 @@ export function ValidationTray({
 				<div className="flex items-center gap-2">
 					<AlertCircle className="h-4 w-4 text-destructive" />
 					<span className="text-sm font-medium">
-						{errors.length} {errors.length === 1 ? "hallazgo" : "hallazgos"} de
-						validación
+						{errors.length === 1
+							? t("validationTray.findingsSingular")
+							: t("validationTray.findingsPlural").replace(
+									"{n}",
+									String(errors.length),
+								)}
 					</span>
 					<div className="flex gap-2 text-[11px] uppercase tracking-wide">
 						{errorCount > 0 && (
 							<span className="rounded-full bg-destructive/10 px-2 py-0.5 text-destructive">
-								{errorCount} errores
+								{t("validationTray.errors").replace("{n}", String(errorCount))}
 							</span>
 						)}
 						{warningCount > 0 && (
 							<span className="rounded-full bg-amber-200/40 px-2 py-0.5 text-amber-700 dark:text-amber-300">
-								{warningCount} avisos
+								{t("validationTray.warnings").replace(
+									"{n}",
+									String(warningCount),
+								)}
 							</span>
 						)}
 					</div>
@@ -54,7 +63,7 @@ export function ValidationTray({
 					variant="ghost"
 					size="icon"
 					onClick={onClose}
-					aria-label="Cerrar panel de validación"
+					aria-label={t("validationTray.closePanel")}
 				>
 					<X className="h-4 w-4" />
 				</Button>
@@ -86,7 +95,14 @@ export function ValidationTray({
 									>
 										{severityCopy[error.severity]}
 									</span>
-									{error.nodeId && <span>Nodo #{error.nodeId.slice(-4)}</span>}
+									{error.nodeId && (
+										<span>
+											{t("validationTray.nodePrefix").replace(
+												"{id}",
+												error.nodeId.slice(-4),
+											)}
+										</span>
+									)}
 								</div>
 								<p className="mt-1 text-sm text-foreground">{error.message}</p>
 							</div>

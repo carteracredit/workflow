@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface NodeRendererProps {
 	node: WorkflowNode;
@@ -92,11 +93,6 @@ export const NODE_ICON_COLORS = {
 	FlagChange: "var(--node-icon-status)",
 };
 
-const CHALLENGE_TYPE_LABELS: Record<ChallengeType, string> = {
-	acceptance: "Aceptación",
-	signature: "Firma",
-};
-
 export function NodeRenderer({
 	node,
 	selected,
@@ -109,6 +105,7 @@ export function NodeRenderer({
 	onConnectorClick,
 	onHeightMeasured,
 }: NodeRendererProps) {
+	const { t } = useLanguage();
 	const nodeRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const [hoveredConnector, setHoveredConnector] = useState<string | null>(null);
@@ -406,19 +403,22 @@ export function NodeRenderer({
 						data-testid={hasStaleTimeout ? "stale-indicator" : "safe-indicator"}
 						title={
 							hasStaleTimeout
-								? `Timeout Stale: ${node.staleTimeout?.value} ${
-										node.staleTimeout?.unit === "hours"
-											? "horas"
-											: node.staleTimeout?.unit === "days"
-												? "días"
-												: node.staleTimeout?.unit
-									}`
-								: "Safe checkpoint"
+								? t("canvas.nodeStaleCheckpointTitle")
+										.replace("{value}", String(node.staleTimeout?.value ?? ""))
+										.replace(
+											"{unit}",
+											node.staleTimeout?.unit === "hours"
+												? t("canvas.staleUnitHours")
+												: node.staleTimeout?.unit === "days"
+													? t("canvas.staleUnitDays")
+													: (node.staleTimeout?.unit ?? ""),
+										)
+								: t("canvas.nodeSafeCheckpointTitle")
 						}
 						aria-label={
 							hasStaleTimeout
-								? "Nodo con timeout stale configurado"
-								: "Checkpoint seguro"
+								? t("canvas.nodeStaleAriaLabel")
+								: t("canvas.nodeSafeAriaLabel")
 						}
 					>
 						{hasStaleTimeout ? (
@@ -501,7 +501,9 @@ export function NodeRenderer({
 							<div className="mt-2">
 								<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
 									<Shield className="h-3 w-3" />
-									{CHALLENGE_TYPE_LABELS[challengeConfig.challengeType]}
+									{challengeConfig.challengeType === "acceptance"
+										? t("canvas.challengeTypeAcceptance")
+										: t("canvas.challengeTypeSignature")}
 								</span>
 							</div>
 						)}
@@ -526,8 +528,13 @@ export function NodeRenderer({
 							<div className="mt-2">
 								<span className="rounded-full bg-orange-500/20 px-2 py-1 text-xs font-semibold text-orange-700 dark:text-orange-400">
 									{maxRetries > 0
-										? `Reintentos: ${retryCount}/${maxRetries}`
-										: `Reintentos: ${retryCount} (∞)`}
+										? t("canvas.nodeRetriesLabel")
+												.replace("{count}", String(retryCount))
+												.replace("{max}", String(maxRetries))
+										: t("canvas.nodeRetriesUnlimitedLabel").replace(
+												"{count}",
+												String(retryCount),
+											)}
 								</span>
 							</div>
 						)}
@@ -581,10 +588,12 @@ export function NodeRenderer({
 										"return-to-checkpoint": "⏮️",
 									};
 									const labels = {
-										stop: "Detener",
-										continue: "Continuar",
-										retry: "Reintentar",
-										"return-to-checkpoint": "Checkpoint",
+										stop: t("canvas.nodeApiFailureStop"),
+										continue: t("canvas.nodeApiFailureContinue"),
+										retry: t("canvas.nodeApiFailureRetry"),
+										"return-to-checkpoint": t(
+											"canvas.nodeApiFailureCheckpoint",
+										),
 									};
 									return (
 										<div className="mt-2 flex items-center gap-1">
@@ -628,7 +637,7 @@ export function NodeRenderer({
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida positiva (Sí)"
+									title={t("canvas.nodeConnectorPositiveDecision")}
 									onClick={(e) =>
 										handleConnectorClick(rightTopConnectorPos!, e, "top")
 									}
@@ -655,7 +664,7 @@ export function NodeRenderer({
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida negativa (No / Rechazado)"
+									title={t("canvas.nodeConnectorNegativeDecision")}
 									onClick={(e) =>
 										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
 									}
@@ -685,7 +694,7 @@ export function NodeRenderer({
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida positiva (Aceptado)"
+									title={t("canvas.nodeConnectorPositiveChallenge")}
 									onClick={(e) =>
 										handleConnectorClick(rightTopConnectorPos!, e, "top")
 									}
@@ -712,7 +721,7 @@ export function NodeRenderer({
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida negativa (Rechazado)"
+									title={t("canvas.nodeConnectorNegativeChallenge")}
 									onClick={(e) =>
 										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
 									}
@@ -740,7 +749,7 @@ export function NodeRenderer({
 										hoveredConnector === "right" ? "scale(1.25)" : "scale(1)",
 									transformOrigin: "center center",
 								}}
-								title="Conectar a otro nodo"
+								title={t("canvas.nodeConnectorOutput")}
 								onClick={(e) => handleConnectorClick(rightConnectorPos!, e)}
 								onMouseDown={(e) => e.stopPropagation()}
 								onMouseEnter={() => setHoveredConnector("right")}
@@ -768,7 +777,7 @@ export function NodeRenderer({
 								hoveredConnector === "left" ? "scale(1.25)" : "scale(1)",
 							transformOrigin: "center center",
 						}}
-						title="Punto de entrada"
+						title={t("canvas.nodeConnectorInput")}
 						onClick={(e) => handleConnectorClick(leftConnectorPos, e, "middle")}
 						onMouseDown={(e) => e.stopPropagation()}
 						onMouseEnter={() => setHoveredConnector("left")}

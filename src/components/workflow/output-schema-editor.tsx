@@ -19,6 +19,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/components/LanguageProvider";
 
 const PROPERTY_TYPES: Array<{ value: SchemaPropertyType; label: string }> = [
 	{ value: "string", label: "STR" },
@@ -108,6 +109,7 @@ interface EnumTagEditorProps {
 }
 
 function EnumTagEditor({ values, onChange }: EnumTagEditorProps) {
+	const { t } = useLanguage();
 	const [input, setInput] = useState("");
 
 	const addValue = (raw: string) => {
@@ -148,7 +150,7 @@ function EnumTagEditor({ values, onChange }: EnumTagEditorProps) {
 					}
 				}}
 				onBlur={() => addValue(input)}
-				placeholder="Agregar valor (Enter o coma)"
+				placeholder={t("outputSchemaEditor.enumPlaceholder")}
 				className="w-full px-2 py-1 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
 			/>
 		</div>
@@ -170,6 +172,7 @@ function PropertyRow({
 	onUpdate,
 	onDelete,
 }: PropertyRowProps) {
+	const { t } = useLanguage();
 	const [expanded, setExpanded] = useState(true);
 
 	const hasChildren =
@@ -249,7 +252,7 @@ function PropertyRow({
 					<Input
 						value={property.name}
 						onChange={(e) => update({ name: e.target.value })}
-						placeholder="nombre"
+						placeholder={t("outputSchemaEditor.propNamePlaceholder")}
 						className={cn(
 							"h-7 text-xs font-mono",
 							isInvalidName &&
@@ -258,7 +261,7 @@ function PropertyRow({
 					/>
 					{isInvalidName && (
 						<p className="text-[10px] text-destructive mt-0.5 leading-tight">
-							Debe empezar con una letra
+							{t("outputSchemaEditor.propNameError")}
 						</p>
 					)}
 				</div>
@@ -281,7 +284,7 @@ function PropertyRow({
 				<Input
 					value={property.description ?? ""}
 					onChange={(e) => update({ description: e.target.value || undefined })}
-					placeholder="descripción"
+					placeholder={t("outputSchemaEditor.propDescPlaceholder")}
 					className="h-7 text-xs flex-1 min-w-0 text-muted-foreground"
 				/>
 
@@ -323,7 +326,7 @@ function PropertyRow({
 						className="ml-5 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5"
 					>
 						<Plus className="w-3 h-3" />
-						Agregar propiedad
+						{t("outputSchemaEditor.addProperty")}
 					</button>
 				</div>
 			)}
@@ -332,7 +335,7 @@ function PropertyRow({
 			{property.type === "array" && expanded && property.items && (
 				<div className="px-2 pb-2 space-y-1">
 					<p className="text-[10px] text-muted-foreground ml-5 mb-1 uppercase tracking-wide">
-						Tipo de elemento
+						{t("outputSchemaEditor.arrayItemType")}
 					</p>
 					<PropertyRow
 						property={property.items}
@@ -394,12 +397,18 @@ export function OutputSchemaEditor({
 	label = "Esquema de Salida",
 	onInferFromJson,
 }: OutputSchemaEditorProps) {
+	const { t } = useLanguage();
+	const defaultLabel = t("outputSchemaEditor.defaultLabel");
+	const effectiveLabel = label === "Esquema de Salida" ? defaultLabel : label;
 	const [collapsed, setCollapsed] = useState(false);
 	const [mode, setMode] = useState<"simple" | "advanced">("simple");
 	const [advancedJson, setAdvancedJson] = useState("");
 	const [advancedError, setAdvancedError] = useState<string | null>(null);
 
-	const schema: OutputSchema = value ?? { name: label, properties: [] };
+	const schema: OutputSchema = value ?? {
+		name: effectiveLabel,
+		properties: [],
+	};
 	const prettySchema = useMemo(() => JSON.stringify(schema, null, 2), [schema]);
 
 	useEffect(() => {
@@ -438,21 +447,19 @@ export function OutputSchemaEditor({
 	const applyAdvancedSchema = useCallback(() => {
 		try {
 			const parsed = JSON.parse(advancedJson) as unknown;
-			const normalized = normalizeSchema(parsed, schema.name || label);
+			const normalized = normalizeSchema(parsed, schema.name || effectiveLabel);
 			if (!normalized) {
-				setAdvancedError(
-					"Estructura invalida. Usa un objeto con { name, properties[] }.",
-				);
+				setAdvancedError(t("outputSchemaEditor.invalidStructureError"));
 				return false;
 			}
 			onChange(normalized);
 			setAdvancedError(null);
 			return true;
 		} catch {
-			setAdvancedError("JSON invalido. Revisa comas y llaves.");
+			setAdvancedError(t("outputSchemaEditor.invalidJsonError"));
 			return false;
 		}
-	}, [advancedJson, label, onChange, schema.name]);
+	}, [advancedJson, effectiveLabel, onChange, schema.name]);
 
 	const handleModeChange = (nextMode: "simple" | "advanced") => {
 		if (nextMode === mode) return;
@@ -474,7 +481,9 @@ export function OutputSchemaEditor({
 			<div className="w-full px-3 py-2.5 bg-muted/40 space-y-1.5">
 				<div className="flex items-center justify-between gap-2">
 					<div className="flex items-center gap-1.5 min-w-0">
-						<span className="text-sm font-medium truncate">{label}</span>
+						<span className="text-sm font-medium truncate">
+							{effectiveLabel}
+						</span>
 						<span className="text-xs text-muted-foreground whitespace-nowrap">
 							({schema.properties.length})
 						</span>
@@ -483,7 +492,11 @@ export function OutputSchemaEditor({
 						type="button"
 						onClick={() => setCollapsed(!collapsed)}
 						className="p-1 rounded hover:bg-muted transition-colors shrink-0"
-						aria-label={collapsed ? "Expandir esquema" : "Contraer esquema"}
+						aria-label={
+							collapsed
+								? t("outputSchemaEditor.expandSchema")
+								: t("outputSchemaEditor.collapseSchema")
+						}
 					>
 						{collapsed ? (
 							<ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -503,7 +516,7 @@ export function OutputSchemaEditor({
 								}}
 								className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors truncate"
 							>
-								Inferir desde Mock
+								{t("outputSchemaEditor.inferFromMock")}
 							</button>
 						) : (
 							<span />
@@ -522,7 +535,7 @@ export function OutputSchemaEditor({
 										: "text-muted-foreground hover:text-foreground",
 								)}
 							>
-								Simple
+								{t("outputSchemaEditor.modeSimple")}
 							</button>
 							<button
 								type="button"
@@ -537,7 +550,7 @@ export function OutputSchemaEditor({
 										: "text-muted-foreground hover:text-foreground",
 								)}
 							>
-								Advanced
+								{t("outputSchemaEditor.modeAdvanced")}
 							</button>
 						</div>
 					</div>
@@ -551,14 +564,14 @@ export function OutputSchemaEditor({
 							{/* Schema name */}
 							<div className="space-y-1">
 								<Label className="text-xs text-muted-foreground">
-									Nombre del esquema
+									{t("outputSchemaEditor.schemaNameLabel")}
 								</Label>
 								<Input
 									value={schema.name}
 									onChange={(e) =>
 										onChange({ ...schema, name: e.target.value })
 									}
-									placeholder="EjemploOutput"
+									placeholder={t("outputSchemaEditor.schemaNamePlaceholder")}
 									className="h-7 text-xs font-mono"
 								/>
 							</div>
@@ -568,9 +581,15 @@ export function OutputSchemaEditor({
 								<div className="flex items-center gap-1.5 px-2 text-[10px] text-muted-foreground uppercase tracking-wide">
 									<span className="w-5" />
 									<span className="w-5" />
-									<span className="flex-1">Nombre</span>
-									<span className="w-[76px]">Tipo</span>
-									<span className="flex-1">Descripción</span>
+									<span className="flex-1">
+										{t("outputSchemaEditor.columnName")}
+									</span>
+									<span className="w-[76px]">
+										{t("outputSchemaEditor.columnType")}
+									</span>
+									<span className="flex-1">
+										{t("outputSchemaEditor.columnDescription")}
+									</span>
 									<span className="w-7" />
 								</div>
 							)}
@@ -596,14 +615,14 @@ export function OutputSchemaEditor({
 								className="w-full h-8 text-xs border border-dashed border-border/60 hover:border-border"
 							>
 								<Plus className="w-3.5 h-3.5 mr-1" />
-								Agregar propiedad
+								{t("outputSchemaEditor.addProperty")}
 							</Button>
 						</>
 					) : (
 						<>
 							<div className="space-y-1">
 								<Label className="text-xs text-muted-foreground">
-									Editar JSON del esquema
+									{t("outputSchemaEditor.editJsonLabel")}
 								</Label>
 								<Textarea
 									value={advancedJson}
@@ -623,8 +642,7 @@ export function OutputSchemaEditor({
 							)}
 							<div className="flex items-center justify-between gap-2">
 								<p className="text-[11px] text-muted-foreground">
-									Usa la misma estructura {`{ name, properties[] }`} del modo
-									Simple.
+									{t("outputSchemaEditor.advancedHint")}
 								</p>
 								<Button
 									type="button"
@@ -632,7 +650,7 @@ export function OutputSchemaEditor({
 									onClick={applyAdvancedSchema}
 									className="h-7 text-xs"
 								>
-									Aplicar JSON
+									{t("outputSchemaEditor.applyJson")}
 								</Button>
 							</div>
 						</>

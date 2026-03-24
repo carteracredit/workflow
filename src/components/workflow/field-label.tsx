@@ -6,6 +6,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface FieldLabelProps {
 	htmlFor?: string;
@@ -20,6 +21,7 @@ export function FieldLabel({
 	description,
 	className,
 }: FieldLabelProps) {
+	const { t } = useLanguage();
 	return (
 		<div className={cn("flex items-center gap-1.5", className)}>
 			<Label htmlFor={htmlFor}>{children}</Label>
@@ -29,7 +31,7 @@ export function FieldLabel({
 						<button
 							type="button"
 							className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none"
-							aria-label="Más información"
+							aria-label={t("common.moreInfo")}
 						>
 							<Info className="h-3.5 w-3.5" />
 						</button>

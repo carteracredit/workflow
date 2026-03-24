@@ -10,6 +10,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Play, CheckCircle, XCircle } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface PreviewModalProps {
 	nodes: WorkflowNode[];
@@ -19,16 +20,19 @@ interface PreviewModalProps {
 
 export function PreviewModal({ nodes, edges, onClose }: PreviewModalProps) {
 	const startNode = nodes.find((n) => n.type === "Start");
+	const { t } = useLanguage();
 
 	const simulateFlow = () => {
 		const logs: string[] = [];
 
 		if (!startNode) {
-			logs.push("❌ No se encontró nodo de inicio");
+			logs.push(`❌ ${t("previewModal.logNoStartNode")}`);
 			return logs;
 		}
 
-		logs.push(`✅ Iniciando flujo desde: ${startNode.title}`);
+		logs.push(
+			`✅ ${t("previewModal.logStartingFrom").replace("{title}", startNode.title)}`,
+		);
 
 		let currentNodeId = startNode.id;
 		const visited = new Set<string>();
@@ -37,7 +41,7 @@ export function PreviewModal({ nodes, edges, onClose }: PreviewModalProps) {
 
 		while (steps < maxSteps) {
 			if (visited.has(currentNodeId)) {
-				logs.push("⚠️ Ciclo detectado en el flujo");
+				logs.push(`⚠️ ${t("previewModal.logCycleDetected")}`);
 				break;
 			}
 
@@ -46,21 +50,23 @@ export function PreviewModal({ nodes, edges, onClose }: PreviewModalProps) {
 
 			if (!currentNode) break;
 
-			logs.push(`📍 Procesando: ${currentNode.title} (${currentNode.type})`);
+			logs.push(
+				`📍 ${t("previewModal.logProcessing").replace("{title}", currentNode.title).replace("{type}", currentNode.type)}`,
+			);
 
 			if (currentNode.type === "End") {
-				logs.push("✅ Flujo terminado: FIN");
+				logs.push(`✅ ${t("previewModal.logFlowEndedFin")}`);
 				break;
 			}
 
 			if (currentNode.type === "Reject") {
-				logs.push("❌ Flujo terminado: RECHAZADO");
+				logs.push(`❌ ${t("previewModal.logFlowEndedRejected")}`);
 				break;
 			}
 
 			const nextEdge = edges.find((e) => e.from === currentNodeId);
 			if (!nextEdge) {
-				logs.push("⚠️ No hay siguiente nodo conectado");
+				logs.push(`⚠️ ${t("previewModal.logNoNextNode")}`);
 				break;
 			}
 
@@ -69,7 +75,7 @@ export function PreviewModal({ nodes, edges, onClose }: PreviewModalProps) {
 		}
 
 		if (steps >= maxSteps) {
-			logs.push("⚠️ Límite de pasos alcanzado");
+			logs.push(`⚠️ ${t("previewModal.logMaxStepsReached")}`);
 		}
 
 		return logs;
@@ -81,13 +87,15 @@ export function PreviewModal({ nodes, edges, onClose }: PreviewModalProps) {
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent className="max-w-2xl">
 				<DialogHeader>
-					<DialogTitle>Vista Previa del Flujo</DialogTitle>
+					<DialogTitle>{t("previewModal.title")}</DialogTitle>
 				</DialogHeader>
 
 				<div className="space-y-4">
 					<div className="flex items-center gap-2 rounded-lg bg-muted p-3">
 						<Play className="h-5 w-5 text-primary" />
-						<span className="font-medium">Simulación de Ejecución</span>
+						<span className="font-medium">
+							{t("previewModal.simulationTitle")}
+						</span>
 					</div>
 
 					<ScrollArea className="h-96 rounded border border-border bg-card p-4">
@@ -114,7 +122,7 @@ export function PreviewModal({ nodes, edges, onClose }: PreviewModalProps) {
 
 					<div className="flex justify-end gap-2">
 						<Button variant="outline" onClick={onClose}>
-							Cerrar
+							{t("previewModal.close")}
 						</Button>
 					</div>
 				</div>
