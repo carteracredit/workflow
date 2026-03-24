@@ -1,3 +1,13 @@
+# [1.1.0-rc.10](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.9...v1.1.0-rc.10) (2026-03-24)
+
+
+### Features
+
+* enhance internationalization across workflow components ([ad8bcc0](https://github.com/carteracredit/workflow/commit/ad8bcc00e9a65adc2a3e5f3db729d00bd249ced7))
+* enhance workflow editor with responsive design and tooltip support ([3484d20](https://github.com/carteracredit/workflow/commit/3484d201ac22b4d02756975e575fd590dbd5a9d5))
+* integrate language support in Workflow components ([3f22580](https://github.com/carteracredit/workflow/commit/3f225804d32864fcd9f885907037d62f763fe32a))
+* integrate TooltipProvider in Storybook preview ([305e147](https://github.com/carteracredit/workflow/commit/305e147e58c8d9454bcb00c37568c1db7470af76))
+
 # [1.1.0-rc.9](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.8...v1.1.0-rc.9) (2026-03-19)
 
 
