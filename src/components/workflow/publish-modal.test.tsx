@@ -98,7 +98,6 @@ const createEdge = (
 const defaultProps = {
 	workflowApiId: "wf-uuid-001",
 	onSave: vi.fn().mockResolvedValue(undefined),
-	apiToken: "test-jwt-token",
 	onClose: vi.fn(),
 };
 
@@ -469,13 +468,11 @@ describe("PublishModal", () => {
 				metadata={metadata}
 				flags={[]}
 				{...defaultProps}
-				apiToken={null}
 			/>,
 		);
 
 		await waitFor(
 			() => {
-				// When apiToken is null, publishing fails with toast but transpilation succeeds
 				expect(screen.getByText("Descargar .ts")).toBeInTheDocument();
 			},
 			{ timeout: 5000 },

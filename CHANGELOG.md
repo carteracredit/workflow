@@ -1,3 +1,17 @@
+# [1.1.0-rc.9](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.8...v1.1.0-rc.9) (2026-03-19)
+
+
+### Features
+
+* add validation and saving states to WorkflowEditor and TopBar ([4a50394](https://github.com/carteracredit/workflow/commit/4a50394794d986966316c2d7aa9d68c70af100fe))
+
+# [1.1.0-rc.8](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.7...v1.1.0-rc.8) (2026-03-19)
+
+
+### Features
+
+* enhance form schema utilities with compound field handling ([93c0fda](https://github.com/carteracredit/workflow/commit/93c0fdac018c7eeecb2ac586ec285db4680f359c))
+
 # [1.1.0-rc.7](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.6...v1.1.0-rc.7) (2026-03-14)
 
 

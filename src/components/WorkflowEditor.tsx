@@ -37,7 +37,6 @@ import {
 	undoHistory,
 } from "@/lib/workflow/history";
 import { slugify } from "@/lib/slugify";
-import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 import {
 	createWorkflow,
 	getWorkflow,
@@ -322,7 +321,6 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 
 export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const router = useRouter();
-	const { token: apiToken } = useWorkflowApiToken();
 	const { t } = useLanguage();
 
 	// When workflowId prop is given, it is the authoritative API ID.
@@ -416,14 +414,14 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 
 	// Load workflow from API when workflowId prop is set
 	useEffect(() => {
-		if (workflowId === undefined || !apiToken) return;
+		if (workflowId === undefined) return;
 
 		let cancelled = false;
 		setIsLoadingFromApi(true);
 
 		Promise.all([
-			getWorkflow(workflowId, { jwt: apiToken }),
-			listFlags(workflowId, { jwt: apiToken }).catch(() => null),
+			getWorkflow(workflowId),
+			listFlags(workflowId).catch(() => null),
 		])
 			.then(([wf, apiFlagsFull]: [Workflow, WorkflowFlag[] | null]) => {
 				if (cancelled) return;
@@ -505,7 +503,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			cancelled = true;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [workflowId, apiToken]);
+	}, [workflowId]);
 
 	const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
 		[],
@@ -829,13 +827,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	}, [workflowState.nodes, workflowState.edges, workflowState.flags]);
 
 	const handleSave = useCallback(async () => {
-		if (!apiToken) {
-			toast.error(t("workflowEditor.toastNotAuthenticated"), {
-				description: t("workflowEditor.toastNotAuthenticatedDesc"),
-			});
-			return;
-		}
-
 		setIsSaving(true);
 
 		const definitionObj = buildDefinitionObject(
@@ -861,15 +852,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 
 		try {
 			if (workflowApiId !== null) {
-				await updateWorkflowApi(workflowApiId, payload, { jwt: apiToken });
+				await updateWorkflowApi(workflowApiId, payload);
 				toast.success(t("workflowEditor.toastWorkflowUpdated"), {
 					description: `"${payload.name}" guardado correctamente.`,
 				});
 			} else {
-				const created = await createWorkflow(
-					{ ...payload, status: "draft" },
-					{ jwt: apiToken },
-				);
+				const created = await createWorkflow({ ...payload, status: "draft" });
 				setWorkflowApiId(created.id);
 				if (typeof window !== "undefined") {
 					localStorage.setItem(WORKFLOW_API_ID_KEY, String(created.id));
@@ -900,7 +888,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		} finally {
 			setIsSaving(false);
 		}
-	}, [apiToken, workflowApiId, workflowState, router]);
+	}, [workflowApiId, workflowState, router]);
 
 	const handleBack = useCallback(() => {
 		router.push("/");
@@ -1056,7 +1044,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 
 				// Auto-save definition to the DB so flags persist across page reloads.
 				// We use the computed nextState (not stale closure) and fire-and-forget.
-				if (workflowApiId && apiToken) {
+				if (workflowApiId) {
 					const definitionObj = buildDefinitionObject(
 						nextState.nodes,
 						nextState.edges,
@@ -1064,20 +1052,14 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						nextState.zoom,
 						nextState.pan,
 					);
-					updateWorkflowApi(
-						workflowApiId,
-						{
-							name: prev.metadata.name || "Nuevo Flujo de Trabajo",
-							slug: slugify(prev.metadata.name || "nuevo-flujo-de-trabajo"),
-							description: prev.metadata.description || "",
-							class_name: toClassName(
-								prev.metadata.name || "GeneratedWorkflow",
-							),
-							current_major_version: extractMajorVersion(prev.metadata.version),
-							definition: definitionObj,
-						},
-						{ jwt: apiToken },
-					).catch((err) => {
+					updateWorkflowApi(workflowApiId, {
+						name: prev.metadata.name || "Nuevo Flujo de Trabajo",
+						slug: slugify(prev.metadata.name || "nuevo-flujo-de-trabajo"),
+						description: prev.metadata.description || "",
+						class_name: toClassName(prev.metadata.name || "GeneratedWorkflow"),
+						current_major_version: extractMajorVersion(prev.metadata.version),
+						definition: definitionObj,
+					}).catch((err) => {
 						console.error("[updateFlags] Failed to auto-save definition:", err);
 					});
 				}
@@ -1085,7 +1067,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				return nextState;
 			});
 		},
-		[setWorkflowState, workflowApiId, apiToken],
+		[setWorkflowState, workflowApiId],
 	);
 
 	const hasMultipleSelections =
@@ -1341,10 +1323,9 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				/>
 			)}
 
-			{showFlagManager && workflowApiId && apiToken && (
+			{showFlagManager && workflowApiId && (
 				<FlagManagerModal
 					workflowId={workflowApiId}
-					apiToken={apiToken}
 					flags={workflowState.flags}
 					onClose={() => setShowFlagManager(false)}
 					onUpdateFlags={updateFlags}
@@ -1370,7 +1351,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					pan={workflowState.pan}
 					workflowApiId={workflowApiId}
 					onSave={handleSave}
-					apiToken={apiToken}
 					onClose={() => setShowPublish(false)}
 					onPublished={(status, majorVersion) => {
 						setWorkflowStatus(status);

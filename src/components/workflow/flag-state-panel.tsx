@@ -11,12 +11,11 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 interface FlagStatePanelProps {
 	workflowId: string;
-	apiToken: string;
 	className?: string;
 }
 
-async function fetchFlags(url: string, jwt: string): Promise<WorkflowFlag[]> {
-	const { json } = await fetchJson<ApiResponse<WorkflowFlag[]>>(url, { jwt });
+async function fetchFlags(url: string): Promise<WorkflowFlag[]> {
+	const { json } = await fetchJson<ApiResponse<WorkflowFlag[]>>(url);
 	return json.result;
 }
 
@@ -27,19 +26,13 @@ async function fetchFlags(url: string, jwt: string): Promise<WorkflowFlag[]> {
  * Polls every 10 seconds to stay up to date with worker-triggered updates.
  * Only renders when the workflow has been published (has a workflowId) and has flags.
  */
-export function FlagStatePanel({
-	workflowId,
-	apiToken,
-	className,
-}: FlagStatePanelProps) {
+export function FlagStatePanel({ workflowId, className }: FlagStatePanelProps) {
 	const { t } = useLanguage();
 	const url = `${getWorkflowServiceUrl()}/workflows/${workflowId}/flags`;
 
-	const { data: flags, isLoading } = useSWR<WorkflowFlag[]>(
-		[url, apiToken],
-		([u, jwt]: [string, string]) => fetchFlags(u, jwt),
-		{ refreshInterval: 10_000 },
-	);
+	const { data: flags, isLoading } = useSWR<WorkflowFlag[]>(url, fetchFlags, {
+		refreshInterval: 10_000,
+	});
 
 	if (isLoading || !flags || flags.length === 0) return null;
 

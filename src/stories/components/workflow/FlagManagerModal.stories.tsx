@@ -39,7 +39,6 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
 	args: {
 		workflowId: "00000000-0000-0000-0000-000000000001",
-		apiToken: "mock-jwt-token",
 		flags: SAMPLE_FLAGS,
 		onClose: () => {},
 		onUpdateFlags: () => {},

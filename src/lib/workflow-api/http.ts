@@ -54,15 +54,49 @@ export interface FetchJsonOptions extends RequestInit {
 	/**
 	 * JWT token to include in Authorization header.
 	 * When provided, adds `Authorization: Bearer <jwt>` header.
+	 * If not provided and running in browser (client-side), automatically fetches JWT.
 	 */
-	jwt?: string;
+	jwt?: string | null;
+}
+
+function isClientSide(): boolean {
+	return typeof window !== "undefined";
+}
+
+function isTestEnvironment(): boolean {
+	return (
+		typeof process !== "undefined" &&
+		(process.env.NODE_ENV === "test" ||
+			process.env.VITEST === "true" ||
+			process.env.JEST_WORKER_ID !== undefined)
+	);
+}
+
+async function getJwtIfNeeded(
+	jwt: string | null | undefined,
+): Promise<string | null> {
+	if (jwt !== undefined && jwt !== null) {
+		return jwt;
+	}
+	if (isTestEnvironment() || !isClientSide()) {
+		return null;
+	}
+	try {
+		const { tokenCache } = await import("@/lib/auth/tokenCache");
+		return await tokenCache.getCachedToken();
+	} catch (error) {
+		console.warn("Failed to auto-fetch JWT:", error);
+		return null;
+	}
 }
 
 export async function fetchJson<T>(
 	url: string,
 	init?: FetchJsonOptions,
 ): Promise<{ status: number; json: T }> {
-	const { jwt, ...fetchInit } = init ?? {};
+	const { jwt: providedJwt, ...fetchInit } = init ?? {};
+	const jwt = await getJwtIfNeeded(providedJwt);
+
 	const headers: Record<string, string> = {
 		accept: "application/json",
 		...(fetchInit?.headers as Record<string, string> | undefined),
@@ -80,6 +114,36 @@ export async function fetchJson<T>(
 	const body = isJson ? await res.json().catch(() => null) : await res.text();
 
 	if (!res.ok) {
+		if (res.status === 401 && isClientSide() && !isTestEnvironment()) {
+			try {
+				const { tokenCache } = await import("@/lib/auth/tokenCache");
+				const freshToken = await tokenCache.forceRefresh();
+				if (freshToken) {
+					const retryHeaders = {
+						...headers,
+						Authorization: `Bearer ${freshToken}`,
+					};
+					const retryRes = await fetch(url, {
+						...fetchInit,
+						headers: retryHeaders,
+					});
+					const retryContentType = retryRes.headers.get("content-type") ?? "";
+					const retryIsJson = retryContentType.includes("application/json");
+					const retryBody = retryIsJson
+						? await retryRes.json().catch(() => null)
+						: await retryRes.text();
+					if (retryRes.ok) {
+						return { status: retryRes.status, json: retryBody as T };
+					}
+					throw new ApiError(
+						`Request failed: ${retryRes.status} ${retryRes.statusText}`,
+						{ status: retryRes.status, body: retryBody },
+					);
+				}
+			} catch (retryErr) {
+				if (retryErr instanceof ApiError) throw retryErr;
+			}
+		}
 		throw new ApiError(`Request failed: ${res.status} ${res.statusText}`, {
 			status: res.status,
 			body,

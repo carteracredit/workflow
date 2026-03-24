@@ -1,9 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fetchJson, ApiError, extractApiErrorMessage } from "./http";
 
+const mockTokenCache = {
+	getCachedToken: vi.fn(),
+	forceRefresh: vi.fn(),
+	clear: vi.fn(),
+	getToken: vi.fn(),
+	isValid: vi.fn(),
+};
+vi.mock("@/lib/auth/tokenCache", () => ({ tokenCache: mockTokenCache }));
+
 describe("fetchJson", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
+		mockTokenCache.getCachedToken.mockResolvedValue(null);
+		mockTokenCache.forceRefresh.mockResolvedValue(null);
 	});
 
 	it("returns parsed JSON on successful response", async () => {
@@ -122,6 +133,76 @@ describe("fetchJson", () => {
 		await expect(fetchJson("https://example.com/api")).rejects.toThrow(
 			ApiError,
 		);
+	});
+
+	it("uses getCachedToken when jwt is omitted in client-side non-test env", async () => {
+		const origWindow = globalThis.window;
+		(globalThis as unknown as { window: unknown }).window = {};
+		vi.stubEnv("VITEST", "");
+		vi.stubEnv("NODE_ENV", "development");
+		mockTokenCache.getCachedToken.mockResolvedValue("auto-jwt");
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: { get: () => "application/json" },
+				json: () => Promise.resolve({}),
+				text: () => Promise.resolve(""),
+			}),
+		);
+
+		await fetchJson("https://example.com/api");
+
+		const fetchCall = vi.mocked(fetch).mock.calls[0];
+		const headers = fetchCall[1]?.headers as Record<string, string>;
+		expect(headers.Authorization).toBe("Bearer auto-jwt");
+		expect(mockTokenCache.getCachedToken).toHaveBeenCalled();
+		(globalThis as unknown as { window: unknown }).window = origWindow;
+		vi.unstubAllEnvs();
+	});
+
+	it("on 401 in client-side non-test env, force-refreshes token and retries once", async () => {
+		const origWindow = globalThis.window;
+		(globalThis as unknown as { window: unknown }).window = {};
+		vi.stubEnv("VITEST", "");
+		vi.stubEnv("NODE_ENV", "development");
+		mockTokenCache.getCachedToken.mockResolvedValue("expired-token");
+		mockTokenCache.forceRefresh.mockResolvedValue("fresh-token");
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: false,
+				status: 401,
+				statusText: "Unauthorized",
+				headers: { get: () => "application/json" },
+				json: () => Promise.resolve({ errors: [{ message: "Unauthorized" }] }),
+				text: () => Promise.resolve(""),
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				headers: { get: () => "application/json" },
+				json: () => Promise.resolve({ result: "ok" }),
+				text: () => Promise.resolve(""),
+			});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const result = await fetchJson<{ result: string }>(
+			"https://example.com/api",
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		const retryHeaders = fetchMock.mock.calls[1][1]?.headers as Record<
+			string,
+			string
+		>;
+		expect(retryHeaders.Authorization).toBe("Bearer fresh-token");
+		expect(result.status).toBe(200);
+		expect(result.json).toEqual({ result: "ok" });
+		expect(mockTokenCache.forceRefresh).toHaveBeenCalled();
+		(globalThis as unknown as { window: unknown }).window = origWindow;
+		vi.unstubAllEnvs();
 	});
 });
 

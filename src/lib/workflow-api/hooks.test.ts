@@ -9,10 +9,6 @@ vi.mock("swr", () => ({
 	default: vi.fn(),
 }));
 
-vi.mock("@/hooks/useWorkflowApiToken", () => ({
-	useWorkflowApiToken: vi.fn(),
-}));
-
 vi.mock("@/lib/workflow-api/config", () => ({
 	getWorkflowServiceUrl: () => "https://workflow-svc.carteracredit.workers.dev",
 }));
@@ -26,7 +22,6 @@ vi.mock("@/lib/workflow-api/http", () => ({
 // ---------------------------------------------------------------------------
 
 import useSWR from "swr";
-import { useWorkflowApiToken } from "@/hooks/useWorkflowApiToken";
 import {
 	useWorkflows,
 	useWorkflow,
@@ -40,7 +35,6 @@ import type { Workflow, WorkflowVersion, WorkflowFlag } from "./types";
 // ---------------------------------------------------------------------------
 
 const mockUseSWR = vi.mocked(useSWR);
-const mockUseApiToken = vi.mocked(useWorkflowApiToken);
 
 const BASE = "https://workflow-svc.carteracredit.workers.dev";
 
@@ -59,15 +53,6 @@ function mockSWRReturn<T>(
 	} as unknown as ReturnType<typeof useSWR>);
 }
 
-function withToken(token: string | null = "test-jwt") {
-	mockUseApiToken.mockReturnValue({
-		token,
-		isLoading: false,
-		error: null,
-		refetch: vi.fn(),
-	});
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -77,17 +62,7 @@ beforeEach(() => {
 });
 
 describe("useWorkflows", () => {
-	it("passes null SWR key when token is null", () => {
-		withToken(null);
-		mockSWRReturn<Workflow[]>(undefined);
-
-		renderHook(() => useWorkflows());
-
-		expect(mockUseSWR).toHaveBeenCalledWith(null, expect.any(Function));
-	});
-
-	it("passes correct URL as SWR key when token is present", () => {
-		withToken("my-token");
+	it("passes correct URL as SWR key", () => {
 		mockSWRReturn<Workflow[]>(undefined);
 
 		renderHook(() => useWorkflows());
@@ -97,7 +72,6 @@ describe("useWorkflows", () => {
 	});
 
 	it("appends search param to key", () => {
-		withToken("my-token");
 		mockSWRReturn<Workflow[]>(undefined);
 
 		renderHook(() => useWorkflows({ search: "credit" }));
@@ -107,7 +81,6 @@ describe("useWorkflows", () => {
 	});
 
 	it("appends status param to key", () => {
-		withToken("my-token");
 		mockSWRReturn<Workflow[]>(undefined);
 
 		renderHook(() => useWorkflows({ status: "published" }));
@@ -117,7 +90,6 @@ describe("useWorkflows", () => {
 	});
 
 	it("returns empty array when data is undefined", () => {
-		withToken("my-token");
 		mockSWRReturn<Workflow[]>(undefined);
 
 		const { result } = renderHook(() => useWorkflows());
@@ -129,7 +101,6 @@ describe("useWorkflows", () => {
 
 	it("returns workflows when SWR provides data", () => {
 		const workflows = [{ id: "wf-uuid-001", name: "Test" }] as Workflow[];
-		withToken("my-token");
 		mockSWRReturn<Workflow[]>(workflows);
 
 		const { result } = renderHook(() => useWorkflows());
@@ -138,7 +109,6 @@ describe("useWorkflows", () => {
 	});
 
 	it("forwards isLoading and error from SWR", () => {
-		withToken("my-token");
 		const err = new Error("network error");
 		mockSWRReturn<Workflow[]>(undefined, { error: err, isLoading: true });
 
@@ -149,7 +119,6 @@ describe("useWorkflows", () => {
 	});
 
 	it("exposes mutate from SWR", () => {
-		withToken("my-token");
 		mockSWRReturn<Workflow[]>([]);
 
 		const { result } = renderHook(() => useWorkflows());
@@ -159,17 +128,7 @@ describe("useWorkflows", () => {
 });
 
 describe("useWorkflow", () => {
-	it("passes null key when token is null", () => {
-		withToken(null);
-		mockSWRReturn<Workflow>(undefined);
-
-		renderHook(() => useWorkflow("wf-uuid-001"));
-
-		expect(mockUseSWR).toHaveBeenCalledWith(null, expect.any(Function));
-	});
-
 	it("passes null key when id is null", () => {
-		withToken("my-token");
 		mockSWRReturn<Workflow>(undefined);
 
 		renderHook(() => useWorkflow(null));
@@ -178,7 +137,6 @@ describe("useWorkflow", () => {
 	});
 
 	it("passes correct URL key for a given id", () => {
-		withToken("my-token");
 		mockSWRReturn<Workflow>(undefined);
 
 		renderHook(() => useWorkflow("wf-uuid-042"));
@@ -188,7 +146,6 @@ describe("useWorkflow", () => {
 	});
 
 	it("returns null when data is undefined", () => {
-		withToken("my-token");
 		mockSWRReturn<Workflow>(undefined);
 
 		const { result } = renderHook(() => useWorkflow("wf-uuid-001"));
@@ -198,7 +155,6 @@ describe("useWorkflow", () => {
 
 	it("returns workflow object when SWR provides data", () => {
 		const workflow = { id: "wf-uuid-005", name: "Credit App" } as Workflow;
-		withToken("my-token");
 		mockSWRReturn<Workflow>(workflow);
 
 		const { result } = renderHook(() => useWorkflow("wf-uuid-005"));
@@ -207,7 +163,6 @@ describe("useWorkflow", () => {
 	});
 
 	it("exposes isLoading, error, and mutate", () => {
-		withToken("my-token");
 		const err = new Error("not found");
 		mockSWRReturn<Workflow>(undefined, { error: err, isLoading: false });
 
@@ -220,17 +175,7 @@ describe("useWorkflow", () => {
 });
 
 describe("useWorkflowVersions", () => {
-	it("passes null key when token is null", () => {
-		withToken(null);
-		mockSWRReturn<WorkflowVersion[]>(undefined);
-
-		renderHook(() => useWorkflowVersions("wf-uuid-001"));
-
-		expect(mockUseSWR).toHaveBeenCalledWith(null, expect.any(Function));
-	});
-
 	it("passes null key when workflowId is null", () => {
-		withToken("my-token");
 		mockSWRReturn<WorkflowVersion[]>(undefined);
 
 		renderHook(() => useWorkflowVersions(null));
@@ -239,7 +184,6 @@ describe("useWorkflowVersions", () => {
 	});
 
 	it("passes correct URL key with workflow_id param", () => {
-		withToken("my-token");
 		mockSWRReturn<WorkflowVersion[]>(undefined);
 
 		renderHook(() => useWorkflowVersions("wf-uuid-007"));
@@ -250,7 +194,6 @@ describe("useWorkflowVersions", () => {
 	});
 
 	it("returns empty array when data is undefined", () => {
-		withToken("my-token");
 		mockSWRReturn<WorkflowVersion[]>(undefined);
 
 		const { result } = renderHook(() => useWorkflowVersions("wf-uuid-001"));
@@ -260,7 +203,6 @@ describe("useWorkflowVersions", () => {
 
 	it("returns versions array when SWR provides data", () => {
 		const versions = [{ id: "ver-uuid-001", version: 1 }] as WorkflowVersion[];
-		withToken("my-token");
 		mockSWRReturn<WorkflowVersion[]>(versions);
 
 		const { result } = renderHook(() => useWorkflowVersions("wf-uuid-003"));
@@ -270,21 +212,7 @@ describe("useWorkflowVersions", () => {
 });
 
 describe("useWorkflowFlags", () => {
-	it("passes null key when token is null", () => {
-		withToken(null);
-		mockSWRReturn<WorkflowFlag[]>(undefined);
-
-		renderHook(() => useWorkflowFlags("wf-uuid-001"));
-
-		expect(mockUseSWR).toHaveBeenCalledWith(
-			null,
-			expect.any(Function),
-			expect.objectContaining({ refreshInterval: 10_000 }),
-		);
-	});
-
 	it("passes null key when workflowId is null", () => {
-		withToken("my-token");
 		mockSWRReturn<WorkflowFlag[]>(undefined);
 
 		renderHook(() => useWorkflowFlags(null));
@@ -297,7 +225,6 @@ describe("useWorkflowFlags", () => {
 	});
 
 	it("passes correct URL key for a given workflowId", () => {
-		withToken("my-token");
 		mockSWRReturn<WorkflowFlag[]>(undefined);
 
 		renderHook(() => useWorkflowFlags("wf-uuid-042"));
@@ -312,7 +239,6 @@ describe("useWorkflowFlags", () => {
 	});
 
 	it("returns empty array when data is undefined", () => {
-		withToken("my-token");
 		mockSWRReturn<WorkflowFlag[]>(undefined);
 
 		const { result } = renderHook(() => useWorkflowFlags("wf-uuid-001"));
@@ -333,7 +259,6 @@ describe("useWorkflowFlags", () => {
 				currentState: null,
 			},
 		];
-		withToken("my-token");
 		mockSWRReturn<WorkflowFlag[]>(flags);
 
 		const { result } = renderHook(() => useWorkflowFlags("wf-uuid-001"));
@@ -342,7 +267,6 @@ describe("useWorkflowFlags", () => {
 	});
 
 	it("forwards isLoading, error, and mutate", () => {
-		withToken("my-token");
 		const err = new Error("flags fetch failed");
 		mockSWRReturn<WorkflowFlag[]>(undefined, { error: err, isLoading: true });
 
