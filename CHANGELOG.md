@@ -1,3 +1,10 @@
+# [1.1.0-rc.11](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.10...v1.1.0-rc.11) (2026-03-24)
+
+
+### Features
+
+* implement progress tracking in workflow code generation ([93ad43f](https://github.com/carteracredit/workflow/commit/93ad43f140545c6fb30f64dedf929520a472cf89))
+
 # [1.1.0-rc.10](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.9...v1.1.0-rc.10) (2026-03-24)
 
 
