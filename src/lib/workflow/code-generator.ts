@@ -215,6 +215,41 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
 	return { outgoingMap, incomingMap };
 }
 
+// ---------------------------------------------------------------------------
+// Progress tracking helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Emit a WORKFLOW_SVC.updateInstanceProgress call for step tracking.
+ * This is injected before/after each step so the UI can display progress.
+ */
+function generateProgressCall(
+	node: WorkflowNode,
+	indent: string,
+	status: "in_progress" | "completed" | "waiting_event",
+	eventType?: string,
+): string {
+	const stepName = createStepName(node);
+	const nodeType = node.type;
+	const nodeId = node.id;
+	let code = `${indent}await this.env.WORKFLOW_SVC.updateInstanceProgress({\n`;
+	code += `${indent}\tworkflowId: this.env.WORKFLOW_ID,\n`;
+	code += `${indent}\tinstanceId: event.instanceId,\n`;
+	code += `${indent}\tnodeId: "${escapeString(nodeId)}",\n`;
+	code += `${indent}\tnodeType: "${escapeString(nodeType)}",\n`;
+	code += `${indent}\tstepName: "${escapeString(stepName)}",\n`;
+	code += `${indent}\tstatus: "${status}",\n`;
+	if (eventType) {
+		code += `${indent}\teventType: "${escapeString(eventType)}",\n`;
+	}
+	code += `${indent}});\n`;
+	return code;
+}
+
+// ---------------------------------------------------------------------------
+// Node code generators
+// ---------------------------------------------------------------------------
+
 /**
  * Generate code for a Form node.
  * Uses step.waitForEvent so the workflow pauses until the client sends form data
@@ -229,10 +264,12 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
 	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload }) from cases-svc\n`;
+	code += generateProgressCall(node, indent, "waiting_event", eventType);
 	code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
 	code += `${indent}\t"${escapeString(stepName)}",\n`;
 	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
 	code += `${indent})).payload as Record<string, unknown>;\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -255,6 +292,7 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
 
 	let code = `${indent}// API Call: ${node.title}\n`;
+	code += generateProgressCall(node, indent, "in_progress");
 	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
 	code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
 	code += `${indent}\t\tmethod: "${method}",\n`;
@@ -282,6 +320,7 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 	}
 
 	code += `);\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -297,10 +336,12 @@ function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const resultCast = captureResult ? " as Record<string, unknown>" : "";
 
 	let code = `${indent}// Transform: ${node.title}\n`;
+	code += generateProgressCall(node, indent, "in_progress");
 	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
 	const expandedCode = expandVariableRefs(transformCode);
 	code += `${indent}\t${expandedCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}})${resultCast};\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -389,12 +430,14 @@ function generateCheckpointStep(node: WorkflowNode, indent: string): string {
 	const isSafe = node.checkpointType === "safe";
 
 	let code = `${indent}// Checkpoint: ${node.title}${isSafe ? " (safe)" : ""}\n`;
+	code += generateProgressCall(node, indent, "in_progress");
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	if (isSafe) {
 		code += `${indent}\t// Safe checkpoint - workflow can be safely retried from here\n`;
 	}
 	code += `${indent}\treturn { checkpoint: "${stepName}", timestamp: Date.now() };\n`;
 	code += `${indent}});\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -409,8 +452,10 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const challengeType = config?.challengeType || "acceptance";
 	const timeout = config?.challengeTimeout;
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
+	const eventType = challengeType;
 
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
+	code += generateProgressCall(node, indent, "waiting_event", eventType);
 	code += `${indent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
 	code += `${indent}\t"${stepName}",\n`;
 	code += `${indent}\t{\n`;
@@ -418,6 +463,7 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
 	code += `${indent}\t},\n`;
 	code += `${indent});\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -432,6 +478,7 @@ function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
 		[];
 
 	let code = `${indent}// Flag Change: ${node.title}\n`;
+	code += generateProgressCall(node, indent, "in_progress");
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	if (flagChanges.length > 0) {
 		const changes = flagChanges
@@ -449,6 +496,7 @@ function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\t// Configure flag changes in the workflow editor\n`;
 	}
 	code += `${indent}});\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -465,10 +513,12 @@ function generateJoinStep(
 	const branchCount = incomingEdges.length;
 
 	let code = `${indent}// Join: ${node.title} (merging ${branchCount} branches)\n`;
+	code += generateProgressCall(node, indent, "in_progress");
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
 	code += `${indent}\t// Merge point for ${branchCount} branches\n`;
 	code += `${indent}\treturn { merged: true };\n`;
 	code += `${indent}});\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -801,6 +851,15 @@ export function generateWorkflowCode(
 	code += `\t\t\tchanges: Array<{ flagId: string; optionId: string }>;\n`;
 	code += `\t\t\tinstanceId?: string;\n`;
 	code += `\t\t}) => Promise<{ changes: Array<{ flagId: string; optionId: string; updated: boolean }> }>;\n`;
+	code += `\t\tupdateInstanceProgress: (input: {\n`;
+	code += `\t\t\tworkflowId: string;\n`;
+	code += `\t\t\tinstanceId: string;\n`;
+	code += `\t\t\tnodeId: string;\n`;
+	code += `\t\t\tnodeType: string;\n`;
+	code += `\t\t\tstepName: string;\n`;
+	code += `\t\t\tstatus: "in_progress" | "completed" | "waiting_event";\n`;
+	code += `\t\t\teventType?: string;\n`;
+	code += `\t\t}) => Promise<{ ok: boolean }>;\n`;
 	code += `\t};\n`;
 	code += `\tWORKFLOW_ID: string;\n`;
 	if (hasMessageNodes) {

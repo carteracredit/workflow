@@ -2472,3 +2472,100 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 		expect(result.code).not.toContain("${node-data.items}");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Progress tracking injection tests
+// ---------------------------------------------------------------------------
+
+describe("generateWorkflowCode – progress tracking", () => {
+	const meta: WorkflowMetadata = {
+		name: "Progress Test",
+		description: "",
+		version: "1.0.0",
+		author: "",
+		tags: [],
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	};
+
+	it("injects updateInstanceProgress before and after a Form node (waiting_event + completed)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({ id: "form1", type: "Form", title: "My Form" }),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form1"),
+			createEdge("form1", "end"),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges, meta);
+
+		// Should contain waiting_event call before waitForEvent
+		expect(code).toContain('"waiting_event"');
+		expect(code).toContain('"form-submission:my-form"');
+
+		// Should contain completed call after waitForEvent
+		expect(code).toContain('"completed"');
+
+		// WORKFLOW_SVC.updateInstanceProgress should appear at least twice for the form node
+		const matches = (code.match(/WORKFLOW_SVC\.updateInstanceProgress/g) ?? [])
+			.length;
+		expect(matches).toBeGreaterThanOrEqual(2);
+	});
+
+	it("injects updateInstanceProgress for API node (in_progress + completed)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({
+				id: "api1",
+				type: "API",
+				title: "Call API",
+				config: { url: "https://example.com/api", method: "GET" },
+			}),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "api1"),
+			createEdge("api1", "end"),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges, meta);
+
+		expect(code).toContain('"in_progress"');
+		expect(code).toContain('"completed"');
+		const matches = (code.match(/WORKFLOW_SVC\.updateInstanceProgress/g) ?? [])
+			.length;
+		expect(matches).toBeGreaterThanOrEqual(2);
+	});
+
+	it("emits nodeId and nodeType in progress calls", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({ id: "chk1", type: "Checkpoint", title: "Save Point" }),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "chk1"),
+			createEdge("chk1", "end"),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges, meta);
+
+		expect(code).toContain('"chk1"'); // nodeId
+		expect(code).toContain('"Checkpoint"'); // nodeType
+	});
+
+	it("adds updateInstanceProgress signature to WorkflowEnv interface", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const { code } = generateWorkflowCode(nodes, edges, meta);
+
+		expect(code).toContain("updateInstanceProgress");
+		expect(code).toContain('"waiting_event"'); // part of the status union in the interface
+	});
+});
