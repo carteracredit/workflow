@@ -18,6 +18,7 @@ import {
 	Play,
 	Shield,
 } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface PaletteProps {
 	onAddNode: (node: WorkflowNode) => void;
@@ -29,11 +30,11 @@ interface PaletteProps {
 const NODE_CATEGORIES = [
 	{
 		id: "core",
-		label: "NÚCLEO",
+		labelKey: "palette.categoryCore",
 		nodes: [
 			{
 				type: "Start" as NodeType,
-				label: "Inicio",
+				labelKey: "palette.nodeStart",
 				icon: <Play className="h-4 w-4" />,
 				bgColor: "var(--node-bg-start)",
 				iconColorVar: "--node-icon-start",
@@ -42,39 +43,39 @@ const NODE_CATEGORIES = [
 	},
 	{
 		id: "logic",
-		label: "LÓGICA",
+		labelKey: "palette.categoryLogic",
 		nodes: [
 			{
 				type: "Decision" as NodeType,
-				label: "Decisión",
+				labelKey: "palette.nodeDecision",
 				icon: <GitBranch className="h-4 w-4" />,
 				bgColor: "var(--node-bg-decision)",
 				iconColorVar: "--node-icon-decision",
 			},
 			{
 				type: "Challenge" as NodeType,
-				label: "Challenge",
+				labelKey: "palette.nodeChallenge",
 				icon: <Shield className="h-4 w-4" />,
 				bgColor: "var(--node-bg-challenge)",
 				iconColorVar: "--node-icon-challenge",
 			},
 			{
 				type: "Checkpoint" as NodeType,
-				label: "Checkpoint",
+				labelKey: "palette.nodeCheckpoint",
 				icon: <Flag className="h-4 w-4" />,
 				bgColor: "var(--node-bg-checkpoint)",
 				iconColorVar: "--node-icon-checkpoint",
 			},
 			{
 				type: "Join" as NodeType,
-				label: "Unión",
+				labelKey: "palette.nodeJoin",
 				icon: <Merge className="h-4 w-4" />,
 				bgColor: "var(--node-bg-join)",
 				iconColorVar: "--node-icon-join",
 			},
 			{
 				type: "FlagChange" as NodeType,
-				label: "Flag Change",
+				labelKey: "palette.nodeFlagChange",
 				icon: <Tag className="h-4 w-4" />,
 				bgColor: "var(--node-bg-status)",
 				iconColorVar: "--node-icon-status",
@@ -83,32 +84,32 @@ const NODE_CATEGORIES = [
 	},
 	{
 		id: "data",
-		label: "DATOS",
+		labelKey: "palette.categoryData",
 		nodes: [
 			{
 				type: "Form" as NodeType,
-				label: "Formulario",
+				labelKey: "palette.nodeForm",
 				icon: <FileText className="h-4 w-4" />,
 				bgColor: "var(--node-bg-form)",
 				iconColorVar: "--node-icon-form",
 			},
 			{
 				type: "Transform" as NodeType,
-				label: "Transformación",
+				labelKey: "palette.nodeTransform",
 				icon: <Code className="h-4 w-4" />,
 				bgColor: "var(--node-bg-transform)",
 				iconColorVar: "--node-icon-transform",
 			},
 			{
 				type: "API" as NodeType,
-				label: "API",
+				labelKey: "palette.nodeApi",
 				icon: <Globe className="h-4 w-4" />,
 				bgColor: "var(--node-bg-api)",
 				iconColorVar: "--node-icon-api",
 			},
 			{
 				type: "Message" as NodeType,
-				label: "Mensaje",
+				labelKey: "palette.nodeMessage",
 				icon: <Mail className="h-4 w-4" />,
 				bgColor: "var(--node-bg-message)",
 				iconColorVar: "--node-icon-message",
@@ -117,18 +118,18 @@ const NODE_CATEGORIES = [
 	},
 	{
 		id: "terminal",
-		label: "FINALES",
+		labelKey: "palette.categoryTerminal",
 		nodes: [
 			{
 				type: "End" as NodeType,
-				label: "Fin",
+				labelKey: "palette.nodeEnd",
 				icon: <Circle className="h-4 w-4" />,
 				bgColor: "var(--node-bg-end)",
 				iconColorVar: "--node-icon-end",
 			},
 			{
 				type: "Reject" as NodeType,
-				label: "Rechazado",
+				labelKey: "palette.nodeReject",
 				icon: <XCircle className="h-4 w-4" />,
 				bgColor: "var(--node-bg-end-reject)",
 				iconColorVar: "--node-icon-end-reject",
@@ -149,8 +150,10 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 
 export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const { t } = useLanguage();
 
-	const handleAddNode = (type: NodeType, label: string) => {
+	const handleAddNode = (type: NodeType, labelKey: string) => {
+		const label = t(labelKey);
 		const propertiesPanel = document.querySelector<HTMLElement>(
 			'[data-workflow-panel="properties"]',
 		);
@@ -195,13 +198,16 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 			{NODE_CATEGORIES.map((category, index) => (
 				<div key={category.id} className="flex items-center gap-2">
 					{category.nodes.map(
-						({ type, label, icon, bgColor, iconColorVar }) => (
+						({ type, labelKey, icon, bgColor, iconColorVar }) => (
 							<div key={type} className="group relative">
 								<button
 									type="button"
 									className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-									onClick={() => handleAddNode(type, label)}
-									aria-label={`Agregar ${label}`}
+									onClick={() => handleAddNode(type, labelKey)}
+									aria-label={t("palette.addNodeLabel").replace(
+										"{label}",
+										t(labelKey),
+									)}
 								>
 									<div
 										className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
@@ -215,7 +221,7 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 								</button>
 								<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
 									<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
-										{label}
+										{t(labelKey)}
 									</span>
 									<span
 										className="mt-1 h-2 w-px rounded-full bg-border"

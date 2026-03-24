@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { LanguageProvider } from "@/components/LanguageProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "../src/app/globals.css";
 
 type ThemeOption = "light" | "dark" | "system";
@@ -69,9 +70,11 @@ const preview: Preview = {
 				<LanguageProvider defaultLanguage="es">
 					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 						<ThemeSync theme={theme}>
-							<div className="min-h-screen bg-background text-foreground p-6">
-								<Story />
-							</div>
+							<TooltipProvider delayDuration={300}>
+								<div className="min-h-screen bg-background text-foreground p-6">
+									<Story />
+								</div>
+							</TooltipProvider>
 						</ThemeSync>
 					</ThemeProvider>
 				</LanguageProvider>

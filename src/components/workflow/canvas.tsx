@@ -45,6 +45,7 @@ import {
 	deserializeSelection,
 	type CopiedSelection,
 } from "@/lib/workflow/copy-paste";
+import { useLanguage } from "@/components/LanguageProvider";
 
 const MULTI_OUTPUT_NODE_TYPES: WorkflowNode["type"][] = [
 	"Decision",
@@ -167,11 +168,12 @@ export const matchToolbarShortcut = (
 const getPortDescriptor = (
 	nodeType: WorkflowNode["type"],
 	port: "top" | "bottom",
+	t: (key: string) => string,
 ): string => {
 	if (nodeType === "Challenge") {
-		return port === "top" ? "accepted" : "rejected";
+		return port === "top" ? t("canvas.portAccepted") : t("canvas.portRejected");
 	}
-	return port === "top" ? "verde (positiva)" : "roja (negativa)";
+	return port === "top" ? t("canvas.portPositive") : t("canvas.portNegative");
 };
 
 interface CanvasProps {
@@ -245,6 +247,7 @@ export function Canvas({
 	canRedo = false,
 	onCommitHistory,
 }: CanvasProps) {
+	const { t } = useLanguage();
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
 	const [isPanning, setIsPanning] = useState(false);
@@ -257,6 +260,19 @@ export function Canvas({
 	const hasAutoPositionedEmptyState = useRef(false);
 	const [hasCopiedData, setHasCopiedData] = useState(false);
 	const [justCopied, setJustCopied] = useState(false);
+	const [measuredNodeHeights, setMeasuredNodeHeights] = useState<
+		Record<string, number>
+	>({});
+
+	const handleNodeHeightMeasured = useCallback(
+		(nodeId: string, height: number) => {
+			setMeasuredNodeHeights((prev) => {
+				if (prev[nodeId] === height) return prev;
+				return { ...prev, [nodeId]: height };
+			});
+		},
+		[],
+	);
 	const editorContainerRef = useRef<HTMLDivElement>(null);
 	const [isEditorFocused, setIsEditorFocused] = useState(true);
 	useEffect(() => {
@@ -1180,7 +1196,7 @@ export function Canvas({
 						(e) => e.from === sourceNode.id && e.fromPort === outputPort,
 					);
 					if (existingConnectionOnPort) {
-						const portName = getPortDescriptor(sourceNode.type, outputPort);
+						const portName = getPortDescriptor(sourceNode.type, outputPort, t);
 						alert(
 							`El nodo "${sourceNode.title}" ya tiene una conexión en el conector ${portName}. Cada conector solo puede tener una conexión.`,
 						);
@@ -1340,7 +1356,7 @@ export function Canvas({
 							variant="ghost"
 							size="sm"
 							onClick={onReset}
-							title="Reiniciar (Ctrl/Cmd+Shift+Alt+R)"
+							title={t("canvas.toolbarReset")}
 						>
 							<Trash2 className="h-4 w-4" />
 						</Button>
@@ -1353,7 +1369,7 @@ export function Canvas({
 							size="sm"
 							onClick={onValidate}
 							disabled={isValidating}
-							title="Validar (Ctrl/Cmd+Shift+V)"
+							title={t("canvas.toolbarValidate")}
 						>
 							{isValidating ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
@@ -1367,7 +1383,7 @@ export function Canvas({
 							variant="ghost"
 							size="sm"
 							onClick={onPreview}
-							title="Preview (Ctrl/Cmd+P)"
+							title={t("canvas.toolbarPreview")}
 						>
 							<Play className="h-4 w-4" />
 						</Button>
@@ -1377,7 +1393,7 @@ export function Canvas({
 							variant="ghost"
 							size="sm"
 							onClick={onGenerateCode}
-							title="Generar código Cloudflare Workflow"
+							title={t("canvas.toolbarCode")}
 						>
 							<FileCode className="h-4 w-4" />
 						</Button>
@@ -1417,6 +1433,7 @@ export function Canvas({
 							nodes={nodes}
 							edges={edges}
 							selected={selectedEdgeIds.includes(edge.id)}
+							measuredNodeHeights={measuredNodeHeights}
 							onSelect={(e) => {
 								e.stopPropagation();
 								console.warn("[v0] Edge selected:", edge.id);
@@ -1538,12 +1555,14 @@ export function Canvas({
 								selected={selectedNodeIds.includes(node.id)}
 								errors={nodeErrors}
 								connecting={connectingFrom?.nodeId === node.id}
+								isAnyConnectionInProgress={!!connectingFrom}
 								highlightCheckpoint={isReferencedCheckpoint}
 								flags={flags}
 								onMouseDown={(e) => handleNodeMouseDown(node.id, e)}
 								onConnectorClick={(position, e, port) =>
 									handleConnectorClick(node.id, position, e, port)
 								}
+								onHeightMeasured={handleNodeHeightMeasured}
 							/>
 						);
 					})}
@@ -1553,7 +1572,7 @@ export function Canvas({
 					<div className="pointer-events-none absolute inset-0 flex items-start justify-start px-4 pt-6 sm:px-8 sm:pt-8 lg:px-14 lg:pt-10">
 						<div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-dashed border-border/70 bg-background/95 p-6 text-left shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:max-w-md">
 							<p className="text-sm font-semibold uppercase tracking-wide text-primary">
-								Construye tu primer flujo
+								{t("canvas.emptyStateTitle")}
 							</p>
 							<p className="mt-2 text-sm text-muted-foreground">
 								Usa el panel izquierdo para agregar nodos o haz clic derecho en
@@ -1623,8 +1642,8 @@ export function Canvas({
 							isHandToolActive &&
 								"border border-primary/30 bg-primary/10 text-primary shadow-inner ring-1 ring-primary/30",
 						)}
-						title="Herramienta de pan (mano)"
-						aria-label="Herramienta de pan (mano)"
+						title={t("canvas.toolbarPanMode")}
+						aria-label={t("canvas.toolbarPanMode")}
 						aria-pressed={isHandToolActive}
 						data-state={isHandToolActive ? "active" : "inactive"}
 						onClick={() =>
@@ -1649,8 +1668,8 @@ export function Canvas({
 							!isHandToolActive &&
 								"border border-primary/30 bg-primary/10 text-primary shadow-inner ring-1 ring-primary/30",
 						)}
-						title="Herramienta de selección (puntero)"
-						aria-label="Herramienta de selección (puntero)"
+						title={t("canvas.toolbarSelectMode")}
+						aria-label={t("canvas.toolbarSelectMode")}
 						aria-pressed={!isHandToolActive}
 						data-state={!isHandToolActive ? "active" : "inactive"}
 						onClick={activateSelectionMode}
@@ -1664,7 +1683,7 @@ export function Canvas({
 						size="icon"
 						variant="ghost"
 						className="h-8 w-8"
-						title="Deshacer (Ctrl+Z)"
+						title={t("canvas.toolbarUndo")}
 						disabled={!canUndo}
 						aria-disabled={!canUndo}
 						onClick={onUndo}
@@ -1675,7 +1694,7 @@ export function Canvas({
 						size="icon"
 						variant="ghost"
 						className="h-8 w-8"
-						title="Rehacer (Ctrl+Y / Ctrl+Shift+Z)"
+						title={t("canvas.toolbarRedo")}
 						disabled={!canRedo}
 						aria-disabled={!canRedo}
 						onClick={onRedo}
@@ -1691,7 +1710,7 @@ export function Canvas({
 							justCopied &&
 								"border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400",
 						)}
-						title={justCopied ? "¡Copiado!" : "Copiar (Ctrl/Cmd+C)"}
+						title={justCopied ? t("canvas.copied") : t("canvas.toolbarCopy")}
 						disabled={
 							selectedNodeIds.length === 0 && selectedEdgeIds.length === 0
 						}
@@ -1729,7 +1748,7 @@ export function Canvas({
 						size="icon"
 						variant="ghost"
 						className="h-8 w-8"
-						title="Pegar (Ctrl/Cmd+V)"
+						title={t("canvas.toolbarPaste")}
 						disabled={!hasCopiedData || !copiedDataRef.current}
 						onClick={() => {
 							if (onPaste && copiedDataRef.current) {
@@ -1748,7 +1767,7 @@ export function Canvas({
 						variant="ghost"
 						className="h-8 w-8"
 						onClick={() => onUpdateZoom(Math.min(2, zoom + 0.1))}
-						title="Acercar"
+						title={t("canvas.toolbarZoomIn")}
 					>
 						<ZoomIn className="h-4 w-4" />
 					</Button>
@@ -1757,7 +1776,7 @@ export function Canvas({
 						variant="ghost"
 						className="h-8 w-8"
 						onClick={() => onUpdateZoom(Math.max(0.1, zoom - 0.1))}
-						title="Alejar"
+						title={t("canvas.toolbarZoomOut")}
 					>
 						<ZoomOut className="h-4 w-4" />
 					</Button>
@@ -1766,7 +1785,7 @@ export function Canvas({
 						variant="ghost"
 						className="h-8 w-8"
 						onClick={handleFitToView}
-						title="Ajustar a vista (F)"
+						title={t("canvas.toolbarFitView")}
 					>
 						<Maximize className="h-4 w-4" />
 					</Button>

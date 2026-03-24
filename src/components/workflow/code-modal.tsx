@@ -32,6 +32,7 @@ import {
 	AlertTriangle,
 	FileCode,
 } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface CodeModalProps {
 	nodes: WorkflowNode[];
@@ -44,6 +45,7 @@ export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 	const { resolvedTheme } = useTheme();
 	const [copied, setCopied] = useState(false);
 	const [formattedCode, setFormattedCode] = useState<string | null>(null);
+	const { t } = useLanguage();
 
 	// Validate workflow
 	const validation = validateForCodeGeneration(nodes, edges);
@@ -110,7 +112,7 @@ export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 					<DialogTitle>
 						<span className="flex items-center gap-2">
 							<FileCode className="h-5 w-5" />
-							Código Cloudflare Workflow
+							{t("codeModal.title")}
 						</span>
 					</DialogTitle>
 				</DialogHeader>
@@ -121,7 +123,7 @@ export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 						<div className="flex-shrink-0 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
 							<div className="flex items-center gap-2 font-medium text-destructive">
 								<AlertTriangle className="h-4 w-4" />
-								Errores de validación
+								{t("codeModal.validationErrors")}
 							</div>
 							<ul className="mt-2 list-inside list-disc space-y-1 text-sm text-destructive/90">
 								{validation.errors.map((error, index) => (
@@ -136,7 +138,7 @@ export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 						<div className="flex-shrink-0 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
 							<div className="flex items-center gap-2 font-medium text-yellow-700 dark:text-yellow-400">
 								<AlertTriangle className="h-4 w-4" />
-								Advertencias
+								{t("codeModal.warnings")}
 							</div>
 							<ul className="mt-2 list-inside list-disc space-y-1 text-sm text-yellow-700/90 dark:text-yellow-400/90">
 								{warnings.map((warning, index) => (
@@ -185,10 +187,10 @@ export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 							<Code className="mt-0.5 h-4 w-4 flex-shrink-0" />
 							<div>
 								<p className="font-medium text-foreground">
-									Sobre Cloudflare Workflows
+									{t("codeModal.infoTitle")}
 								</p>
 								<p className="mt-1">
-									Este código está diseñado para ejecutarse como un{" "}
+									{t("codeModal.infoBody").split("Cloudflare Workflow")[0]}
 									<a
 										href="https://developers.cloudflare.com/workflows/"
 										target="_blank"
@@ -197,9 +199,7 @@ export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 									>
 										Cloudflare Workflow
 									</a>
-									. Los workflows permiten construir aplicaciones durables con
-									múltiples pasos, reintentos automáticos y persistencia de
-									estado.
+									{t("codeModal.infoBody").split("Cloudflare Workflow")[1]}
 								</p>
 							</div>
 						</div>
@@ -210,24 +210,24 @@ export function CodeModal({ nodes, edges, metadata, onClose }: CodeModalProps) {
 				<div className="flex-shrink-0 border-t px-6 py-4">
 					<div className="flex justify-end gap-2">
 						<Button variant="outline" onClick={onClose}>
-							Cerrar
+							{t("codeModal.close")}
 						</Button>
 						<Button variant="outline" onClick={handleCopy}>
 							{copied ? (
 								<>
 									<Check className="mr-2 h-4 w-4" />
-									¡Copiado!
+									{t("codeModal.copied")}
 								</>
 							) : (
 								<>
 									<Copy className="mr-2 h-4 w-4" />
-									Copiar
+									{t("codeModal.copy")}
 								</>
 							)}
 						</Button>
 						<Button onClick={handleDownload}>
 							<Download className="mr-2 h-4 w-4" />
-							Descargar .ts
+							{t("codeModal.download")}
 						</Button>
 					</div>
 				</div>

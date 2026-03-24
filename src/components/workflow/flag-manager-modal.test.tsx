@@ -3,6 +3,25 @@ import { render, screen, fireEvent, within } from "@testing-library/react";
 import { FlagManagerModal } from "./flag-manager-modal";
 import type { Flag } from "@/lib/workflow/types";
 
+vi.mock("@/components/LanguageProvider", async () => {
+	const { translations } = await import("@/lib/translations");
+	const tFn = (key: string) => {
+		const parts = key.split(".");
+		let val: unknown = translations.es;
+		for (const part of parts) {
+			if (val && typeof val === "object") {
+				val = (val as Record<string, unknown>)[part];
+			} else {
+				return key;
+			}
+		}
+		return typeof val === "string" ? val : key;
+	};
+	return {
+		useLanguage: () => ({ language: "es", setLanguage: vi.fn(), t: tFn }),
+	};
+});
+
 // Mock the flags API client
 vi.mock("@/lib/workflow-api/flags", () => ({
 	createFlag: vi.fn(),

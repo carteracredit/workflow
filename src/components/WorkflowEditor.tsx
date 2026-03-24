@@ -45,6 +45,8 @@ import {
 import { listFlags } from "@/lib/workflow-api/flags";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import type { Workflow, WorkflowFlag } from "@/lib/workflow-api/types";
+import { Monitor } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 // Legacy keys for backward compatibility (single-workflow editor mode)
 const LEGACY_STORAGE_KEY = "cartera-workflow-state";
@@ -319,6 +321,7 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 
 export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const router = useRouter();
+	const { t } = useLanguage();
 
 	// When workflowId prop is given, it is the authoritative API ID.
 	// Otherwise fall back to legacy localStorage key.
@@ -338,6 +341,19 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [isLoadingFromApi, setIsLoadingFromApi] = useState(
 		workflowId !== undefined,
 	);
+	const [isSmallScreen, setIsSmallScreen] = useState(false);
+	const [isTablet, setIsTablet] = useState(false);
+
+	useEffect(() => {
+		const checkScreenSize = () => {
+			const w = window.innerWidth;
+			setIsSmallScreen(w < 768);
+			setIsTablet(w >= 768 && w < 1024);
+		};
+		checkScreenSize();
+		window.addEventListener("resize", checkScreenSize);
+		return () => window.removeEventListener("resize", checkScreenSize);
+	}, []);
 
 	// Initial state — overridden by API load when workflowId is set
 	const [workflowState, setWorkflowState] = useState<WorkflowState>(() => {
@@ -475,7 +491,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			.catch((err) => {
 				if (cancelled) return;
 				console.error("[WorkflowEditor] Failed to load from API:", err);
-				toast.error("No se pudo cargar el workflow", {
+				toast.error(t("workflowEditor.toastLoadError"), {
 					description: extractApiErrorMessage(err),
 				});
 			})
@@ -791,13 +807,13 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			setLastValidationErrorCount(errors.length);
 			setValidationStatus(isValid ? "valid" : "invalid");
 			if (isValid) {
-				toast.success("Validación exitosa", {
-					description: "El workflow no tiene errores.",
+				toast.success(t("workflowEditor.toastValidationSuccess"), {
+					description: t("workflowEditor.toastValidationSuccessDesc"),
 				});
 			}
 			return isValid;
 		} catch (error) {
-			toast.error("Error de validación", {
+			toast.error(t("workflowEditor.toastValidationError"), {
 				description:
 					error instanceof Error
 						? error.message
@@ -837,7 +853,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		try {
 			if (workflowApiId !== null) {
 				await updateWorkflowApi(workflowApiId, payload);
-				toast.success("Workflow actualizado", {
+				toast.success(t("workflowEditor.toastWorkflowUpdated"), {
 					description: `"${payload.name}" guardado correctamente.`,
 				});
 			} else {
@@ -846,26 +862,26 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				if (typeof window !== "undefined") {
 					localStorage.setItem(WORKFLOW_API_ID_KEY, String(created.id));
 				}
-				toast.success("Workflow guardado", {
+				toast.success(t("workflowEditor.toastWorkflowSaved"), {
 					description: `"${payload.name}" creado correctamente.`,
 				});
 				router.replace(`/editor/${created.id}`);
 			}
 		} catch (error) {
 			if (error instanceof ApiError && error.status === 401) {
-				toast.error("No autorizado", {
+				toast.error(t("workflowEditor.toastUnauthorized"), {
 					description: "Tu sesión expiró. Por favor inicia sesión nuevamente.",
 				});
 			} else if (error instanceof ApiError && error.status === 403) {
-				toast.error("Acceso denegado", {
+				toast.error(t("workflowEditor.toastForbidden"), {
 					description: "Solo los administradores pueden guardar workflows.",
 				});
 			} else if (error instanceof ApiError && error.status === 409) {
-				toast.error("Nombre duplicado", {
+				toast.error(t("workflowEditor.toastDuplicateName"), {
 					description: extractApiErrorMessage(error),
 				});
 			} else {
-				toast.error("Error al guardar", {
+				toast.error(t("workflowEditor.toastSaveError"), {
 					description: extractApiErrorMessage(error),
 				});
 			}
@@ -884,9 +900,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			router.push("/editor");
 			return;
 		}
-		const confirmed = window.confirm(
-			"¿Estás seguro de que deseas eliminar el flujo actual? Esta acción no se puede deshacer.",
-		);
+		const confirmed = window.confirm(t("workflowEditor.confirmReset"));
 		if (confirmed) {
 			setWorkflowState(createEmptyWorkflowState());
 			setWorkflowApiId(null);
@@ -932,7 +946,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		if (isValid) {
 			setShowPublish(true);
 		} else {
-			toast.error("No se puede publicar", {
+			toast.error(t("workflowEditor.toastCannotPublish"), {
 				description:
 					"El workflow tiene errores de validación. Corrígelos antes de publicar.",
 			});
@@ -1083,6 +1097,24 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		return <WorkflowEditorSkeleton showBack={workflowId !== undefined} />;
 	}
 
+	if (isSmallScreen) {
+		return (
+			<div className="flex h-screen flex-col items-center justify-center gap-6 bg-background p-8 text-center">
+				<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+					<Monitor className="h-8 w-8 text-muted-foreground" />
+				</div>
+				<div className="space-y-2">
+					<h2 className="text-xl font-semibold">
+						{t("workflowEditor.smallScreenTitle")}
+					</h2>
+					<p className="max-w-xs text-sm text-muted-foreground">
+						{t("workflowEditor.smallScreenMessage")}
+					</p>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex h-screen flex-col bg-background">
 			<TopBar
@@ -1094,9 +1126,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				onLoadExample={handleLoadExample}
 				onManageFlags={() => {
 					if (!workflowApiId) {
-						toast.warning(
-							"Guarda el workflow primero antes de gestionar flags.",
-						);
+						toast.warning(t("workflowEditor.toastSaveBeforeFlags"));
 						return;
 					}
 					setShowFlagManager(true);
@@ -1189,13 +1219,28 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 							/>
 						)}
 
+						{/* Backdrop para tablet cuando el panel está abierto */}
+						{isTablet && shouldShowPropertiesOverlay && (
+							<div
+								className="absolute inset-0 z-20 bg-black/30 backdrop-blur-sm"
+								onClick={() => {
+									updateWorkflow({ selectedNodeIds: [], selectedEdgeIds: [] });
+									setShowWorkflowProperties(false);
+								}}
+							/>
+						)}
+
 						<div
 							className={`absolute inset-y-0 left-0 z-30 flex transition-opacity duration-200 ${
 								shouldShowPropertiesOverlay
 									? "pointer-events-auto opacity-100"
 									: "pointer-events-none opacity-0"
 							}`}
-							style={{ width: panelWidth }}
+							style={{
+								width: isTablet
+									? Math.min(panelWidth, window.innerWidth * 0.85)
+									: panelWidth,
+							}}
 						>
 							<PropertiesPanel
 								selectedNodes={
@@ -1230,8 +1275,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 									setShowWorkflowProperties(false)
 								}
 								position="left"
-								width={panelWidth}
-								onWidthChange={setPanelWidth}
+								width={
+									isTablet
+										? Math.min(panelWidth, window.innerWidth * 0.85)
+										: panelWidth
+								}
+								onWidthChange={isTablet ? undefined : setPanelWidth}
 							/>
 						</div>
 					</div>

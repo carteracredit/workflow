@@ -2,6 +2,25 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Palette } from "./palette";
 
+vi.mock("@/components/LanguageProvider", async () => {
+	const { translations } = await import("@/lib/translations");
+	const tFn = (key: string) => {
+		const parts = key.split(".");
+		let val: unknown = translations.es;
+		for (const part of parts) {
+			if (val && typeof val === "object") {
+				val = (val as Record<string, unknown>)[part];
+			} else {
+				return key;
+			}
+		}
+		return typeof val === "string" ? val : key;
+	};
+	return {
+		useLanguage: () => ({ language: "es", setLanguage: vi.fn(), t: tFn }),
+	};
+});
+
 describe("Palette", () => {
 	it("renders add buttons for node types", () => {
 		render(<Palette onAddNode={vi.fn()} zoom={1} pan={{ x: 0, y: 0 }} />);

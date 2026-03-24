@@ -59,6 +59,7 @@ import {
 	VariableTemplateInput,
 	VariablePicker,
 } from "@/components/workflow/variable-picker";
+import { FieldLabel } from "@/components/workflow/field-label";
 import type { TemplateSegment } from "@/components/workflow/variable-picker";
 import type { OutputSchemaProperty } from "@/lib/workflow/types";
 import {
@@ -67,6 +68,7 @@ import {
 } from "@/lib/workflow-api/forms-actions";
 import type { Form as WorkflowForm } from "@/lib/workflow-api/forms";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
+import { useLanguage } from "@/components/LanguageProvider";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -162,17 +164,6 @@ const NODES_WITH_ROLES = ["Form", "Challenge", "Message"];
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 560;
 
-const EDGE_COLORS = [
-	{ name: "Predeterminado", value: "default" },
-	{ name: "Azul", value: "rgb(59, 130, 246)" },
-	{ name: "Verde", value: "rgb(34, 197, 94)" },
-	{ name: "Rojo", value: "rgb(239, 68, 68)" },
-	{ name: "Amarillo", value: "rgb(234, 179, 8)" },
-	{ name: "Morado", value: "rgb(168, 85, 247)" },
-	{ name: "Rosa", value: "rgb(236, 72, 153)" },
-	{ name: "Naranja", value: "rgb(249, 115, 22)" },
-];
-
 const DEFAULT_STALE_TIMEOUT: StaleTimeoutConfig = {
 	value: 24,
 	unit: "hours",
@@ -182,39 +173,39 @@ const STALE_TIMEOUT_UNITS: Array<{
 	label: string;
 	value: StaleTimeoutConfig["unit"];
 }> = [
-	{ label: "Horas", value: "hours" },
-	{ label: "Días", value: "days" },
+	{ label: "hours", value: "hours" },
+	{ label: "days", value: "days" },
 ];
 
 const CHALLENGE_TYPE_OPTIONS: Array<{
 	label: string;
 	value: ChallengeType;
-	description: string;
+	descriptionKey: string;
 }> = [
 	{
-		label: "Aceptación",
+		label: "acceptance",
 		value: "acceptance",
-		description: "El usuario debe aceptar términos, condiciones o formularios.",
+		descriptionKey: "challengeAcceptanceDesc",
 	},
 	{
-		label: "Firma",
+		label: "signature",
 		value: "signature",
-		description: "El usuario debe firmar documentos o acuerdos.",
+		descriptionKey: "challengeSignatureDesc",
 	},
 ];
 
 const CHALLENGE_DELIVERY_METHODS = [
-	{ label: "Ninguno", value: "none" },
-	{ label: "SMS", value: "sms" },
-	{ label: "Email", value: "email" },
-	{ label: "Ambos", value: "both" },
+	{ labelKey: "challengeDeliveryNone", value: "none" },
+	{ labelKey: "challengeDeliverySms", value: "sms" },
+	{ labelKey: "challengeDeliveryEmail", value: "email" },
+	{ labelKey: "challengeDeliveryBoth", value: "both" },
 ] as const;
 
 const CHALLENGE_TIMEOUT_UNITS = [
-	{ label: "Segundos", value: "seconds" },
-	{ label: "Minutos", value: "minutes" },
-	{ label: "Horas", value: "hours" },
-	{ label: "Días", value: "days" },
+	{ labelKey: "challengeTimeoutSeconds", value: "seconds" },
+	{ labelKey: "challengeTimeoutMinutes", value: "minutes" },
+	{ labelKey: "challengeTimeoutHours", value: "hours" },
+	{ labelKey: "challengeTimeoutDays", value: "days" },
 ] as const;
 
 export function PropertiesPanel({
@@ -235,6 +226,7 @@ export function PropertiesPanel({
 	width,
 	onWidthChange,
 }: PropertiesPanelProps) {
+	const { t } = useLanguage();
 	// For backward compatibility and single selection UI, use first selected item
 	const selectedNode =
 		selectedNodes.length === 1 ? selectedNodes[0] : undefined;
@@ -364,7 +356,7 @@ export function PropertiesPanel({
 				});
 			}
 		} catch {
-			setApiMockError("El JSON de la respuesta mock no es válido");
+			setApiMockError(t("propertiesPanel.apiInvalidMockJson"));
 			setApiMockSimulated(false);
 		}
 	}, [apiMockResponse, selectedNode, onUpdateNode]);
@@ -598,17 +590,36 @@ export function PropertiesPanel({
 		selectedNodes.length === 0 &&
 		selectedEdges.length === 0
 	) {
+		const edgeColors = [
+			{ name: t("propertiesPanel.edgeColorDefault"), value: "default" },
+			{ name: t("propertiesPanel.edgeColorBlue"), value: "rgb(59, 130, 246)" },
+			{ name: t("propertiesPanel.edgeColorGreen"), value: "rgb(34, 197, 94)" },
+			{ name: t("propertiesPanel.edgeColorRed"), value: "rgb(239, 68, 68)" },
+			{ name: t("propertiesPanel.edgeColorYellow"), value: "rgb(234, 179, 8)" },
+			{
+				name: t("propertiesPanel.edgeColorPurple"),
+				value: "rgb(168, 85, 247)",
+			},
+			{ name: t("propertiesPanel.edgeColorPink"), value: "rgb(236, 72, 153)" },
+			{
+				name: t("propertiesPanel.edgeColorOrange"),
+				value: "rgb(249, 115, 22)",
+			},
+		];
+		void edgeColors;
 		return (
 			<div {...panelContainerProps}>
 				{resizeHandle}
 				<div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
-					<h2 className="font-semibold">Propiedades del Flujo</h2>
+					<h2 className="font-semibold">
+						{t("propertiesPanel.flowPropsTitle")}
+					</h2>
 					<Button
 						variant="ghost"
 						size="icon"
 						className="h-6 w-6"
 						onClick={onCloseWorkflowProperties}
-						title="Cerrar"
+						title={t("propertiesPanel.closeTitle")}
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -630,25 +641,29 @@ export function PropertiesPanel({
 					<div className="space-y-4 p-4">
 						{/* Workflow Name */}
 						<div className="space-y-2">
-							<Label htmlFor="workflow-name">Nombre del Flujo</Label>
+							<Label htmlFor="workflow-name">
+								{t("propertiesPanel.workflowNameLabel")}
+							</Label>
 							<Input
 								id="workflow-name"
 								value={workflowMetadata.name}
 								onChange={(e) => onUpdateMetadata({ name: e.target.value })}
-								placeholder="Mi Flujo de Crédito"
+								placeholder={t("propertiesPanel.workflowNamePlaceholder")}
 							/>
 						</div>
 
 						{/* Workflow Description */}
 						<div className="space-y-2">
-							<Label htmlFor="workflow-description">Descripción</Label>
+							<Label htmlFor="workflow-description">
+								{t("propertiesPanel.workflowDescLabel")}
+							</Label>
 							<Textarea
 								id="workflow-description"
 								value={workflowMetadata.description}
 								onChange={(e) =>
 									onUpdateMetadata({ description: e.target.value })
 								}
-								placeholder="Descripción del flujo de trabajo..."
+								placeholder={t("propertiesPanel.workflowDescPlaceholder")}
 								rows={4}
 							/>
 						</div>
@@ -659,14 +674,17 @@ export function PropertiesPanel({
 								htmlFor="workflow-version"
 								className="text-muted-foreground"
 							>
-								Versión{" "}
+								{t("propertiesPanel.workflowVersionLabel")}{" "}
 								<span className="text-xs font-normal">
-									(gestionada automáticamente)
+									{t("propertiesPanel.workflowVersionAuto")}
 								</span>
 							</Label>
 							<Input
 								id="workflow-version"
-								value={workflowMetadata.version || "Sin publicar"}
+								value={
+									workflowMetadata.version ||
+									t("propertiesPanel.workflowVersionUnpublished")
+								}
 								readOnly
 								disabled
 								className="cursor-default opacity-60"
@@ -675,19 +693,21 @@ export function PropertiesPanel({
 
 						{/* Author */}
 						<div className="space-y-2">
-							<Label htmlFor="workflow-author">Autor</Label>
+							<Label htmlFor="workflow-author">
+								{t("propertiesPanel.workflowAuthorLabel")}
+							</Label>
 							<Input
 								id="workflow-author"
 								value={workflowMetadata.author}
 								onChange={(e) => onUpdateMetadata({ author: e.target.value })}
-								placeholder="Nombre del autor"
+								placeholder={t("propertiesPanel.workflowAuthorPlaceholder")}
 							/>
 						</div>
 
 						{/* Tags */}
 						<div className="space-y-2">
 							<Label htmlFor="workflow-tags">
-								Etiquetas (separadas por comas)
+								{t("propertiesPanel.workflowTagsLabel")}
 							</Label>
 							<Input
 								id="workflow-tags"
@@ -696,27 +716,31 @@ export function PropertiesPanel({
 									onUpdateMetadata({
 										tags: e.target.value
 											.split(",")
-											.map((t) => t.trim())
+											.map((tag) => tag.trim())
 											.filter(Boolean),
 									})
 								}
-								placeholder="crédito, aprobación, automático"
+								placeholder={t("propertiesPanel.workflowTagsPlaceholder")}
 							/>
 						</div>
 
 						{/* Timestamps */}
 						<div className="space-y-2">
-							<Label>Información de Fechas</Label>
+							<Label>{t("propertiesPanel.workflowDatesLabel")}</Label>
 							<div className="rounded-md bg-muted p-3 text-xs">
 								<div className="space-y-1">
 									<div>
-										<span className="font-medium">Creado:</span>{" "}
+										<span className="font-medium">
+											{t("propertiesPanel.workflowCreated")}:
+										</span>{" "}
 										{new Date(workflowMetadata.createdAt).toLocaleString(
 											"es-MX",
 										)}
 									</div>
 									<div>
-										<span className="font-medium">Actualizado:</span>{" "}
+										<span className="font-medium">
+											{t("propertiesPanel.workflowUpdated")}:
+										</span>{" "}
 										{new Date(workflowMetadata.updatedAt).toLocaleString(
 											"es-MX",
 										)}
@@ -727,12 +751,10 @@ export function PropertiesPanel({
 
 						{/* Help Text */}
 						<div className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
-							<p className="font-medium">Información:</p>
-							<p className="mt-1">
-								Estas propiedades describen el flujo de trabajo completo.
-								Selecciona un nodo o flecha para editar sus propiedades
-								específicas.
+							<p className="font-medium">
+								{t("propertiesPanel.workflowInfoTitle")}:
 							</p>
+							<p className="mt-1">{t("propertiesPanel.workflowInfoBody")}</p>
 						</div>
 					</div>
 				</ScrollArea>
@@ -746,18 +768,38 @@ export function PropertiesPanel({
 	}
 
 	if (selectedEdge) {
+		const edgeColors = [
+			{ name: t("propertiesPanel.edgeColorDefault"), value: "default" },
+			{ name: t("propertiesPanel.edgeColorBlue"), value: "rgb(59, 130, 246)" },
+			{ name: t("propertiesPanel.edgeColorGreen"), value: "rgb(34, 197, 94)" },
+			{ name: t("propertiesPanel.edgeColorRed"), value: "rgb(239, 68, 68)" },
+			{ name: t("propertiesPanel.edgeColorYellow"), value: "rgb(234, 179, 8)" },
+			{
+				name: t("propertiesPanel.edgeColorPurple"),
+				value: "rgb(168, 85, 247)",
+			},
+			{ name: t("propertiesPanel.edgeColorPink"), value: "rgb(236, 72, 153)" },
+			{
+				name: t("propertiesPanel.edgeColorOrange"),
+				value: "rgb(249, 115, 22)",
+			},
+		];
 		return (
 			<div {...panelContainerProps}>
 				{resizeHandle}
 				<div className="border-b border-border p-4 flex-shrink-0">
-					<h2 className="font-semibold">Propiedades de Flecha</h2>
+					<h2 className="font-semibold">
+						{t("propertiesPanel.edgePropsTitle")}
+					</h2>
 				</div>
 
 				<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 					<div className="space-y-4 p-4">
 						{/* Edge Label */}
 						<div className="space-y-2">
-							<Label htmlFor="edge-label">Etiqueta</Label>
+							<Label htmlFor="edge-label">
+								{t("propertiesPanel.edgeLabelLabel")}
+							</Label>
 							<Input
 								id="edge-label"
 								value={selectedEdge.label || ""}
@@ -766,13 +808,15 @@ export function PropertiesPanel({
 										label: e.target.value || null,
 									})
 								}
-								placeholder="Etiqueta de la flecha"
+								placeholder={t("propertiesPanel.edgeLabelPlaceholder")}
 							/>
 						</div>
 
 						{/* Edge Color */}
 						<div className="space-y-2">
-							<Label htmlFor="edge-color">Color</Label>
+							<Label htmlFor="edge-color">
+								{t("propertiesPanel.edgeColorLabel")}
+							</Label>
 							<Select
 								value={selectedEdge.color || "default"}
 								onValueChange={(value) =>
@@ -782,10 +826,12 @@ export function PropertiesPanel({
 								}
 							>
 								<SelectTrigger id="edge-color">
-									<SelectValue placeholder="Seleccionar color" />
+									<SelectValue
+										placeholder={t("propertiesPanel.edgeColorPlaceholder")}
+									/>
 								</SelectTrigger>
 								<SelectContent>
-									{EDGE_COLORS.map((color) => (
+									{edgeColors.map((color) => (
 										<SelectItem key={color.value} value={color.value}>
 											<div className="flex items-center gap-2">
 												{color.value !== "default" && (
@@ -805,7 +851,10 @@ export function PropertiesPanel({
 						{/* Edge Thickness */}
 						<div className="space-y-2">
 							<Label htmlFor="edge-thickness">
-								Grosor: {selectedEdge.thickness || 2}px
+								{t("propertiesPanel.edgeThicknessLabel").replace(
+									"{n}",
+									String(selectedEdge.thickness || 2),
+								)}
 							</Label>
 							<Slider
 								id="edge-thickness"
@@ -822,7 +871,7 @@ export function PropertiesPanel({
 
 						{/* Visual Preview */}
 						<div className="space-y-2">
-							<Label>Vista Previa</Label>
+							<Label>{t("propertiesPanel.edgePreviewLabel")}</Label>
 							<div className="flex h-20 items-center justify-center rounded-md border bg-muted/50 p-4">
 								<svg width="200" height="40" className="overflow-visible">
 									<defs>
@@ -864,11 +913,13 @@ export function PropertiesPanel({
 
 						{/* Help Text */}
 						<div className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
-							<p className="font-medium">Atajos:</p>
+							<p className="font-medium">
+								{t("propertiesPanel.edgeShortcutsTitle")}
+							</p>
 							<ul className="mt-1 space-y-1">
-								<li>• Click: Seleccionar flecha</li>
-								<li>• Shift + Click: Eliminar flecha</li>
-								<li>• Delete: Eliminar seleccionada</li>
+								<li>{t("propertiesPanel.edgeShortcutClick")}</li>
+								<li>{t("propertiesPanel.edgeShortcutShiftClick")}</li>
+								<li>{t("propertiesPanel.edgeShortcutDelete")}</li>
 							</ul>
 						</div>
 					</div>
@@ -914,7 +965,6 @@ export function PropertiesPanel({
 		: null;
 	const challengeTimeout =
 		challengeConfig?.challengeTimeout ?? DEFAULT_CHALLENGE_TIMEOUT;
-	// Asegurar que selectedChallengeType siempre sea seguro, incluso si el tipo no existe
 	const selectedChallengeType = challengeConfig
 		? (CHALLENGE_TYPE_OPTIONS.find(
 				(option) => option.value === challengeConfig.challengeType,
@@ -1087,35 +1137,37 @@ export function PropertiesPanel({
 		<div {...panelContainerProps}>
 			{resizeHandle}
 			<div className="border-b border-border p-4 flex-shrink-0">
-				<h2 className="font-semibold">Propiedades de Nodo</h2>
+				<h2 className="font-semibold">{t("propertiesPanel.nodePropsTitle")}</h2>
 			</div>
 
 			<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 				<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
 					{/* Title */}
 					<div className="space-y-2 w-full">
-						<Label htmlFor="title">Título</Label>
+						<Label htmlFor="title">{t("propertiesPanel.nodeTitleLabel")}</Label>
 						<Input
 							id="title"
 							value={selectedNode.title}
 							onChange={(e) =>
 								onUpdateNode(selectedNode.id, { title: e.target.value })
 							}
-							placeholder="Título del nodo"
+							placeholder={t("propertiesPanel.nodeTitlePlaceholder")}
 							className="w-full"
 						/>
 					</div>
 
 					{/* Description */}
 					<div className="space-y-2 w-full">
-						<Label htmlFor="description">Descripción</Label>
+						<Label htmlFor="description">
+							{t("propertiesPanel.nodeDescLabel")}
+						</Label>
 						<Textarea
 							id="description"
 							value={selectedNode.description}
 							onChange={(e) =>
 								onUpdateNode(selectedNode.id, { description: e.target.value })
 							}
-							placeholder="Descripción del nodo"
+							placeholder={t("propertiesPanel.nodeDescPlaceholder")}
 							rows={3}
 							className="w-full"
 						/>
@@ -1125,11 +1177,12 @@ export function PropertiesPanel({
 						<div className="space-y-3 rounded-md border border-border/60 p-3">
 							<div className="flex items-center justify-between gap-4">
 								<div>
-									<Label htmlFor="stale-toggle">Timeout Stale</Label>
-									<p className="text-xs text-muted-foreground">
-										Activa un recordatorio para nodos que llevan mucho tiempo
-										sin resolverse.
-									</p>
+									<FieldLabel
+										htmlFor="stale-toggle"
+										description={t("propertiesPanel.staleTimeoutDesc")}
+									>
+										{t("propertiesPanel.staleTimeoutLabel")}
+									</FieldLabel>
 								</div>
 								<Switch
 									id="stale-toggle"
@@ -1141,7 +1194,9 @@ export function PropertiesPanel({
 							{selectedNode.staleTimeout && (
 								<div className="grid gap-3 md:grid-cols-2">
 									<div className="space-y-1">
-										<Label htmlFor="stale-duration">Duración (valor)</Label>
+										<Label htmlFor="stale-duration">
+											{t("propertiesPanel.staleDurationLabel")}
+										</Label>
 										<Input
 											id="stale-duration"
 											type="number"
@@ -1156,7 +1211,9 @@ export function PropertiesPanel({
 										/>
 									</div>
 									<div className="space-y-1">
-										<Label htmlFor="stale-unit">Unidad</Label>
+										<Label htmlFor="stale-unit">
+											{t("propertiesPanel.staleUnitLabel")}
+										</Label>
 										<Select
 											value={selectedNode.staleTimeout.unit}
 											onValueChange={(value) =>
@@ -1167,12 +1224,18 @@ export function PropertiesPanel({
 											data-testid="stale-unit-select"
 										>
 											<SelectTrigger id="stale-unit">
-												<SelectValue placeholder="Selecciona unidad" />
+												<SelectValue
+													placeholder={t(
+														"propertiesPanel.staleUnitPlaceholder",
+													)}
+												/>
 											</SelectTrigger>
 											<SelectContent>
 												{STALE_TIMEOUT_UNITS.map((option) => (
 													<SelectItem key={option.value} value={option.value}>
-														{option.label}
+														{option.value === "hours"
+															? t("propertiesPanel.staleUnitHours")
+															: t("propertiesPanel.staleUnitDays")}
 													</SelectItem>
 												))}
 											</SelectContent>
@@ -1185,7 +1248,7 @@ export function PropertiesPanel({
 
 					{NODES_WITH_ROLES.includes(selectedNode.type) && (
 						<div className="space-y-2">
-							<Label>Roles Responsables</Label>
+							<Label>{t("propertiesPanel.rolesLabel")}</Label>
 							<div className="space-y-2">
 								{ROLE_OPTIONS.map((role) => (
 									<div key={role} className="flex items-center space-x-2">
@@ -1213,7 +1276,7 @@ export function PropertiesPanel({
 								selectedNode.config.outputSchema as OutputSchema | undefined
 							}
 							onChange={handleUpdateOutputSchema}
-							label="Esquema de Entrada del Workflow"
+							label={t("propertiesPanel.startSchemaLabel")}
 						/>
 					)}
 
@@ -1221,7 +1284,9 @@ export function PropertiesPanel({
 					{selectedNode.type === "Form" && (
 						<div className="space-y-3">
 							<div className="space-y-2">
-								<Label htmlFor="form-select">Formulario</Label>
+								<Label htmlFor="form-select">
+									{t("propertiesPanel.formSelectLabel")}
+								</Label>
 								<Select
 									value={(selectedNode.config.formId as string) || ""}
 									onValueChange={async (value) => {
@@ -1232,12 +1297,10 @@ export function PropertiesPanel({
 												formVersion: undefined,
 											},
 										};
-										// Fetch full form to get versions and auto-select latest
 										try {
 											setFormVersionsLoading(true);
 											const fullForm = await getFormAction(value);
 											setSelectedFormFull(fullForm);
-											// Auto-select the highest published version
 											const latestVersion =
 												fullForm.versions.length > 0
 													? fullForm.versions.reduce((a, b) =>
@@ -1267,15 +1330,15 @@ export function PropertiesPanel({
 										<SelectValue
 											placeholder={
 												formsLoading
-													? "Cargando formularios..."
-													: "Seleccionar formulario"
+													? t("propertiesPanel.formSelectLoadingPlaceholder")
+													: t("propertiesPanel.formSelectPlaceholder")
 											}
 										/>
 									</SelectTrigger>
 									<SelectContent>
 										{availableForms.length === 0 && !formsLoading ? (
 											<SelectItem value="__empty__" disabled>
-												No hay formularios publicados
+												{t("propertiesPanel.formNoForms")}
 											</SelectItem>
 										) : (
 											availableForms.map((form) => (
@@ -1288,16 +1351,17 @@ export function PropertiesPanel({
 								</Select>
 								{availableForms.length === 0 && !formsLoading && (
 									<p className="text-xs text-muted-foreground">
-										Publica un formulario en la app de Formularios para poder
-										seleccionarlo aquí.
+										{t("propertiesPanel.formNoFormsNote")}
 									</p>
 								)}
 							</div>
-							{/* Version selector — shown once a form is selected and has versions */}
+							{/* Version selector */}
 							{!!(selectedNode.config.formId as string | undefined) &&
 								(selectedFormFull?.versions?.length ?? 0) > 0 && (
 									<div className="space-y-2">
-										<Label htmlFor="form-version-select">Versión</Label>
+										<Label htmlFor="form-version-select">
+											{t("propertiesPanel.formVersionLabel")}
+										</Label>
 										<Select
 											value={
 												(
@@ -1332,8 +1396,10 @@ export function PropertiesPanel({
 												<SelectValue
 													placeholder={
 														formVersionsLoading
-															? "Cargando versiones..."
-															: "Seleccionar versión"
+															? t(
+																	"propertiesPanel.formVersionLoadingPlaceholder",
+																)
+															: t("propertiesPanel.formVersionPlaceholder")
 													}
 												/>
 											</SelectTrigger>
@@ -1347,7 +1413,7 @@ export function PropertiesPanel({
 															{v.version ===
 																selectedFormFull.currentVersion && (
 																<span className="ml-2 text-xs text-muted-foreground">
-																	(última)
+																	{t("propertiesPanel.formVersionLatest")}
 																</span>
 															)}
 														</SelectItem>
@@ -1361,14 +1427,16 @@ export function PropertiesPanel({
 									selectedNode.config.outputSchema as OutputSchema | undefined
 								}
 								onChange={handleUpdateOutputSchema}
-								label="Esquema de Salida"
+								label={t("propertiesPanel.outputSchemaLabel")}
 							/>
 						</div>
 					)}
 
 					{selectedNode.type === "Decision" && (
 						<div className="space-y-2">
-							<Label htmlFor="condition">Condición</Label>
+							<Label htmlFor="condition">
+								{t("propertiesPanel.conditionLabel")}
+							</Label>
 							<Textarea
 								id="condition"
 								ref={conditionTextareaRef}
@@ -1381,7 +1449,7 @@ export function PropertiesPanel({
 										},
 									})
 								}
-								placeholder="Ej: creditScore > 700"
+								placeholder={t("propertiesPanel.conditionPlaceholder")}
 								rows={3}
 							/>
 							<div className="rounded-md border border-border/60 overflow-hidden">
@@ -1392,7 +1460,9 @@ export function PropertiesPanel({
 									}
 									className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
 								>
-									<span className="font-medium">Variables disponibles</span>
+									<span className="font-medium">
+										{t("propertiesPanel.availableVarsLabel")}
+									</span>
 									<span>{showDecisionVarPicker ? "▲" : "▼"}</span>
 								</button>
 								{showDecisionVarPicker &&
@@ -1410,9 +1480,7 @@ export function PropertiesPanel({
 										/>
 									) : (
 										<div className="px-3 py-2 text-xs text-muted-foreground">
-											No hay variables disponibles todavia. Define un esquema de
-											salida en nodos anteriores (o en Inicio) para usarlas en
-											la condicion.
+											{t("propertiesPanel.noVarsAvailable")}
 										</div>
 									))}
 							</div>
@@ -1421,7 +1489,9 @@ export function PropertiesPanel({
 
 					{selectedNode.type === "Transform" && (
 						<div className="space-y-2">
-							<Label htmlFor="transform-code">Código TypeScript</Label>
+							<Label htmlFor="transform-code">
+								{t("propertiesPanel.transformCodeLabel")}
+							</Label>
 							<Textarea
 								id="transform-code"
 								ref={transformTextareaRef}
@@ -1431,7 +1501,7 @@ export function PropertiesPanel({
 										config: { ...selectedNode.config, code: e.target.value },
 									});
 								}}
-								placeholder="// Transformar datos aquí"
+								placeholder={t("propertiesPanel.transformCodePlaceholder")}
 								rows={6}
 								className="font-mono text-xs"
 							/>
@@ -1443,7 +1513,9 @@ export function PropertiesPanel({
 									}
 									className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
 								>
-									<span className="font-medium">Variables disponibles</span>
+									<span className="font-medium">
+										{t("propertiesPanel.availableVarsLabel")}
+									</span>
 									<span>{showTransformVarPicker ? "▲" : "▼"}</span>
 								</button>
 								{showTransformVarPicker &&
@@ -1461,9 +1533,7 @@ export function PropertiesPanel({
 										/>
 									) : (
 										<div className="px-3 py-2 text-xs text-muted-foreground">
-											No hay variables disponibles todavia. Define un esquema de
-											salida en nodos anteriores (o en Inicio) para usarlas en
-											transformaciones.
+											{t("propertiesPanel.noVarsAvailable")}
 										</div>
 									))}
 							</div>
@@ -1499,10 +1569,10 @@ export function PropertiesPanel({
 												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
 											/>
 										</svg>
-										Validando...
+										{t("propertiesPanel.validatingCode")}
 									</span>
 								) : (
-									"Validar Código"
+									t("propertiesPanel.validateCodeBtn")
 								)}
 							</Button>
 							{transformValidationResult !== null && (
@@ -1516,11 +1586,13 @@ export function PropertiesPanel({
 								>
 									{transformValidationResult.valid ? (
 										<span className="font-medium">
-											✓ Código válido — sin errores de sintaxis
+											{t("propertiesPanel.codeValid")}
 										</span>
 									) : (
 										<>
-											<p className="font-medium">✗ Error de sintaxis</p>
+											<p className="font-medium">
+												{t("propertiesPanel.codeSyntaxError")}
+											</p>
 											<p className="mt-1">{transformValidationResult.error}</p>
 										</>
 									)}
@@ -1531,7 +1603,7 @@ export function PropertiesPanel({
 									selectedNode.config.outputSchema as OutputSchema | undefined
 								}
 								onChange={handleUpdateOutputSchema}
-								label="Esquema de Salida"
+								label={t("propertiesPanel.outputSchemaLabel")}
 							/>
 						</div>
 					)}
@@ -1554,7 +1626,6 @@ export function PropertiesPanel({
 							);
 							const hasCheckpoint = allCheckpoints.length > 0;
 							const hasMultipleCheckpoints = allCheckpoints.length > 1;
-							// Usar el checkpoint seleccionado en config o el primero disponible
 							const selectedCheckpointId =
 								(failureHandling.checkpointId as string) ||
 								allCheckpoints[0] ||
@@ -1562,9 +1633,10 @@ export function PropertiesPanel({
 
 							return (
 								<div className="space-y-4">
-									{/* Configuración básica de API */}
 									<div className="space-y-2">
-										<Label htmlFor="api-method">Método</Label>
+										<Label htmlFor="api-method">
+											{t("propertiesPanel.apiMethodLabel")}
+										</Label>
 										<Select
 											value={(selectedNode.config.method as string) || "GET"}
 											onValueChange={(value) =>
@@ -1587,7 +1659,9 @@ export function PropertiesPanel({
 									</div>
 
 									<div className="space-y-2">
-										<Label htmlFor="api-url">URL</Label>
+										<Label htmlFor="api-url">
+											{t("propertiesPanel.apiUrlLabel")}
+										</Label>
 										<VariableTemplateInput
 											nodes={upstreamVariableNodes}
 											value={
@@ -1606,14 +1680,14 @@ export function PropertiesPanel({
 										className="w-full"
 										onClick={handleOpenApiMock}
 									>
-										Probar con Mock
+										{t("propertiesPanel.apiTestMockBtn")}
 									</Button>
 
 									{showApiMock && (
 										<div className="rounded-md border border-border bg-muted/40 p-3 space-y-3">
 											<div className="space-y-1">
 												<p className="text-xs font-medium">
-													Preview del Request
+													{t("propertiesPanel.apiRequestPreview")}
 												</p>
 												<div className="rounded-md bg-muted px-3 py-2 font-mono text-xs">
 													<span className="text-blue-400">
@@ -1628,7 +1702,7 @@ export function PropertiesPanel({
 
 											<div className="space-y-1">
 												<label className="text-xs font-medium">
-													Respuesta Mock (JSON)
+													{t("propertiesPanel.apiMockResponseLabel")}
 												</label>
 												<Textarea
 													value={apiMockResponse}
@@ -1639,7 +1713,9 @@ export function PropertiesPanel({
 													}}
 													rows={4}
 													className="font-mono text-xs resize-none"
-													placeholder='{"success": true}'
+													placeholder={t(
+														"propertiesPanel.apiMockResponsePlaceholder",
+													)}
 												/>
 											</div>
 
@@ -1652,10 +1728,10 @@ export function PropertiesPanel({
 											{apiMockSimulated && !apiMockError && (
 												<div className="rounded-md bg-emerald-500/15 p-2">
 													<p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-														✓ Simulación exitosa
+														{t("propertiesPanel.apiSimSuccessTitle")}
 													</p>
 													<p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-														Respuesta mock guardada en la configuración
+														{t("propertiesPanel.apiSimSuccessDesc")}
 													</p>
 												</div>
 											)}
@@ -1670,37 +1746,35 @@ export function PropertiesPanel({
 														setApiMockSimulated(false);
 													}}
 												>
-													Cerrar
+													{t("propertiesPanel.apiMockClose")}
 												</Button>
 												<Button
 													size="sm"
 													className="flex-1"
 													onClick={handleSimulateMock}
 												>
-													Simular respuesta
+													{t("propertiesPanel.apiMockSimulate")}
 												</Button>
 											</div>
 										</div>
 									)}
 
-									{/* Separador */}
 									<div className="border-t border-border pt-4">
-										<h3 className="mb-3 font-semibold">Manejo de Fallos</h3>
+										<h3 className="mb-3 font-semibold">
+											{t("propertiesPanel.apiFailureTitle")}
+										</h3>
 
-										{/* Estrategia ante fallo */}
 										<div className="space-y-2">
 											<Label htmlFor="api-on-failure">
-												Si la llamada falla:
+												{t("propertiesPanel.apiOnFailureLabel")}
 											</Label>
 											<Select
 												value={failureHandling.onFailure}
 												onValueChange={(value) => {
-													// Buscar TODOS los edges salientes del nodo
 													const outgoingEdges = edges.filter(
 														(e) => e.from === selectedNode.id,
 													);
 
-													// Si cambia a stop, eliminar TODOS los edges salientes PRIMERO (será terminal)
 													if (value === "stop") {
 														outgoingEdges.forEach((edge) =>
 															onDeleteEdge(edge.id),
@@ -1711,16 +1785,13 @@ export function PropertiesPanel({
 																failureHandling: {
 																	...failureHandling,
 																	onFailure: value,
-																	checkpointId: undefined, // Limpiar checkpointId si existe
+																	checkpointId: undefined,
 																},
 															},
 														});
 														return;
 													}
 
-													// Si cambia a return-to-checkpoint, guardar el checkpoint ID en config (sin crear edge visible)
-													// NOTA: No eliminamos edges salientes porque el flujo normal de éxito debe continuar
-													// Solo en caso de fallo regresará al checkpoint
 													if (
 														value === "return-to-checkpoint" &&
 														hasCheckpoint
@@ -1732,14 +1803,13 @@ export function PropertiesPanel({
 																	...failureHandling,
 																	onFailure: value,
 																	checkpointId:
-																		selectedCheckpointId || allCheckpoints[0], // Guardar referencia al checkpoint
+																		selectedCheckpointId || allCheckpoints[0],
 																},
 															},
 														});
 														return;
 													}
 
-													// Si cambia de return-to-checkpoint a otra opción, limpiar checkpointId
 													if (
 														failureHandling.onFailure ===
 															"return-to-checkpoint" &&
@@ -1758,7 +1828,6 @@ export function PropertiesPanel({
 														return;
 													}
 
-													// Para cualquier otra opción (continue, retry)
 													onUpdateNode(selectedNode.id, {
 														config: {
 															...selectedNode.config,
@@ -1775,40 +1844,42 @@ export function PropertiesPanel({
 												</SelectTrigger>
 												<SelectContent>
 													<SelectItem value="stop">
-														❌ Detener Workflow
+														{t("propertiesPanel.apiOnFailureStop")}
 													</SelectItem>
 													<SelectItem value="continue">
-														⚠️ Continuar (ignorar error)
+														{t("propertiesPanel.apiOnFailureContinue")}
 													</SelectItem>
 													<SelectItem value="retry">
-														🔄 Reintentar en este nodo
+														{t("propertiesPanel.apiOnFailureRetry")}
 													</SelectItem>
 													<SelectItem
 														value="return-to-checkpoint"
 														disabled={!hasCheckpoint}
 													>
-														⏮️ Regresar a Checkpoint
+														{t("propertiesPanel.apiOnFailureCheckpoint")}
 													</SelectItem>
 												</SelectContent>
 											</Select>
 											<p className="text-xs text-muted-foreground">
 												{failureHandling.onFailure === "stop" &&
-													"El workflow se detendrá inmediatamente con error"}
+													t("propertiesPanel.apiOnFailureDescStop")}
 												{failureHandling.onFailure === "continue" &&
-													"El workflow continuará con datos vacíos o error"}
+													t("propertiesPanel.apiOnFailureDescContinue")}
 												{failureHandling.onFailure === "retry" &&
-													"Se reintentará la llamada en el mismo nodo"}
+													t("propertiesPanel.apiOnFailureDescRetry")}
 												{failureHandling.onFailure === "return-to-checkpoint" &&
-													"Regresará al checkpoint anterior más próximo"}
+													t("propertiesPanel.apiOnFailureDescCheckpoint")}
 											</p>
 										</div>
 
-										{/* Reintentos - Solo para retry */}
 										{failureHandling.onFailure === "retry" && (
 											<div className="mt-3 space-y-2">
-												<Label htmlFor="api-max-retries">
-													Número de Reintentos
-												</Label>
+												<FieldLabel
+													htmlFor="api-max-retries"
+													description={t("propertiesPanel.apiRetriesDesc")}
+												>
+													{t("propertiesPanel.apiRetriesLabel")}
+												</FieldLabel>
 												<Input
 													id="api-max-retries"
 													type="number"
@@ -1817,19 +1888,14 @@ export function PropertiesPanel({
 													value={apiMaxRetriesInput}
 													onChange={(e) => {
 														const inputValue = e.target.value;
-														// Permitir que el usuario borre el valor temporalmente
 														setApiMaxRetriesInput(inputValue);
 
-														// Si el campo está vacío, no actualizar el estado del nodo
 														if (inputValue === "") {
 															return;
 														}
 
 														const parsedValue = Number.parseInt(inputValue, 10);
-														// Solo aceptar valores válidos entre 1 y 2
 														if (!Number.isNaN(parsedValue)) {
-															// Si el valor es menor a 1, establecer 1
-															// Si el valor es mayor a 2, establecer 2
 															const value = Math.min(
 																2,
 																Math.max(1, parsedValue),
@@ -1846,10 +1912,8 @@ export function PropertiesPanel({
 														}
 													}}
 													onBlur={(e) => {
-														// Cuando pierde el foco, asegurar que tenga un valor válido (1 o 2)
 														const inputValue = e.target.value;
 														if (inputValue === "") {
-															// Si está vacío, establecer 1
 															setApiMaxRetriesInput("1");
 															onUpdateNode(selectedNode.id, {
 																config: {
@@ -1868,7 +1932,6 @@ export function PropertiesPanel({
 															parsedValue < 1 ||
 															parsedValue > 2
 														) {
-															// Si es inválido, establecer 1
 															setApiMaxRetriesInput("1");
 															onUpdateNode(selectedNode.id, {
 																config: {
@@ -1880,23 +1943,20 @@ export function PropertiesPanel({
 																},
 															});
 														} else {
-															// Si es válido, asegurar que el estado local esté sincronizado
 															setApiMaxRetriesInput(String(parsedValue));
 														}
 													}}
 												/>
-												<p className="text-xs text-muted-foreground">
-													Máximo 2 reintentos. Después de agotarlos, el workflow
-													se detendrá.
-												</p>
 											</div>
 										)}
 
-										{/* Estrategia de caché */}
 										<div className="mt-3 space-y-2">
-											<Label htmlFor="api-cache-strategy">
-												Estrategia de Ejecución
-											</Label>
+											<FieldLabel
+												htmlFor="api-cache-strategy"
+												description={t("propertiesPanel.apiCacheStrategyDesc")}
+											>
+												{t("propertiesPanel.apiCacheStrategyLabel")}
+											</FieldLabel>
 											<Select
 												value={failureHandling.cacheStrategy}
 												onValueChange={(value) =>
@@ -1916,31 +1976,25 @@ export function PropertiesPanel({
 												</SelectTrigger>
 												<SelectContent>
 													<SelectItem value="always-execute">
-														Siempre Ejecutar
+														{t("propertiesPanel.apiCacheAlwaysExecute")}
 													</SelectItem>
 													<SelectItem value="cache-until-checkpoint-reset">
-														Cachear hasta reinicio de checkpoint
+														{t("propertiesPanel.apiCacheUntilCheckpoint")}
 													</SelectItem>
 													<SelectItem value="cache-until-workflow-end">
-														Cachear para todo el workflow
+														{t("propertiesPanel.apiCacheUntilWorkflowEnd")}
 													</SelectItem>
 												</SelectContent>
 											</Select>
-											<p className="text-xs text-muted-foreground">
-												{failureHandling.cacheStrategy === "always-execute" &&
-													"Se ejecutará cada vez que el flujo pase por este nodo"}
-												{failureHandling.cacheStrategy ===
-													"cache-until-checkpoint-reset" &&
-													"Se ejecutará solo una vez por ciclo de checkpoint"}
-												{failureHandling.cacheStrategy ===
-													"cache-until-workflow-end" &&
-													"Se ejecutará solo una vez en todo el workflow"}
-											</p>
 										</div>
 
-										{/* Timeout */}
 										<div className="mt-3 space-y-2">
-											<Label htmlFor="api-timeout">Timeout (segundos)</Label>
+											<FieldLabel
+												htmlFor="api-timeout"
+												description={t("propertiesPanel.apiTimeoutDesc")}
+											>
+												{t("propertiesPanel.apiTimeoutLabel")}
+											</FieldLabel>
 											<Input
 												id="api-timeout"
 												type="number"
@@ -1963,20 +2017,15 @@ export function PropertiesPanel({
 													});
 												}}
 											/>
-											<p className="text-xs text-muted-foreground">
-												Tiempo máximo de espera para la respuesta (5-300
-												segundos)
-											</p>
 										</div>
 
-										{/* Selector de checkpoint si return-to-checkpoint */}
 										{failureHandling.onFailure === "return-to-checkpoint" &&
 											hasCheckpoint && (
 												<div className="mt-3 space-y-2">
 													<Label htmlFor="api-checkpoint-select">
 														{hasMultipleCheckpoints
-															? "Seleccionar Checkpoint de Destino"
-															: "Checkpoint de Destino"}
+															? t("propertiesPanel.apiCheckpointSelectLabel")
+															: t("propertiesPanel.apiCheckpointLabel")}
 													</Label>
 													{hasMultipleCheckpoints ? (
 														<Select
@@ -2036,40 +2085,36 @@ export function PropertiesPanel({
 													)}
 													{hasMultipleCheckpoints && (
 														<p className="text-xs text-muted-foreground">
-															Hay múltiples checkpoints a la misma distancia.
-															Selecciona el checkpoint al que deseas regresar.
+															{t("propertiesPanel.apiMultipleCheckpointsNote")}
 														</p>
 													)}
 												</div>
 											)}
 
-										{/* Advertencia si return-to-checkpoint sin checkpoint */}
 										{failureHandling.onFailure === "return-to-checkpoint" &&
 											!hasCheckpoint && (
 												<div className="mt-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
 													<p className="font-medium">
-														⚠️ No hay checkpoint anterior disponible
+														{t("propertiesPanel.apiNoCheckpointTitle")}
 													</p>
 													<p className="mt-1 text-xs">
-														Para usar esta opción, debe existir un checkpoint
-														anterior en el flujo.
+														{t("propertiesPanel.apiNoCheckpointDesc")}
 													</p>
 												</div>
 											)}
 
-										{/* Info si stop (terminal) */}
 										{failureHandling.onFailure === "stop" && (
 											<div className="mt-3 rounded-md bg-muted p-3 text-sm text-muted-foreground">
-												<p className="font-medium">ℹ️ Nodo Terminal</p>
+												<p className="font-medium">
+													{t("propertiesPanel.apiTerminalTitle")}
+												</p>
 												<p className="mt-1 text-xs">
-													Este nodo no puede conectarse a otros nodos. El
-													workflow terminará aquí en caso de fallo.
+													{t("propertiesPanel.apiTerminalDesc")}
 												</p>
 											</div>
 										)}
 									</div>
 
-									{/* Output Schema */}
 									<OutputSchemaEditor
 										value={
 											selectedNode.config.outputSchema as
@@ -2077,7 +2122,7 @@ export function PropertiesPanel({
 												| undefined
 										}
 										onChange={handleUpdateOutputSchema}
-										label="Esquema de Respuesta"
+										label={t("propertiesPanel.outputSchemaLabelResponse")}
 										onInferFromJson={
 											(selectedNode.config.mockResponse as string)
 												? handleInferSchemaFromMock
@@ -2092,7 +2137,9 @@ export function PropertiesPanel({
 						<div className="space-y-4">
 							{/* Canal */}
 							<div className="space-y-2">
-								<Label htmlFor="message-channel">Canal de entrega</Label>
+								<Label htmlFor="message-channel">
+									{t("propertiesPanel.messageChannelLabel")}
+								</Label>
 								<Select
 									value={messageConfig.channel ?? "email"}
 									onValueChange={(value) =>
@@ -2106,8 +2153,12 @@ export function PropertiesPanel({
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="email">Email (Mandrill)</SelectItem>
-										<SelectItem value="sms">SMS (Twilio)</SelectItem>
+										<SelectItem value="email">
+											{t("propertiesPanel.messageChannelEmail")}
+										</SelectItem>
+										<SelectItem value="sms">
+											{t("propertiesPanel.messageChannelSms")}
+										</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>
@@ -2116,9 +2167,12 @@ export function PropertiesPanel({
 							{messageConfig.channel === "email" && (
 								<>
 									<div className="space-y-2">
-										<Label htmlFor="message-template-name">
-											Nombre del template
-										</Label>
+										<FieldLabel
+											htmlFor="message-template-name"
+											description={t("propertiesPanel.messageTemplateNameDesc")}
+										>
+											{t("propertiesPanel.messageTemplateNameLabel")}
+										</FieldLabel>
 										<Input
 											id="message-template-name"
 											value={messageConfig.templateName ?? ""}
@@ -2128,15 +2182,16 @@ export function PropertiesPanel({
 													templateName: e.target.value,
 												})
 											}
-											placeholder="mi-template-mandrill"
+											placeholder={t(
+												"propertiesPanel.messageTemplateNamePlaceholder",
+											)}
 										/>
-										<p className="text-xs text-muted-foreground">
-											Nombre exacto del template en Mandrill.
-										</p>
 									</div>
 
 									<div className="space-y-2">
-										<Label htmlFor="message-subject">Asunto</Label>
+										<Label htmlFor="message-subject">
+											{t("propertiesPanel.messageSubjectLabel")}
+										</Label>
 										<Input
 											id="message-subject"
 											value={messageConfig.subject ?? ""}
@@ -2146,13 +2201,19 @@ export function PropertiesPanel({
 													subject: e.target.value,
 												})
 											}
-											placeholder="Tu solicitud ha sido procesada"
+											placeholder={t(
+												"propertiesPanel.messageSubjectPlaceholder",
+											)}
 										/>
 									</div>
 
 									<div className="space-y-2">
 										<div className="flex items-center justify-between">
-											<Label>Variables del template</Label>
+											<FieldLabel
+												description={t("propertiesPanel.messageMergeVarsDesc")}
+											>
+												{t("propertiesPanel.messageMergeVarsLabel")}
+											</FieldLabel>
 											<Button
 												type="button"
 												variant="outline"
@@ -2160,20 +2221,12 @@ export function PropertiesPanel({
 												className="h-7 px-2 text-xs"
 												onClick={handleMessageMergeVarAdd}
 											>
-												+ Agregar
+												{t("propertiesPanel.messageMergeVarsAddBtn")}
 											</Button>
 										</div>
-										<p className="text-xs text-muted-foreground">
-											Variables que se sustituyen en el template. La{" "}
-											<span className="font-mono">clave</span> corresponde al
-											placeholder <span className="font-mono">*|CLAVE|*</span>{" "}
-											en Mandrill. El <span className="font-mono">valor</span>{" "}
-											puede referenciar datos del evento, p.ej.{" "}
-											<span className="font-mono">event.payload.nombre</span>.
-										</p>
 										{(messageConfig.mergeVars ?? []).length === 0 && (
 											<p className="text-xs text-muted-foreground italic">
-												Sin variables definidas.
+												{t("propertiesPanel.messageMergeVarsEmpty")}
 											</p>
 										)}
 										<div className="space-y-2">
@@ -2212,7 +2265,9 @@ export function PropertiesPanel({
 														size="icon"
 														className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
 														onClick={() => handleMessageMergeVarRemove(index)}
-														aria-label="Eliminar variable"
+														aria-label={t(
+															"propertiesPanel.messageMergeVarRemoveAriaLabel",
+														)}
 													>
 														<svg
 															xmlns="http://www.w3.org/2000/svg"
@@ -2238,7 +2293,9 @@ export function PropertiesPanel({
 							{/* SMS config */}
 							{messageConfig.channel === "sms" && (
 								<div className="space-y-2">
-									<Label htmlFor="message-sms-body">Cuerpo del mensaje</Label>
+									<Label htmlFor="message-sms-body">
+										{t("propertiesPanel.messageSmsBodyLabel")}
+									</Label>
 									<Textarea
 										id="message-sms-body"
 										value={messageConfig.body ?? ""}
@@ -2248,13 +2305,11 @@ export function PropertiesPanel({
 												body: e.target.value,
 											})
 										}
-										placeholder="Hola, tu solicitud {{id}} ha sido procesada."
+										placeholder={t("propertiesPanel.messageSmsBodyPlaceholder")}
 										rows={4}
 									/>
 									<p className="text-xs text-muted-foreground">
-										Texto del SMS. Máximo 1,600 caracteres. Usa{" "}
-										<span className="font-mono">{"{{variable}}"}</span> para
-										referenciar datos del evento.
+										{t("propertiesPanel.messageSmsBodyNote")}
 									</p>
 								</div>
 							)}
@@ -2264,7 +2319,9 @@ export function PropertiesPanel({
 					{selectedNode.type === "Challenge" && challengeConfig && (
 						<div className="space-y-4">
 							<div className="space-y-2">
-								<Label htmlFor="challenge-type">Tipo de challenge</Label>
+								<Label htmlFor="challenge-type">
+									{t("propertiesPanel.challengeTypeLabel")}
+								</Label>
 								<Select
 									value={
 										challengeConfig.challengeType === "acceptance" ||
@@ -2282,20 +2339,26 @@ export function PropertiesPanel({
 									<SelectContent>
 										{CHALLENGE_TYPE_OPTIONS.map((option) => (
 											<SelectItem key={option.value} value={option.value}>
-												{option.label}
+												{option.value === "acceptance"
+													? t("propertiesPanel.challengeAcceptanceLabel")
+													: t("propertiesPanel.challengeSignatureLabel")}
 											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
 								{selectedChallengeType && (
 									<p className="text-xs text-muted-foreground">
-										{selectedChallengeType.description}
+										{selectedChallengeType.value === "acceptance"
+											? t("propertiesPanel.challengeAcceptanceDesc")
+											: t("propertiesPanel.challengeSignatureDesc")}
 									</p>
 								)}
 							</div>
 
 							<div className="space-y-2">
-								<Label htmlFor="challenge-delivery">Canal de entrega</Label>
+								<Label htmlFor="challenge-delivery">
+									{t("propertiesPanel.challengeDeliveryLabel")}
+								</Label>
 								<Select
 									value={challengeConfig.deliveryMethod}
 									onValueChange={(method) =>
@@ -2312,20 +2375,19 @@ export function PropertiesPanel({
 									<SelectContent>
 										{CHALLENGE_DELIVERY_METHODS.map((option) => (
 											<SelectItem key={option.value} value={option.value}>
-												{option.label}
+												{t(`propertiesPanel.${option.labelKey}`)}
 											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
 								<p className="text-xs text-muted-foreground">
-									Selecciona cómo se enviará el challenge (SMS, Email, Ambos o
-									Ninguno).
+									{t("propertiesPanel.challengeDeliveryDesc")}
 								</p>
 							</div>
 
 							<div className="space-y-2">
 								<Label htmlFor="challenge-timeout-value">
-									Tiempo límite (challengeTimeout)
+									{t("propertiesPanel.challengeTimeoutLabel")}
 								</Label>
 								<div className="grid gap-3 md:grid-cols-2">
 									<div className="space-y-1 min-w-0">
@@ -2358,12 +2420,16 @@ export function PropertiesPanel({
 												id="challenge-timeout-unit"
 												className="w-full"
 											>
-												<SelectValue placeholder="Selecciona unidad" />
+												<SelectValue
+													placeholder={t(
+														"propertiesPanel.staleUnitPlaceholder",
+													)}
+												/>
 											</SelectTrigger>
 											<SelectContent>
 												{CHALLENGE_TIMEOUT_UNITS.map((unit) => (
 													<SelectItem key={unit.value} value={unit.value}>
-														{unit.label}
+														{t(`propertiesPanel.${unit.labelKey}`)}
 													</SelectItem>
 												))}
 											</SelectContent>
@@ -2371,18 +2437,18 @@ export function PropertiesPanel({
 									</div>
 								</div>
 								<p className="text-xs text-muted-foreground">
-									Tiempo en el que debe resolverse el challenge o durante el
-									cual es válido.
+									{t("propertiesPanel.challengeTimeoutDesc")}
 								</p>
 							</div>
 
 							<div className="space-y-3 rounded-md border border-border/60 p-3">
 								<div className="flex items-center justify-between gap-4">
 									<div>
-										<Label htmlFor="challenge-retry-toggle">Reintentos</Label>
+										<Label htmlFor="challenge-retry-toggle">
+											{t("propertiesPanel.challengeRetriesLabel")}
+										</Label>
 										<p className="text-xs text-muted-foreground">
-											Controla si este challenge permite reintentos y quiénes
-											pueden ejecutarlos.
+											{t("propertiesPanel.challengeRetriesDesc")}
 										</p>
 									</div>
 									<Switch
@@ -2400,7 +2466,7 @@ export function PropertiesPanel({
 									<div className="space-y-3">
 										<div className="space-y-1">
 											<Label htmlFor="challenge-retry-count">
-												Cantidad de reintentos
+												{t("propertiesPanel.challengeRetryCountLabel")}
 											</Label>
 											<Input
 												id="challenge-retry-count"
@@ -2413,12 +2479,17 @@ export function PropertiesPanel({
 												}
 											/>
 											<p className="text-xs text-muted-foreground">
-												Máximo {MAX_CHALLENGE_RETRIES} reintentos permitidos.
+												{t("propertiesPanel.challengeRetryCountNote").replace(
+													"{n}",
+													String(MAX_CHALLENGE_RETRIES),
+												)}
 											</p>
 										</div>
 
 										<div className="space-y-2">
-											<Label>Roles responsables (reintentos)</Label>
+											<Label>
+												{t("propertiesPanel.challengeRetryRolesLabel")}
+											</Label>
 											<div className="space-y-2">
 												{ROLE_OPTIONS.map((role) => (
 													<div
@@ -2444,8 +2515,7 @@ export function PropertiesPanel({
 											</div>
 											{challengeRetryRoles.length === 0 && (
 												<p className="text-xs text-muted-foreground">
-													Selecciona al menos un rol autorizado para ejecutar
-													reintentos.
+													{t("propertiesPanel.challengeRetryRolesNote")}
 												</p>
 											)}
 										</div>
@@ -2454,19 +2524,17 @@ export function PropertiesPanel({
 							</div>
 
 							<div className="rounded-md bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
-								<p className="font-medium">Notas</p>
+								<p className="font-medium">
+									{t("propertiesPanel.challengeNotesTitle")}
+								</p>
 								<p className="mt-1">
-									Los challenges de aceptación y firma permiten pausar el flujo
-									hasta que el usuario complete la acción requerida (aceptar
-									términos o firmar documentos) respetando el timeout
-									configurado.
+									{t("propertiesPanel.challengeNotesBody")}
 								</p>
 								<p className="mt-2">
 									<span className="font-semibold">
-										Comportamiento en caso de fallo:
+										{t("propertiesPanel.challengeFailureTitle")}
 									</span>{" "}
-									Si el challenge falla (timeout o rechazo), el flujo retorna
-									automáticamente al checkpoint previo más próximo.
+									{t("propertiesPanel.challengeFailureDesc")}
 								</p>
 							</div>
 						</div>
@@ -2478,11 +2546,10 @@ export function PropertiesPanel({
 								<div className="flex items-center justify-between gap-4">
 									<div>
 										<Label htmlFor="checkpoint-safe-toggle">
-											Checkpoint seguro
+											{t("propertiesPanel.checkpointSafeLabel")}
 										</Label>
 										<p className="text-xs text-muted-foreground">
-											Marca este checkpoint como &quot;safe&quot; para usarlo
-											como etapa protegida.
+											{t("propertiesPanel.checkpointSafeDesc")}
 										</p>
 									</div>
 									<Switch
@@ -2513,19 +2580,21 @@ export function PropertiesPanel({
 										)}
 									>
 										{isSafeCheckpoint
-											? "Safe checkpoint activo"
-											: "Checkpoint normal"}
+											? t("propertiesPanel.checkpointSafeActive")
+											: t("propertiesPanel.checkpointNormal")}
 									</p>
 									<p className="mt-1">
 										{isSafeCheckpoint
-											? "Se usa para saltos controlados desde nodos especiales sin perder contexto."
-											: "Funciona como checkpoint convencional dentro del flujo."}
+											? t("propertiesPanel.checkpointSafeActiveDesc")
+											: t("propertiesPanel.checkpointNormalDesc")}
 									</p>
 								</div>
 							</div>
 
 							<div className="space-y-2">
-								<Label htmlFor="checkpoint-name">Nombre del Checkpoint</Label>
+								<Label htmlFor="checkpoint-name">
+									{t("propertiesPanel.checkpointNameLabel")}
+								</Label>
 								<Input
 									id="checkpoint-name"
 									value={(selectedNode.config.checkpointName as string) || ""}
@@ -2537,12 +2606,14 @@ export function PropertiesPanel({
 											},
 										})
 									}
-									placeholder="Ej: Verificación Inicial"
+									placeholder={t("propertiesPanel.checkpointNamePlaceholder")}
 								/>
 							</div>
 
 							<div className="space-y-2">
-								<Label htmlFor="checkpoint-notes">Notas</Label>
+								<Label htmlFor="checkpoint-notes">
+									{t("propertiesPanel.checkpointNotesLabel")}
+								</Label>
 								<Textarea
 									id="checkpoint-notes"
 									value={(selectedNode.config.notes as string) || ""}
@@ -2551,7 +2622,7 @@ export function PropertiesPanel({
 											config: { ...selectedNode.config, notes: e.target.value },
 										})
 									}
-									placeholder="Notas sobre este checkpoint..."
+									placeholder={t("propertiesPanel.checkpointNotesPlaceholder")}
 									rows={3}
 								/>
 							</div>
@@ -2561,18 +2632,17 @@ export function PropertiesPanel({
 					{selectedNode.type === "FlagChange" && (
 						<div className="space-y-4">
 							<div className="space-y-1">
-								<Label>Flags a Cambiar</Label>
+								<Label>{t("propertiesPanel.flagChangesLabel")}</Label>
 								<p className="text-xs text-muted-foreground">
-									Selecciona los flags que deseas cambiar en este nodo
+									{t("propertiesPanel.flagChangesDesc")}
 								</p>
 							</div>
 
 							{flags.length === 0 ? (
 								<div className="rounded-md bg-muted p-3 text-center text-sm text-muted-foreground">
-									<p>No hay flags definidos</p>
+									<p>{t("propertiesPanel.flagChangesNoFlags")}</p>
 									<p className="text-xs mt-1">
-										Usa el botón &quot;Gestionar Flags&quot; en la barra
-										superior para crear flags
+										{t("propertiesPanel.flagChangesNoFlagsNote")}
 									</p>
 								</div>
 							) : (
@@ -2725,7 +2795,9 @@ export function PropertiesPanel({
 
 								return (
 									<div className="rounded-md bg-muted p-2.5">
-										<p className="text-xs font-medium mb-2">Preview:</p>
+										<p className="text-xs font-medium mb-2">
+											{t("propertiesPanel.flagChangesPreview")}
+										</p>
 										<div className="flex flex-wrap gap-1.5">
 											{flagChanges.map((flagChange) => {
 												const flag = flags.find(
@@ -2754,12 +2826,10 @@ export function PropertiesPanel({
 							})()}
 
 							<div className="rounded-md bg-muted p-2.5 text-xs text-muted-foreground">
-								<p className="font-medium mb-1">Información:</p>
-								<p>
-									Este nodo permite cambiar múltiples flags del workflow.
-									Selecciona los flags que deseas modificar y elige la opción
-									para cada uno.
+								<p className="font-medium mb-1">
+									{t("propertiesPanel.flagChangesInfoTitle")}
 								</p>
+								<p>{t("propertiesPanel.flagChangesInfoBody")}</p>
 							</div>
 						</div>
 					)}
@@ -2780,15 +2850,14 @@ export function PropertiesPanel({
 
 							const handleAllowRetryChange = (checked: boolean) => {
 								if (checked) {
-									// Activar reintentos: crear edge automáticamente hacia el checkpoint
 									if (checkpointId && !existingEdge) {
 										const newEdge: WorkflowEdge = {
 											id: `edge-${Date.now()}`,
 											from: selectedNode.id,
 											to: checkpointId,
 											label: "Reintento",
-											color: "rgb(234, 179, 8)", // Amarillo para reintentos
-											thickness: 3, // Más grueso para destacar
+											color: "rgb(234, 179, 8)",
+											thickness: 3,
 										};
 										onAddEdge(newEdge);
 									}
@@ -2800,7 +2869,6 @@ export function PropertiesPanel({
 										},
 									});
 								} else {
-									// Desactivar reintentos: eliminar edge si existe
 									if (existingEdge) {
 										onDeleteEdge(existingEdge.id);
 									}
@@ -2818,11 +2886,10 @@ export function PropertiesPanel({
 									{!checkpointId ? (
 										<div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
 											<p className="font-medium">
-												No hay checkpoint anterior disponible
+												{t("propertiesPanel.rejectNoCheckpoint")}
 											</p>
 											<p className="mt-1 text-xs">
-												Para habilitar reintentos, debe existir un checkpoint
-												anterior en el flujo.
+												{t("propertiesPanel.rejectNoCheckpointDesc")}
 											</p>
 										</div>
 									) : (
@@ -2830,7 +2897,7 @@ export function PropertiesPanel({
 											<div className="space-y-2">
 												<div className="flex items-center justify-between">
 													<Label htmlFor="allow-retry">
-														Permitir Reintentos
+														{t("propertiesPanel.rejectAllowRetryLabel")}
 													</Label>
 													<Switch
 														id="allow-retry"
@@ -2839,8 +2906,7 @@ export function PropertiesPanel({
 													/>
 												</div>
 												<p className="text-xs text-muted-foreground">
-													Permite que el flujo regrese al checkpoint anterior
-													más próximo
+													{t("propertiesPanel.rejectAllowRetryDesc")}
 												</p>
 											</div>
 
@@ -2848,7 +2914,7 @@ export function PropertiesPanel({
 												<>
 													<div className="space-y-2">
 														<Label htmlFor="max-retries">
-															Número Máximo de Reintentos
+															{t("propertiesPanel.rejectMaxRetriesLabel")}
 														</Label>
 														<Input
 															id="max-retries"
@@ -2862,7 +2928,6 @@ export function PropertiesPanel({
 															}
 															onChange={(e) => {
 																const inputValue = e.target.value;
-																// Permitir campo vacío temporalmente
 																if (inputValue === "") {
 																	onUpdateNode(selectedNode.id, {
 																		config: {
@@ -2883,7 +2948,6 @@ export function PropertiesPanel({
 																}
 															}}
 															onBlur={(e) => {
-																// Cuando pierde el foco, si está vacío, establecer 0
 																if (e.target.value === "") {
 																	onUpdateNode(selectedNode.id, {
 																		config: {
@@ -2893,22 +2957,24 @@ export function PropertiesPanel({
 																	});
 																}
 															}}
-															placeholder="0 = ilimitados"
+															placeholder={t(
+																"propertiesPanel.rejectMaxRetriesPlaceholder",
+															)}
 														/>
 														<p className="text-xs text-muted-foreground">
 															{(selectedNode.config.maxRetries as number) ===
 																0 ||
 															selectedNode.config.maxRetries === undefined ||
 															selectedNode.config.maxRetries === null
-																? "0 = ilimitados (sin límite de reintentos)"
-																: "Número máximo de veces que se puede reintentar"}
+																? t("propertiesPanel.rejectMaxRetriesUnlimited")
+																: t("propertiesPanel.rejectMaxRetriesLimited")}
 														</p>
 													</div>
 
 													{checkpoint && (
 														<div className="rounded-md bg-muted p-3 text-sm">
 															<p className="font-medium">
-																Checkpoint de destino:
+																{t("propertiesPanel.rejectCheckpointLabel")}
 															</p>
 															<p className="mt-1 text-xs text-muted-foreground">
 																{checkpoint.title ||

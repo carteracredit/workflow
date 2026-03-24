@@ -7,6 +7,7 @@ import type { WorkflowFlag, ApiResponse } from "@/lib/workflow-api/types";
 import { getColorValue } from "@/lib/flag-manager";
 import { cn } from "@/lib/utils";
 import { RefreshCw, Activity } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface FlagStatePanelProps {
 	workflowId: string;
@@ -26,6 +27,7 @@ async function fetchFlags(url: string): Promise<WorkflowFlag[]> {
  * Only renders when the workflow has been published (has a workflowId) and has flags.
  */
 export function FlagStatePanel({ workflowId, className }: FlagStatePanelProps) {
+	const { t } = useLanguage();
 	const url = `${getWorkflowServiceUrl()}/workflows/${workflowId}/flags`;
 
 	const { data: flags, isLoading } = useSWR<WorkflowFlag[]>(url, fetchFlags, {
@@ -43,7 +45,7 @@ export function FlagStatePanel({ workflowId, className }: FlagStatePanelProps) {
 		>
 			<div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
 				<Activity className="h-3 w-3" />
-				<span>Estado de Flags</span>
+				<span>{t("flagStatePanel.title")}</span>
 				<RefreshCw className="h-3 w-3 ml-auto opacity-50" />
 			</div>
 

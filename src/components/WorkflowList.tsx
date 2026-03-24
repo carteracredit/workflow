@@ -60,6 +60,8 @@ import {
 	updateWorkflow,
 	cloneWorkflow,
 } from "@/lib/workflow-api/workflows";
+import { useLanguage } from "@/components/LanguageProvider";
+import { getLocaleForLanguage } from "@/lib/translations";
 import { slugify } from "@/lib/slugify";
 import type { Workflow } from "@/lib/workflow-api/types";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
@@ -84,19 +86,30 @@ type WorkflowStatus = "draft" | "published" | "archived";
 
 const STATUS_CONFIG: Record<
 	WorkflowStatus,
-	{ label: string; variant: "secondary" | "success" | "outline" }
+	{ labelKey: string; variant: "secondary" | "success" | "outline" }
 > = {
-	draft: { label: "Borrador", variant: "secondary" },
-	published: { label: "Publicado", variant: "success" },
-	archived: { label: "Archivado", variant: "outline" },
+	draft: { labelKey: "status.draft", variant: "secondary" },
+	published: { labelKey: "status.published", variant: "success" },
+	archived: { labelKey: "status.archived", variant: "outline" },
 };
 
 function StatusBadge({ status }: { status: WorkflowStatus | string }) {
-	const config = STATUS_CONFIG[status as WorkflowStatus] ?? {
-		label: status,
-		variant: "outline" as const,
-	};
-	return <Badge variant={config.variant}>{config.label}</Badge>;
+	const { t } = useLanguage();
+	const config = STATUS_CONFIG[status as WorkflowStatus];
+	if (!config) {
+		return <Badge variant="outline">{status}</Badge>;
+	}
+	if (status === "draft") {
+		return (
+			<Badge
+				variant="outline"
+				className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+			>
+				{t(config.labelKey)}
+			</Badge>
+		);
+	}
+	return <Badge variant={config.variant}>{t(config.labelKey)}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +136,7 @@ function WorkflowCardRow({
 	cloningId,
 }: WorkflowCardRowProps) {
 	const isBusy = deletingId === workflow.id || cloningId === workflow.id;
+	const { t } = useLanguage();
 	return (
 		<div
 			role="button"
@@ -139,7 +153,7 @@ function WorkflowCardRow({
 			<div className="min-w-0 flex-1">
 				<p className="font-medium truncate">{workflow.name}</p>
 				<p className="text-sm text-muted-foreground truncate">
-					{workflow.description || "Sin descripción"}
+					{workflow.description || t("workflowList.noDescriptionPlaceholder")}
 				</p>
 				<div className="mt-2">
 					<StatusBadge status={workflow.status} />
@@ -164,25 +178,25 @@ function WorkflowCardRow({
 					<DropdownMenuContent align="end">
 						<DropdownMenuItem onClick={() => onEdit(workflow.id)}>
 							<Pencil className="mr-2 h-4 w-4" />
-							Editar
+							{t("workflowList.rowActionEdit")}
 						</DropdownMenuItem>
 						<DropdownMenuItem onClick={() => onArchive(workflow)}>
 							{workflow.status === "archived" ? (
 								<>
 									<WorkflowIcon className="mr-2 h-4 w-4" />
-									Restaurar
+									{t("workflowList.rowActionRestore")}
 								</>
 							) : (
 								<>
 									<WorkflowIcon className="mr-2 h-4 w-4" />
-									Archivar
+									{t("workflowList.rowActionArchive")}
 								</>
 							)}
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem onClick={() => onClone(workflow)}>
 							<Copy className="mr-2 h-4 w-4" />
-							Clonar
+							{t("workflowList.rowActionClone")}
 						</DropdownMenuItem>
 						{workflow.current_major_version === 0 &&
 							workflow.status === "draft" && (
@@ -193,7 +207,7 @@ function WorkflowCardRow({
 										onClick={() => onDelete(workflow)}
 									>
 										<Trash2 className="mr-2 h-4 w-4" />
-										Eliminar
+										{t("workflowList.rowActionDelete")}
 									</DropdownMenuItem>
 								</>
 							)}
@@ -204,18 +218,23 @@ function WorkflowCardRow({
 	);
 }
 
-function formatRelativeDate(dateStr: string): string {
+function formatRelativeDate(
+	dateStr: string,
+	t: (key: string) => string,
+	locale: string,
+): string {
 	const date = new Date(dateStr);
 	const now = new Date();
 	const diffMs = now.getTime() - date.getTime();
 	// Use ceil so that timestamps slightly in the future (server clock skew)
 	// round to 0 instead of producing negative values.
 	const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-	if (diffDays === 0) return "Hoy";
-	if (diffDays === 1) return "Ayer";
-	if (diffDays < 7) return `Hace ${diffDays} días`;
-	if (diffDays < 30) return `Hace ${Math.floor(diffDays / 7)} sem.`;
-	return date.toLocaleDateString("es-MX", {
+	if (diffDays === 0) return t("dates.today");
+	if (diffDays === 1) return t("dates.yesterday");
+	if (diffDays < 7) return t("dates.daysAgo").replace("{n}", String(diffDays));
+	if (diffDays < 30)
+		return t("dates.weeksAgo").replace("{n}", String(Math.floor(diffDays / 7)));
+	return date.toLocaleDateString(locale, {
 		year: "numeric",
 		month: "short",
 		day: "numeric",
@@ -329,10 +348,11 @@ function CreateWorkflowDialog({
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 	const [isCreating, setIsCreating] = useState(false);
+	const { t } = useLanguage();
 
 	const handleCreate = async () => {
 		if (!name.trim()) {
-			toast.error("El nombre es requerido");
+			toast.error(t("workflowList.toastNameRequired"));
 			return;
 		}
 		setIsCreating(true);
@@ -348,7 +368,9 @@ function CreateWorkflowDialog({
 				// Start node when definition is null. That state gets persisted to
 				// localStorage automatically and to the DB on first explicit Save.
 			});
-			toast.success(`Workflow "${workflow.name}" creado`);
+			toast.success(
+				t("workflowList.toastCreated").replace("{name}", workflow.name),
+			);
 			setName("");
 			setDescription("");
 			onOpenChange(false);
@@ -356,9 +378,9 @@ function CreateWorkflowDialog({
 		} catch (err) {
 			const msg = extractApiErrorMessage(err);
 			if (err instanceof ApiError && err.status === 409) {
-				toast.error("Ya existe un workflow con ese nombre");
+				toast.error(t("workflowList.toastDuplicateName"));
 			} else {
-				toast.error("Error al crear workflow", { description: msg });
+				toast.error(t("workflowList.toastCreateError"), { description: msg });
 			}
 		} finally {
 			setIsCreating(false);
@@ -376,18 +398,17 @@ function CreateWorkflowDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle>Nuevo Workflow</DialogTitle>
+					<DialogTitle>{t("workflowList.createDialogTitle")}</DialogTitle>
 					<DialogDescription>
-						Crea un borrador nuevo. Podrás agregar nodos y publicarlo desde el
-						editor.
+						{t("workflowList.createDialogDesc")}
 					</DialogDescription>
 				</DialogHeader>
 				<div className="space-y-4 py-2">
 					<div className="space-y-2">
-						<Label htmlFor="wf-name">Nombre *</Label>
+						<Label htmlFor="wf-name">{t("workflowList.createFieldName")}</Label>
 						<Input
 							id="wf-name"
-							placeholder="Ej: Aprobación de Crédito"
+							placeholder={t("workflowList.createFieldNamePlaceholder")}
 							value={name}
 							onChange={(e) => setName(e.target.value)}
 							onKeyDown={handleKeyDown}
@@ -395,10 +416,12 @@ function CreateWorkflowDialog({
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label htmlFor="wf-desc">Descripción</Label>
+						<Label htmlFor="wf-desc">
+							{t("workflowList.createFieldDescription")}
+						</Label>
 						<Input
 							id="wf-desc"
-							placeholder="Descripción opcional del workflow"
+							placeholder={t("workflowList.createFieldDescriptionPlaceholder")}
 							value={description}
 							onChange={(e) => setDescription(e.target.value)}
 							onKeyDown={handleKeyDown}
@@ -411,18 +434,18 @@ function CreateWorkflowDialog({
 						onClick={() => onOpenChange(false)}
 						disabled={isCreating}
 					>
-						Cancelar
+						{t("common.cancel")}
 					</Button>
 					<Button onClick={handleCreate} disabled={isCreating || !name.trim()}>
 						{isCreating ? (
 							<>
 								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-								Creando...
+								{t("workflowList.createButtonCreating")}
 							</>
 						) : (
 							<>
 								<Plus className="mr-2 h-4 w-4" />
-								Crear workflow
+								{t("workflowList.createButtonCreate")}
 							</>
 						)}
 					</Button>
@@ -441,6 +464,8 @@ type VersionFilter = "all" | "unpublished" | number;
 
 export function WorkflowList() {
 	const router = useRouter();
+	const { t, language } = useLanguage();
+	const locale = getLocaleForLanguage(language);
 	const [search, setSearch] = useState("");
 	const [searchScope, setSearchScope] = useState<SearchScope>("all");
 	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
@@ -520,27 +545,27 @@ export function WorkflowList() {
 			});
 			toast.success(
 				newStatus === "archived"
-					? `"${wf.name}" archivado`
-					: `"${wf.name}" restaurado como borrador`,
+					? t("workflowList.toastArchived").replace("{name}", wf.name)
+					: t("workflowList.toastRestored").replace("{name}", wf.name),
 			);
 			mutate();
 		} catch (err) {
-			toast.error("Error al actualizar el estado del workflow", {
+			toast.error(t("workflowList.toastArchiveError"), {
 				description: extractApiErrorMessage(err),
 			});
 		}
 	};
 
 	const handleDelete = async (wf: Workflow) => {
-		if (!confirm(`¿Eliminar "${wf.name}"? Esta acción no se puede deshacer.`))
+		if (!confirm(t("workflowList.deleteConfirm").replace("{name}", wf.name)))
 			return;
 		setDeletingId(wf.id);
 		try {
 			await deleteWorkflow(wf.id);
-			toast.success(`"${wf.name}" eliminado`);
+			toast.success(t("workflowList.toastDeleted").replace("{name}", wf.name));
 			mutate();
 		} catch (err) {
-			toast.error("Error al eliminar", {
+			toast.error(t("workflowList.toastDeleteError"), {
 				description: extractApiErrorMessage(err),
 			});
 		} finally {
@@ -552,11 +577,11 @@ export function WorkflowList() {
 		setCloningId(wf.id);
 		try {
 			const cloned = await cloneWorkflow(wf.id);
-			toast.success(`Copia de "${wf.name}" creada`);
+			toast.success(t("workflowList.toastCloned").replace("{name}", wf.name));
 			mutate();
 			router.push(`/editor/${cloned.id}`);
 		} catch (err) {
-			toast.error("Error al clonar workflow", {
+			toast.error(t("workflowList.toastCloneError"), {
 				description: extractApiErrorMessage(err),
 			});
 		} finally {
@@ -581,10 +606,10 @@ export function WorkflowList() {
 						<img src="/app-icon.svg" alt="" className="h-8 w-auto shrink-0" />
 						<div className="min-w-0">
 							<h1 className="text-xl font-bold tracking-tight truncate sm:text-2xl">
-								Workflows
+								{t("workflowList.title")}
 							</h1>
 							<p className="text-sm text-muted-foreground truncate">
-								Gestiona y publica tus flujos de trabajo
+								{t("workflowList.subtitle")}
 							</p>
 						</div>
 					</div>
@@ -594,7 +619,7 @@ export function WorkflowList() {
 							className="shrink-0"
 						>
 							<Plus className="mr-2 h-4 w-4" />
-							Nuevo Workflow
+							{t("workflowList.newWorkflow")}
 						</Button>
 						<SessionControls className="flex-wrap justify-end" />
 					</div>
@@ -604,7 +629,7 @@ export function WorkflowList() {
 				<div className="mb-5 flex min-h-[44px] flex-wrap justify-center gap-2 overflow-x-auto pb-1">
 					{[
 						{
-							label: "Total",
+							label: t("workflowList.statsTotal"),
 							value: stats.total,
 							tab: "all",
 							icon: <Layers className="h-3.5 w-3.5" />,
@@ -616,7 +641,7 @@ export function WorkflowList() {
 							activeLabel: "text-primary",
 						},
 						{
-							label: "Publicados",
+							label: t("workflowList.statsPublished"),
 							value: stats.published,
 							tab: "published",
 							icon: <CheckCircle2 className="h-3.5 w-3.5" />,
@@ -628,7 +653,7 @@ export function WorkflowList() {
 							activeLabel: "text-emerald-600 dark:text-emerald-400",
 						},
 						{
-							label: "Borradores",
+							label: t("workflowList.statsDrafts"),
 							value: stats.draft,
 							tab: "draft",
 							icon: <FileEdit className="h-3.5 w-3.5" />,
@@ -640,7 +665,7 @@ export function WorkflowList() {
 							activeLabel: "text-amber-600 dark:text-amber-400",
 						},
 						{
-							label: "Archivados",
+							label: t("workflowList.statsArchived"),
 							value: stats.archived,
 							tab: "archived",
 							icon: <Archive className="h-3.5 w-3.5" />,
@@ -686,7 +711,7 @@ export function WorkflowList() {
 					<div className="relative w-full min-w-0 flex-1 sm:max-w-sm">
 						<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
-							placeholder="Buscar por nombre o descripción..."
+							placeholder={t("workflowList.searchPlaceholder")}
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 							className="pl-9"
@@ -699,14 +724,20 @@ export function WorkflowList() {
 						>
 							<SelectTrigger
 								className="h-9 w-full min-w-0 sm:w-[180px]"
-								aria-label="Ámbito de búsqueda"
+								aria-label={t("workflowList.searchScope")}
 							>
-								<SelectValue placeholder="Buscar en" />
+								<SelectValue placeholder={t("workflowList.searchScope")} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">Nombre y descripción</SelectItem>
-								<SelectItem value="name">Solo nombre</SelectItem>
-								<SelectItem value="description">Solo descripción</SelectItem>
+								<SelectItem value="all">
+									{t("workflowList.searchInAll")}
+								</SelectItem>
+								<SelectItem value="name">
+									{t("workflowList.searchInName")}
+								</SelectItem>
+								<SelectItem value="description">
+									{t("workflowList.searchInDescription")}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 						<Select
@@ -729,13 +760,17 @@ export function WorkflowList() {
 						>
 							<SelectTrigger
 								className="h-9 w-full min-w-0 sm:w-[140px]"
-								aria-label="Filtrar por versión"
+								aria-label={t("workflowList.filterVersion")}
 							>
-								<SelectValue placeholder="Versión" />
+								<SelectValue placeholder={t("workflowList.filterVersion")} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">Todas</SelectItem>
-								<SelectItem value="unpublished">Sin publicar</SelectItem>
+								<SelectItem value="all">
+									{t("workflowList.allVersions")}
+								</SelectItem>
+								<SelectItem value="unpublished">
+									{t("workflowList.unpublished")}
+								</SelectItem>
 								{availableVersions.map((v) => (
 									<SelectItem key={v} value={String(v)}>
 										v{v}
@@ -745,8 +780,11 @@ export function WorkflowList() {
 						</Select>
 						<span className="shrink-0 text-sm text-muted-foreground tabular-nums">
 							{filtered.length === 1
-								? "1 resultado"
-								: `${filtered.length} resultados`}
+								? t("workflowList.oneResult")
+								: t("workflowList.manyResults").replace(
+										"{n}",
+										String(filtered.length),
+									)}
 						</span>
 					</div>
 				</div>
@@ -756,9 +794,9 @@ export function WorkflowList() {
 					{error ? (
 						<div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
 							<AlertCircle className="h-8 w-8 text-destructive" />
-							<p className="text-sm">Error al cargar los workflows</p>
+							<p className="text-sm">{t("workflowList.errorLoading")}</p>
 							<Button variant="outline" size="sm" onClick={() => mutate()}>
-								Reintentar
+								{t("common.retry")}
 							</Button>
 						</div>
 					) : filtered.length === 0 ? (
@@ -770,8 +808,8 @@ export function WorkflowList() {
 							/>
 							<p className="text-sm">
 								{search || activeTab !== "all" || versionFilter !== "all"
-									? "No se encontraron workflows con esos filtros"
-									: "No hay workflows todavía. ¡Crea el primero!"}
+									? t("workflowList.noWorkflowsFiltered")
+									: t("workflowList.noWorkflows")}
 							</p>
 							{!search && activeTab === "all" && versionFilter === "all" && (
 								<Button
@@ -780,7 +818,7 @@ export function WorkflowList() {
 									onClick={() => setCreateDialogOpen(true)}
 								>
 									<Plus className="mr-2 h-4 w-4" />
-									Nuevo Workflow
+									{t("workflowList.newWorkflow")}
 								</Button>
 							)}
 						</div>
@@ -806,16 +844,18 @@ export function WorkflowList() {
 								<Table>
 									<TableHeader>
 										<TableRow>
-											<TableHead>Nombre</TableHead>
+											<TableHead>{t("workflowList.tableHeaderName")}</TableHead>
 											<TableHead className="hidden sm:table-cell">
-												Descripción
+												{t("workflowList.tableHeaderDescription")}
 											</TableHead>
-											<TableHead>Estado</TableHead>
+											<TableHead>
+												{t("workflowList.tableHeaderStatus")}
+											</TableHead>
 											<TableHead className="hidden md:table-cell">
-												Versión
+												{t("workflowList.tableHeaderVersion")}
 											</TableHead>
 											<TableHead className="hidden lg:table-cell">
-												Actualizado
+												{t("workflowList.tableHeaderUpdated")}
 											</TableHead>
 											<TableHead className="w-[60px]" />
 										</TableRow>
@@ -831,7 +871,7 @@ export function WorkflowList() {
 												<TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">
 													{wf.description || (
 														<span className="italic opacity-50">
-															Sin descripción
+															{t("workflowList.noDescriptionPlaceholder")}
 														</span>
 													)}
 												</TableCell>
@@ -850,7 +890,7 @@ export function WorkflowList() {
 													)}
 												</TableCell>
 												<TableCell className="hidden text-muted-foreground lg:table-cell">
-													{formatRelativeDate(wf.updated_at)}
+													{formatRelativeDate(wf.updated_at, t, locale)}
 												</TableCell>
 												<TableCell
 													onClick={(e) => e.stopPropagation()}
@@ -878,7 +918,7 @@ export function WorkflowList() {
 																onClick={() => handleEdit(wf.id)}
 															>
 																<Pencil className="mr-2 h-4 w-4" />
-																Editar
+																{t("workflowList.rowActionEdit")}
 															</DropdownMenuItem>
 															<DropdownMenuItem
 																onClick={() => handleArchive(wf)}
@@ -886,19 +926,19 @@ export function WorkflowList() {
 																{wf.status === "archived" ? (
 																	<>
 																		<WorkflowIcon className="mr-2 h-4 w-4" />
-																		Restaurar
+																		{t("workflowList.rowActionRestore")}
 																	</>
 																) : (
 																	<>
 																		<WorkflowIcon className="mr-2 h-4 w-4" />
-																		Archivar
+																		{t("workflowList.rowActionArchive")}
 																	</>
 																)}
 															</DropdownMenuItem>
 															<DropdownMenuSeparator />
 															<DropdownMenuItem onClick={() => handleClone(wf)}>
 																<Copy className="mr-2 h-4 w-4" />
-																Clonar
+																{t("workflowList.rowActionClone")}
 															</DropdownMenuItem>
 															{wf.current_major_version === 0 &&
 																wf.status === "draft" && (
@@ -909,7 +949,7 @@ export function WorkflowList() {
 																			onClick={() => handleDelete(wf)}
 																		>
 																			<Trash2 className="mr-2 h-4 w-4" />
-																			Eliminar
+																			{t("workflowList.rowActionDelete")}
 																		</DropdownMenuItem>
 																	</>
 																)}

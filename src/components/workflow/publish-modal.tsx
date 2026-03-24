@@ -35,6 +35,7 @@ import { publishWorkflow } from "@/lib/workflow-api/workflows";
 import type { PublishWorkflowDeployedResponse } from "@/lib/workflow-api/types";
 import { extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { toast } from "sonner";
+import { useLanguage } from "@/components/LanguageProvider";
 
 export interface PublishModalProps {
 	nodes: WorkflowNode[];
@@ -133,9 +134,11 @@ type DeployPhaseStatus = "idle" | "running" | "done" | "error";
 
 function DeployPhaseItem({
 	status,
+	label,
 	error,
 }: {
 	status: DeployPhaseStatus;
+	label: string;
 	error?: string;
 }) {
 	const getIcon = () => {
@@ -167,7 +170,7 @@ function DeployPhaseItem({
 									: "text-gray-700"
 						}`}
 					>
-						Publicando en Cloudflare
+						{label}
 					</span>
 					{error && <p className="mt-1 text-sm text-red-500">{error}</p>}
 				</div>
@@ -201,9 +204,9 @@ export function PublishModal({
 	const [deployError, setDeployError] = useState<string | undefined>();
 	const [skipped, setSkipped] = useState(false);
 	const [isRunning, setIsRunning] = useState(true);
+	const { t } = useLanguage();
 
 	const run = useCallback(async () => {
-		// Reset all state so a retry starts with a clean slate.
 		setIsRunning(true);
 		setSkipped(false);
 		setPhases([]);
@@ -212,19 +215,16 @@ export function PublishModal({
 		setDeployResult(null);
 		setDeployError(undefined);
 
-		// Step 1: Auto-save if needed
 		if (!workflowApiId) {
 			try {
 				await onSave();
 			} catch {
-				toast.error("Error al guardar el workflow antes de publicar");
+				toast.error(t("publishModal.toastSaveError"));
 				setIsRunning(false);
 				return;
 			}
 		}
 
-		// Step 2: Generate TypeScript code
-		// The template expects "MyWorkflow" as the class name
 		let generatedCode: string | null = null;
 		try {
 			const result = await generateWorkflowCodeWithProgress(
@@ -244,18 +244,23 @@ export function PublishModal({
 			setTranspileResult(result);
 
 			if (!result.valid || !result.code) {
-				toast.error("Error al transpilar workflow", {
-					description: `${result.errors.length} error(es) encontrados`,
+				toast.error(t("publishModal.toastTranspileError"), {
+					description: t("publishModal.toastTranspileErrors").replace(
+						"{n}",
+						String(result.errors.length),
+					),
 				});
 				setIsRunning(false);
 				return;
 			}
 
-			// Format with Prettier so the deployed file passes format:check in CI
 			generatedCode = await formatGeneratedCode(result.code);
 		} catch (err) {
-			toast.error("Error inesperado durante la transpilación", {
-				description: err instanceof Error ? err.message : "Error desconocido",
+			toast.error(t("publishModal.toastUnexpectedError"), {
+				description:
+					err instanceof Error
+						? err.message
+						: t("publishModal.toastUnknownError"),
 			});
 			setIsRunning(false);
 			return;
@@ -271,13 +276,11 @@ export function PublishModal({
 		}
 
 		if (!currentWorkflowId) {
-			toast.error("No se pudo obtener el ID del workflow guardado");
+			toast.error(t("publishModal.toastNoWorkflowId"));
 			setIsRunning(false);
 			return;
 		}
 
-		// Build definition snapshot: always sent to keep the DB in sync with the
-		// editor state, even when the user never clicked "Save" explicitly.
 		const definitionSnapshot = {
 			nodes,
 			edges,
@@ -297,9 +300,8 @@ export function PublishModal({
 			if (result.skipped) {
 				setSkipped(true);
 				setDeployStatus("done");
-				toast.info("Sin cambios detectados", {
-					description:
-						"El workflow no ha cambiado desde la última publicación. No se realizó un nuevo deploy.",
+				toast.info(t("publishModal.toastNoChanges"), {
+					description: t("publishModal.toastNoChangesDesc"),
 				});
 			} else {
 				setDeployResult(result as PublishWorkflowDeployedResponse);
@@ -307,15 +309,15 @@ export function PublishModal({
 				const deployedVersion = (result as PublishWorkflowDeployedResponse)
 					.version;
 				onPublished?.("published", deployedVersion ?? undefined);
-				toast.success("Workflow publicado", {
-					description: `Deployment iniciado. GitHub Actions desplegará a Cloudflare automáticamente.`,
+				toast.success(t("publishModal.toastPublished"), {
+					description: t("publishModal.toastPublishedDesc"),
 				});
 			}
 		} catch (err) {
 			const msg = extractApiErrorMessage(err);
 			setDeployError(msg);
 			setDeployStatus("error");
-			toast.error("Error al publicar", { description: msg });
+			toast.error(t("publishModal.toastPublishError"), { description: msg });
 		}
 
 		setIsRunning(false);
@@ -329,6 +331,7 @@ export function PublishModal({
 		workflowApiId,
 		onSave,
 		onPublished,
+		t,
 	]);
 
 	useEffect(() => {
@@ -353,28 +356,27 @@ export function PublishModal({
 		document.body.removeChild(link);
 		URL.revokeObjectURL(url);
 
-		toast.success("Archivo descargado", { description: filename });
+		toast.success(t("publishModal.toastDownloaded"), { description: filename });
 	};
 
 	const isFinished = !isRunning;
 	const transpileOk = transpileResult?.valid === true;
 
 	const getDescription = () => {
-		if (isRunning) return "Generando y publicando workflow...";
+		if (isRunning) return t("publishModal.descRunning");
 		if (deployStatus === "done" && skipped)
-			return "No se detectaron cambios desde la última publicación.";
-		if (deployStatus === "done")
-			return "Workflow publicado. GitHub Actions desplegará a Cloudflare automáticamente.";
-		if (deployStatus === "error") return "Error al publicar el workflow.";
-		if (!transpileOk) return "Error al transpilar el workflow.";
-		return "Proceso completado.";
+			return t("publishModal.descSkipped");
+		if (deployStatus === "done") return t("publishModal.descDone");
+		if (deployStatus === "error") return t("publishModal.descError");
+		if (!transpileOk) return t("publishModal.descTranspileError");
+		return t("publishModal.descCompleted");
 	};
 
 	return (
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
 				<DialogHeader>
-					<DialogTitle>Publicar Workflow</DialogTitle>
+					<DialogTitle>{t("publishModal.title")}</DialogTitle>
 					<DialogDescription>{getDescription()}</DialogDescription>
 				</DialogHeader>
 
@@ -385,44 +387,47 @@ export function PublishModal({
 
 					{/* Deploy phase — only show after transpilation starts */}
 					{phases.length > 0 && (
-						<DeployPhaseItem status={deployStatus} error={deployError} />
+						<DeployPhaseItem
+							status={deployStatus}
+							label={t("publishModal.deployingCloudflare")}
+							error={deployError}
+						/>
 					)}
 				</div>
 
-				{/* No changes — skipped */}
 				{deployStatus === "done" && skipped && (
 					<div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-4">
 						<p className="mb-1 text-sm font-medium text-amber-800">
-							Sin cambios detectados
+							{t("publishModal.noChangesTitle")}
 						</p>
 						<p className="text-xs text-amber-700">
-							El código generado es idéntico al de la última publicación. No se
-							realizó un nuevo deploy ni se incrementó la versión.
+							{t("publishModal.noChangesBody")}
 						</p>
 					</div>
 				)}
 
-				{/* Deployment result */}
 				{deployStatus === "done" && deployResult && !skipped && (
 					<div className="mb-4 rounded-md border border-green-200 bg-green-50 p-4">
 						<p className="mb-2 text-sm font-medium text-green-800">
-							Deployment iniciado correctamente
+							{t("publishModal.deployStartedTitle")}
 						</p>
 						<div className="space-y-1 text-xs text-green-700">
 							<p>
-								<span className="font-medium">Worker:</span>{" "}
+								<span className="font-medium">{t("publishModal.worker")}:</span>{" "}
 								{deployResult.worker_name}
 							</p>
 							<p>
-								<span className="font-medium">Branch:</span>{" "}
+								<span className="font-medium">{t("publishModal.branch")}:</span>{" "}
 								{deployResult.branch}
 							</p>
 							<p>
-								<span className="font-medium">Versión:</span> v
-								{deployResult.version}
+								<span className="font-medium">
+									{t("publishModal.version")}:
+								</span>{" "}
+								v{deployResult.version}
 							</p>
 							<p>
-								<span className="font-medium">Estado:</span>{" "}
+								<span className="font-medium">{t("publishModal.status")}:</span>{" "}
 								{deployResult.deployment.status}
 							</p>
 						</div>
@@ -433,7 +438,7 @@ export function PublishModal({
 								rel="noopener noreferrer"
 								className="mt-2 inline-flex items-center gap-1 text-xs text-green-700 underline hover:text-green-900"
 							>
-								Ver repositorio en GitHub
+								{t("publishModal.viewRepo")}
 								<ExternalLink className="h-3 w-3" />
 							</a>
 						)}
@@ -443,18 +448,18 @@ export function PublishModal({
 				{isFinished && (
 					<div className="flex justify-end gap-3 border-t pt-4">
 						<Button variant="outline" onClick={onClose}>
-							Cerrar
+							{t("publishModal.close")}
 						</Button>
 						{transpileOk && transpileResult?.code && (
 							<Button variant="outline" onClick={handleDownload}>
 								<Download className="mr-2 h-4 w-4" />
-								Descargar .ts
+								{t("publishModal.download")}
 							</Button>
 						)}
 						{deployStatus === "error" && (
 							<Button onClick={() => run()}>
 								<Rocket className="mr-2 h-4 w-4" />
-								Reintentar
+								{t("publishModal.retry")}
 							</Button>
 						)}
 					</div>
