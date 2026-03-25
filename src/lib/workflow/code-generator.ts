@@ -253,14 +253,14 @@ function generateProgressCall(
 /**
  * Generate code for a Form node.
  * Uses step.waitForEvent so the workflow pauses until the client sends form data
- * via sendEvent({ type: "form-submission:<stepName>", payload }). No FORMS binding.
+ * via sendEvent({ type: "form-submission-<stepName>", payload }). No FORMS binding.
  */
 function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const captureResult = nodeHasOutputSchema(node);
 	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
-	const eventType = `form-submission:${stepName}`;
+	const eventType = `form-submission-${stepName}`;
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
 	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload }) from cases-svc\n`;
