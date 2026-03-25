@@ -1,3 +1,10 @@
+# [1.1.0-rc.12](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.11...v1.1.0-rc.12) (2026-03-25)
+
+
+### Bug Fixes
+
+* update event type format in workflow code generation ([102911f](https://github.com/carteracredit/workflow/commit/102911f3c1ffeea455c1f6657171b025ac88f408))
+
 # [1.1.0-rc.11](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.10...v1.1.0-rc.11) (2026-03-24)
 
 
