@@ -170,7 +170,7 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).toContain("step.waitForEvent");
-		expect(result.code).toContain("form-submission:datos-personales");
+		expect(result.code).toContain("form-submission-datos-personales");
 		expect(result.code).toContain("Solicitante");
 		expect(result.code).toContain('"datos-personales"');
 	});
@@ -249,7 +249,7 @@ describe("generateWorkflowCode", () => {
 
 		// formId/formVersion are no longer emitted; verify waitForEvent pattern is present
 		expect(result.code).toContain("step.waitForEvent");
-		expect(result.code).toContain("form-submission:datos-personales");
+		expect(result.code).toContain("form-submission-datos-personales");
 	});
 
 	it("should omit formVersion when not set in node config", () => {
@@ -2503,7 +2503,7 @@ describe("generateWorkflowCode – progress tracking", () => {
 
 		// Should contain waiting_event call before waitForEvent
 		expect(code).toContain('"waiting_event"');
-		expect(code).toContain('"form-submission:my-form"');
+		expect(code).toContain('"form-submission-my-form"');
 
 		// Should contain completed call after waitForEvent
 		expect(code).toContain('"completed"');
