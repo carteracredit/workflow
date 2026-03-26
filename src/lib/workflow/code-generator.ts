@@ -617,9 +617,17 @@ function generateNodeCode(
 		case "Join":
 			return generateJoinStep(node, indent, ctx.incomingMap.get(node.id) || []);
 		case "End":
-			return `${indent}// Workflow completed successfully\n${indent}return { success: true, payload: event.payload };\n`;
+			return (
+				`${indent}// Workflow completed successfully\n` +
+				generateProgressCall(node, indent, "completed") +
+				`${indent}return { success: true, payload: event.payload };\n`
+			);
 		case "Reject":
-			return `${indent}// Workflow rejected\n${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`;
+			return (
+				`${indent}// Workflow rejected\n` +
+				generateProgressCall(node, indent, "completed") +
+				`${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`
+			);
 		default:
 			ctx.warnings.push(`Unknown node type: ${node.type}`);
 			return `${indent}// Unknown node type: ${node.type}\n`;
