@@ -1,3 +1,10 @@
+# [1.1.0-rc.13](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.12...v1.1.0-rc.13) (2026-03-26)
+
+
+### Features
+
+* enhance workflow code generation with progress tracking for End and Reject nodes ([6b2c1bf](https://github.com/carteracredit/workflow/commit/6b2c1bf8791b5ee6d2026d85792cd688d4d5da3a))
+
 # [1.1.0-rc.12](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.11...v1.1.0-rc.12) (2026-03-25)
 
 
