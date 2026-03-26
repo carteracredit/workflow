@@ -349,6 +349,11 @@ function generateTransformStep(node: WorkflowNode, indent: string): string {
 /**
  * Generate code for a Message node.
  * Uses NOTIFICATIONS_SERVICE RPC binding with sendTemplateEmail (email) or sendSms (SMS).
+ *
+ * Errors are FATAL: if the notification service is not configured, the recipient is
+ * missing, or the send call fails, the step throws and Cloudflare will retry it
+ * according to the step retry policy before marking the workflow as errored.
+ * This ensures failures are always visible in the CF dashboard and in the cases UI.
  */
 function generateMessageStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
@@ -372,20 +377,21 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\t\t}) => Promise<{ queued: number }>;\n`;
 		code += `${indent}\t};\n`;
 		code += `${indent}\tconst recipientEmail = (event.payload.clientEmail ?? event.payload.recipientEmail) as string | undefined;\n`;
-		code += `${indent}\tif (recipientEmail) {\n`;
-		code += `${indent}\t\ttry {\n`;
-		code += `${indent}\t\t\tawait notifications.sendTemplateEmail({\n`;
-		code += `${indent}\t\t\t\tto: recipientEmail,\n`;
+		code += `${indent}\tif (!recipientEmail) {\n`;
+		code += `${indent}\t\tthrow new Error("[Message] No recipient email found in workflow payload. Expected clientEmail or recipientEmail.");\n`;
+		code += `${indent}\t}\n`;
+		code += `${indent}\tawait notifications.sendTemplateEmail({\n`;
+		code += `${indent}\t\tto: recipientEmail,\n`;
 		if (templateName) {
-			code += `${indent}\t\t\t\ttemplateName: "${escapeString(templateName)}",\n`;
+			code += `${indent}\t\ttemplateName: "${escapeString(templateName)}",\n`;
 		} else {
-			code += `${indent}\t\t\t\ttemplateName: "", // TODO: set Mandrill template name\n`;
+			code += `${indent}\t\ttemplateName: "", // TODO: set Mandrill template name\n`;
 		}
 		if (subject) {
-			code += `${indent}\t\t\t\tsubject: "${escapeString(subject)}",\n`;
+			code += `${indent}\t\tsubject: "${escapeString(subject)}",\n`;
 		}
 		if (mergeVars.length > 0) {
-			code += `${indent}\t\t\t\tmergeVars: {\n`;
+			code += `${indent}\t\tmergeVars: {\n`;
 			for (const mv of mergeVars) {
 				const key = escapeString(mv.key.toUpperCase());
 				const value = mv.value.trim();
@@ -394,19 +400,13 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 				const valueCode = isExpression
 					? `${value} as string`
 					: `"${escapeString(value)}"`;
-				code += `${indent}\t\t\t\t\t${key}: ${valueCode},\n`;
+				code += `${indent}\t\t\t${key}: ${valueCode},\n`;
 			}
-			code += `${indent}\t\t\t\t},\n`;
+			code += `${indent}\t\t},\n`;
 		} else {
-			code += `${indent}\t\t\t\tmergeVars: {}, // TODO: add template merge variables\n`;
+			code += `${indent}\t\tmergeVars: {}, // TODO: add template merge variables\n`;
 		}
-		code += `${indent}\t\t\t});\n`;
-		code += `${indent}\t\t} catch (err) {\n`;
-		code += `${indent}\t\t\tconsole.error("[Message] sendTemplateEmail failed (non-fatal):", err);\n`;
-		code += `${indent}\t\t}\n`;
-		code += `${indent}\t} else {\n`;
-		code += `${indent}\t\tconsole.warn("[Message] No recipient email found in payload, skipping email send.");\n`;
-		code += `${indent}\t}\n`;
+		code += `${indent}\t});\n`;
 	} else {
 		const body = config?.body ?? "";
 
@@ -417,22 +417,17 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\t\t}) => Promise<{ queued: number }>;\n`;
 		code += `${indent}\t};\n`;
 		code += `${indent}\tconst recipientPhone = (event.payload.clientPhone ?? event.payload.recipientPhone) as string | undefined;\n`;
-		code += `${indent}\tif (recipientPhone) {\n`;
-		code += `${indent}\t\ttry {\n`;
-		code += `${indent}\t\t\tawait notifications.sendSms({\n`;
-		code += `${indent}\t\t\t\tto: recipientPhone,\n`;
-		if (body) {
-			code += `${indent}\t\t\t\tbody: "${escapeString(body)}",\n`;
-		} else {
-			code += `${indent}\t\t\t\tbody: "", // TODO: set SMS body\n`;
-		}
-		code += `${indent}\t\t\t});\n`;
-		code += `${indent}\t\t} catch (err) {\n`;
-		code += `${indent}\t\t\tconsole.error("[Message] sendSms failed (non-fatal):", err);\n`;
-		code += `${indent}\t\t}\n`;
-		code += `${indent}\t} else {\n`;
-		code += `${indent}\t\tconsole.warn("[Message] No recipient phone found in payload, skipping SMS send.");\n`;
+		code += `${indent}\tif (!recipientPhone) {\n`;
+		code += `${indent}\t\tthrow new Error("[Message] No recipient phone found in workflow payload. Expected clientPhone or recipientPhone.");\n`;
 		code += `${indent}\t}\n`;
+		code += `${indent}\tawait notifications.sendSms({\n`;
+		code += `${indent}\t\tto: recipientPhone,\n`;
+		if (body) {
+			code += `${indent}\t\tbody: "${escapeString(body)}",\n`;
+		} else {
+			code += `${indent}\t\tbody: "", // TODO: set SMS body\n`;
+		}
+		code += `${indent}\t});\n`;
 	}
 
 	code += `${indent}});\n`;
