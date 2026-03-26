@@ -950,6 +950,9 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).toContain("NOTIFICATIONS_SERVICE");
 		// WorkflowEnv should include NOTIFICATIONS_SERVICE
 		expect(result.code).toContain("NOTIFICATIONS_SERVICE: {");
+		// Errors must be fatal: no try-catch swallowing failures
+		expect(result.code).not.toContain("non-fatal");
+		expect(result.code).toContain('throw new Error("[Message]');
 	});
 
 	it("should handle Message node (email) without template name", () => {
@@ -1006,6 +1009,9 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).toContain("NOTIFICATIONS_SERVICE");
 		// WorkflowEnv declares both methods; only sendSms is called in the step
 		expect(result.code).not.toContain("await notifications.sendTemplateEmail");
+		// Errors must be fatal: no try-catch swallowing failures
+		expect(result.code).not.toContain("non-fatal");
+		expect(result.code).toContain('throw new Error("[Message]');
 	});
 
 	it("should handle Message node (sms) without body", () => {
