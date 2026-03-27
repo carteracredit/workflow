@@ -1,3 +1,10 @@
+# [1.1.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.13...v1.1.0-rc.14) (2026-03-27)
+
+
+### Features
+
+* include responsible roles in message step generation ([8a5a554](https://github.com/carteracredit/workflow/commit/8a5a55425335631d1e0817a49a91549da792245d))
+
 # [1.1.0-rc.13](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.12...v1.1.0-rc.13) (2026-03-26)
 
 
