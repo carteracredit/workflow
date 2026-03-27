@@ -1,3 +1,10 @@
+# [1.1.0-rc.15](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.14...v1.1.0-rc.15) (2026-03-27)
+
+
+### Features
+
+* enhance message node handling with multi-role support and progress tracking ([b6683a7](https://github.com/carteracredit/workflow/commit/b6683a7b4ca5bcbae283568ff925b84a2e80184e))
+
 # [1.1.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.13...v1.1.0-rc.14) (2026-03-27)
 
 
