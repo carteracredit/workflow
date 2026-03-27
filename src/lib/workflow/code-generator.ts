@@ -361,6 +361,9 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 	const channel = config?.channel ?? "email";
 
 	let code = `${indent}// Message: ${node.title} (${channel})\n`;
+	if (node.roles && node.roles.length > 0) {
+		code += `${indent}// Responsible roles: ${node.roles.join(", ")}\n`;
+	}
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
 
 	if (channel === "email") {
