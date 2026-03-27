@@ -534,6 +534,9 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain('step.do("send-notification"');
 		expect(result.code).toContain("sendTemplateEmail");
 		expect(result.code).toContain('templateName: "welcome"');
+		// Message nodes must emit progress calls like API/Transform nodes
+		expect(result.code).toContain("updateInstanceProgress");
+		expect(result.code).toContain('status: "in_progress"');
 	});
 
 	it("should include metadata in comments when provided", () => {
@@ -948,11 +951,18 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).toContain("NOMBRE: event.payload.nombre as string");
 		expect(result.code).toContain('MONTO: "500"');
 		expect(result.code).toContain("NOTIFICATIONS_SERVICE");
-		// WorkflowEnv should include NOTIFICATIONS_SERVICE
+		// WorkflowEnv should include NOTIFICATIONS_SERVICE and CASES_SVC
 		expect(result.code).toContain("NOTIFICATIONS_SERVICE: {");
+		expect(result.code).toContain("CASES_SVC: {");
+		expect(result.code).toContain("getCaseRoleContacts");
+		// With roles configured, should use RPC refresh + fallback logic
+		expect(result.code).toContain("CASES_SVC.getCaseRoleContacts");
+		expect(result.code).toContain("roleContacts");
 		// Errors must be fatal: no try-catch swallowing failures
 		expect(result.code).not.toContain("non-fatal");
 		expect(result.code).toContain('throw new Error("[Message]');
+		// Progress tracking must be emitted for Message nodes
+		expect(result.code).toContain("updateInstanceProgress");
 	});
 
 	it("should handle Message node (email) without template name", () => {
@@ -1009,9 +1019,14 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).toContain("NOTIFICATIONS_SERVICE");
 		// WorkflowEnv declares both methods; only sendSms is called in the step
 		expect(result.code).not.toContain("await notifications.sendTemplateEmail");
+		// WorkflowEnv should include CASES_SVC for multi-role SMS
+		expect(result.code).toContain("CASES_SVC: {");
+		expect(result.code).toContain("CASES_SVC.getCaseRoleContacts");
 		// Errors must be fatal: no try-catch swallowing failures
 		expect(result.code).not.toContain("non-fatal");
 		expect(result.code).toContain('throw new Error("[Message]');
+		// Progress tracking must be emitted for Message nodes
+		expect(result.code).toContain("updateInstanceProgress");
 	});
 
 	it("should handle Message node (sms) without body", () => {
@@ -1037,6 +1052,52 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).toContain("TODO: set SMS body");
 	});
 
+	it("should generate multi-role email message with CASES_SVC RPC refresh and fallback", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "message",
+				type: "Message",
+				title: "Notify Multi",
+				roles: ["Solicitante", "Vendedor", "Dealer"],
+				config: {
+					channel: "email",
+					templateName: "notify-all",
+					subject: "Actualización",
+					mergeVars: [],
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "message"),
+			createEdge("message", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Should use CASES_SVC RPC for fresh contacts
+		expect(result.code).toContain("CASES_SVC.getCaseRoleContacts");
+		expect(result.code).toContain("event.payload.caseId");
+		// Should include all three roles as target list
+		expect(result.code).toContain('"Solicitante"');
+		expect(result.code).toContain('"Vendedor"');
+		expect(result.code).toContain('"Dealer"');
+		// Should have fallback to payload.roleContacts
+		expect(result.code).toContain("event.payload.roleContacts");
+		// Should collect emails from role contacts
+		expect(result.code).toContain("recipientEmails");
+		expect(result.code).toContain("toList");
+		// WorkflowEnv must have CASES_SVC binding
+		expect(result.code).toContain("CASES_SVC: {");
+		expect(result.code).toContain("getCaseRoleContacts");
+		// sendTemplateEmail should use toList
+		expect(result.code).toContain(
+			"to: toList.length === 1 ? toList[0] : toList",
+		);
+	});
+
 	it("should NOT include NOTIFICATIONS_SERVICE in WorkflowEnv when no Message nodes", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
@@ -1048,6 +1109,7 @@ describe("generateWorkflowCode edge cases", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).not.toContain("NOTIFICATIONS_SERVICE");
+		expect(result.code).not.toContain("CASES_SVC");
 	});
 
 	it("should handle Decision node without condition", () => {

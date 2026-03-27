@@ -359,12 +359,71 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
 	const config = node.config as MessageNodeConfig | undefined;
 	const channel = config?.channel ?? "email";
+	const targetRoles = node.roles ?? [];
 
 	let code = `${indent}// Message: ${node.title} (${channel})\n`;
-	if (node.roles && node.roles.length > 0) {
-		code += `${indent}// Responsible roles: ${node.roles.join(", ")}\n`;
+	if (targetRoles.length > 0) {
+		code += `${indent}// Responsible roles: ${targetRoles.join(", ")}\n`;
 	}
+	code += generateProgressCall(node, indent, "in_progress");
 	code += `${indent}await step.do("${stepName}", async () => {\n`;
+
+	// Resolve recipients: try fresh RPC, fall back to payload.roleContacts, then clientEmail/Phone
+	if (targetRoles.length > 0) {
+		const rolesLiteral = `[${targetRoles.map((r) => `"${escapeString(r)}"`).join(", ")}]`;
+		if (channel === "email") {
+			code += `${indent}\t// Resolve recipient emails: fresh RPC → payload fallback → clientEmail\n`;
+			code += `${indent}\tlet roleContacts: Record<string, { email: string }> = {};\n`;
+			code += `${indent}\ttry {\n`;
+			code += `${indent}\t\tconst fresh = await this.env.CASES_SVC.getCaseRoleContacts({ caseId: event.payload.caseId as string });\n`;
+			code += `${indent}\t\troleContacts = fresh.roleContacts as Record<string, { email: string }>;\n`;
+			code += `${indent}\t} catch {\n`;
+			code += `${indent}\t\troleContacts = (event.payload.roleContacts ?? {}) as Record<string, { email: string }>;\n`;
+			code += `${indent}\t}\n`;
+			code += `${indent}\tconst targetRoles = ${rolesLiteral};\n`;
+			code += `${indent}\tconst recipientEmails: string[] = targetRoles\n`;
+			code += `${indent}\t\t.map((r) => roleContacts[r]?.email)\n`;
+			code += `${indent}\t\t.filter((e): e is string => typeof e === "string" && e.length > 0);\n`;
+			code += `${indent}\tconst fallbackEmail = (event.payload.clientEmail ?? event.payload.recipientEmail) as string | undefined;\n`;
+			code += `${indent}\tconst toList = recipientEmails.length > 0 ? recipientEmails : (fallbackEmail ? [fallbackEmail] : []);\n`;
+			code += `${indent}\tif (toList.length === 0) {\n`;
+			code += `${indent}\t\tthrow new Error("[Message] No recipient email found for roles: ${escapeString(targetRoles.join(", "))}.");\n`;
+			code += `${indent}\t}\n`;
+		} else {
+			code += `${indent}\t// Resolve recipient phones: fresh RPC → payload fallback → clientPhone\n`;
+			code += `${indent}\tlet roleContacts: Record<string, { phone?: string | null }> = {};\n`;
+			code += `${indent}\ttry {\n`;
+			code += `${indent}\t\tconst fresh = await this.env.CASES_SVC.getCaseRoleContacts({ caseId: event.payload.caseId as string });\n`;
+			code += `${indent}\t\troleContacts = fresh.roleContacts as Record<string, { phone?: string | null }>;\n`;
+			code += `${indent}\t} catch {\n`;
+			code += `${indent}\t\troleContacts = (event.payload.roleContacts ?? {}) as Record<string, { phone?: string | null }>;\n`;
+			code += `${indent}\t}\n`;
+			code += `${indent}\tconst targetRoles = ${rolesLiteral};\n`;
+			code += `${indent}\tconst recipientPhones: string[] = targetRoles\n`;
+			code += `${indent}\t\t.map((r) => roleContacts[r]?.phone)\n`;
+			code += `${indent}\t\t.filter((p): p is string => typeof p === "string" && p.length > 0);\n`;
+			code += `${indent}\tconst fallbackPhone = (event.payload.clientPhone ?? event.payload.recipientPhone) as string | undefined;\n`;
+			code += `${indent}\tconst toList = recipientPhones.length > 0 ? recipientPhones : (fallbackPhone ? [fallbackPhone] : []);\n`;
+			code += `${indent}\tif (toList.length === 0) {\n`;
+			code += `${indent}\t\tthrow new Error("[Message] No recipient phone found for roles: ${escapeString(targetRoles.join(", "))}.");\n`;
+			code += `${indent}\t}\n`;
+		}
+	} else {
+		// No roles configured — fall back to direct payload fields
+		if (channel === "email") {
+			code += `${indent}\tconst fallbackEmail = (event.payload.clientEmail ?? event.payload.recipientEmail) as string | undefined;\n`;
+			code += `${indent}\tif (!fallbackEmail) {\n`;
+			code += `${indent}\t\tthrow new Error("[Message] No recipient email found in workflow payload. Expected clientEmail or recipientEmail.");\n`;
+			code += `${indent}\t}\n`;
+			code += `${indent}\tconst toList = [fallbackEmail];\n`;
+		} else {
+			code += `${indent}\tconst fallbackPhone = (event.payload.clientPhone ?? event.payload.recipientPhone) as string | undefined;\n`;
+			code += `${indent}\tif (!fallbackPhone) {\n`;
+			code += `${indent}\t\tthrow new Error("[Message] No recipient phone found in workflow payload. Expected clientPhone or recipientPhone.");\n`;
+			code += `${indent}\t}\n`;
+			code += `${indent}\tconst toList = [fallbackPhone];\n`;
+		}
+	}
 
 	if (channel === "email") {
 		const templateName = config?.templateName ?? "";
@@ -379,12 +438,8 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\t\t\tmergeVars: Record<string, string>;\n`;
 		code += `${indent}\t\t}) => Promise<{ queued: number }>;\n`;
 		code += `${indent}\t};\n`;
-		code += `${indent}\tconst recipientEmail = (event.payload.clientEmail ?? event.payload.recipientEmail) as string | undefined;\n`;
-		code += `${indent}\tif (!recipientEmail) {\n`;
-		code += `${indent}\t\tthrow new Error("[Message] No recipient email found in workflow payload. Expected clientEmail or recipientEmail.");\n`;
-		code += `${indent}\t}\n`;
 		code += `${indent}\tawait notifications.sendTemplateEmail({\n`;
-		code += `${indent}\t\tto: recipientEmail,\n`;
+		code += `${indent}\t\tto: toList.length === 1 ? toList[0] : toList,\n`;
 		if (templateName) {
 			code += `${indent}\t\ttemplateName: "${escapeString(templateName)}",\n`;
 		} else {
@@ -419,12 +474,8 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\t\t\tbody: string;\n`;
 		code += `${indent}\t\t}) => Promise<{ queued: number }>;\n`;
 		code += `${indent}\t};\n`;
-		code += `${indent}\tconst recipientPhone = (event.payload.clientPhone ?? event.payload.recipientPhone) as string | undefined;\n`;
-		code += `${indent}\tif (!recipientPhone) {\n`;
-		code += `${indent}\t\tthrow new Error("[Message] No recipient phone found in workflow payload. Expected clientPhone or recipientPhone.");\n`;
-		code += `${indent}\t}\n`;
 		code += `${indent}\tawait notifications.sendSms({\n`;
-		code += `${indent}\t\tto: recipientPhone,\n`;
+		code += `${indent}\t\tto: toList.length === 1 ? toList[0] : toList,\n`;
 		if (body) {
 			code += `${indent}\t\tbody: "${escapeString(body)}",\n`;
 		} else {
@@ -434,6 +485,7 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 	}
 
 	code += `${indent}});\n`;
+	code += generateProgressCall(node, indent, "completed");
 
 	return code;
 }
@@ -890,6 +942,11 @@ export function generateWorkflowCode(
 		code += `\tNOTIFICATIONS_SERVICE: {\n`;
 		code += `\t\tsendTemplateEmail: (opts: unknown) => Promise<{ queued: number }>;\n`;
 		code += `\t\tsendSms: (opts: unknown) => Promise<{ queued: number }>;\n`;
+		code += `\t};\n`;
+		code += `\tCASES_SVC: {\n`;
+		code += `\t\tgetCaseRoleContacts: (input: { caseId: string }) => Promise<{\n`;
+		code += `\t\t\troleContacts: Record<string, { email: string; name: string | null; phone?: string | null }>;\n`;
+		code += `\t\t}>;\n`;
 		code += `\t};\n`;
 	}
 	code += `}\n\n`;
