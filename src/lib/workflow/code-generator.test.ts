@@ -1109,7 +1109,9 @@ describe("generateWorkflowCode edge cases", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		expect(result.code).not.toContain("NOTIFICATIONS_SERVICE");
-		expect(result.code).not.toContain("CASES_SVC");
+		// CASES_SVC is always included (for updateCaseObject) regardless of node types
+		expect(result.code).toContain("CASES_SVC");
+		expect(result.code).toContain("updateCaseObject");
 	});
 
 	it("should handle Decision node without condition", () => {
@@ -2635,5 +2637,108 @@ describe("generateWorkflowCode – progress tracking", () => {
 
 		expect(code).toContain("updateInstanceProgress");
 		expect(code).toContain('"waiting_event"'); // part of the status union in the interface
+	});
+});
+
+// ---------------------------------------------------------------------------
+// updateCaseObject integration
+// ---------------------------------------------------------------------------
+
+describe("generateWorkflowCode – updateCaseObject calls", () => {
+	it("emits _init call for Start node with instanceId and startedAt", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		expect(code).toContain("updateCaseObject");
+		expect(code).toContain('"_init"');
+		expect(code).toContain("event.instanceId");
+		expect(code).toContain("startedAt");
+	});
+
+	it("emits updateCaseObject with node variable for Form nodes", () => {
+		const formNode = createNode({
+			id: "node-111",
+			type: "Form",
+			title: "Test Form",
+			config: {
+				outputSchema: {
+					properties: [{ name: "field1", type: "string", required: true }],
+				},
+			},
+		});
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			formNode,
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "node-111"),
+			createEdge("node-111", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		// Should include the form step name as key and the variable as value
+		expect(code).toContain("updateCaseObject");
+		expect(code).toContain('"test-form"');
+		expect(code).toContain("node_111");
+	});
+
+	it("emits updateCaseObject with _status/_type for Message nodes", () => {
+		const msgNode = createNode({
+			id: "node-msg",
+			type: "Message",
+			title: "Notify User",
+			roles: ["Solicitante"],
+			config: {
+				channel: "email",
+				subject: "Hello",
+				templateName: "greeting",
+				mergeVars: {},
+			},
+		});
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			msgNode,
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "node-msg"),
+			createEdge("node-msg", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		expect(code).toContain("_status");
+		expect(code).toContain("_type");
+		expect(code).toContain('"Message"');
+		expect(code).toContain('"notify-user"');
+	});
+
+	it("emits updateCaseObject for End node with _status and _type", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		expect(code).toContain('"End"');
+		expect(code).toContain('"fin"');
+	});
+
+	it("always includes CASES_SVC.updateCaseObject in WorkflowEnv regardless of node types", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		expect(code).toContain("CASES_SVC");
+		expect(code).toContain("updateCaseObject");
+		expect(code).toContain("(caseId: string, data: Record<string, unknown>)");
 	});
 });

@@ -246,6 +246,42 @@ function generateProgressCall(
 	return code;
 }
 
+/**
+ * Emit a CASES_SVC.updateCaseObject call to persist node data in the
+ * CaseRealtimeDO and broadcast a real-time update to connected WebSocket clients.
+ *
+ * For nodes that produce output (captureResult=true), the variable name is
+ * passed so the actual runtime value is stored.
+ * For nodes without output, a status record {_status, _type} is stored so
+ * the DO always has a complete execution history.
+ *
+ * The call is placed after the node's step.do / waitForEvent completes —
+ * matching the pattern shown in the workflow code preview.
+ */
+function generateCaseObjectCall(
+	node: WorkflowNode,
+	indent: string,
+	varName?: string,
+): string {
+	const stepName = createStepName(node);
+	const nodeType = escapeString(node.type);
+	let data: string;
+
+	if (varName) {
+		// Node produced output — store the variable directly
+		data = `{"${escapeString(stepName)}": ${varName}}`;
+	} else {
+		// Node has no output — store execution status so the DO tracks all nodes
+		data = `{"${escapeString(stepName)}": {_status: "completed", _type: "${nodeType}"}}`;
+	}
+
+	let code = `${indent}await this.env.CASES_SVC.updateCaseObject(\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t${data},\n`;
+	code += `${indent});\n`;
+	return code;
+}
+
 // ---------------------------------------------------------------------------
 // Node code generators
 // ---------------------------------------------------------------------------
@@ -259,7 +295,8 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const captureResult = nodeHasOutputSchema(node);
-	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
+	const varName = nodeIdToVarName(node.id);
+	const varDecl = captureResult ? `const ${varName} = ` : "";
 	const eventType = `form-submission-${stepName}`;
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
@@ -269,6 +306,11 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 	code += `${indent}\t"${escapeString(stepName)}",\n`;
 	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
 	code += `${indent})).payload as Record<string, unknown>;\n`;
+	code += generateCaseObjectCall(
+		node,
+		indent,
+		captureResult ? varName : undefined,
+	);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -289,7 +331,8 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 		| undefined;
 	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
 	const captureResult = nodeHasOutputSchema(node);
-	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
+	const varName = nodeIdToVarName(node.id);
+	const varDecl = captureResult ? `const ${varName} = ` : "";
 
 	let code = `${indent}// API Call: ${node.title}\n`;
 	code += generateProgressCall(node, indent, "in_progress");
@@ -320,6 +363,11 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 	}
 
 	code += `);\n`;
+	code += generateCaseObjectCall(
+		node,
+		indent,
+		captureResult ? varName : undefined,
+	);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -332,7 +380,8 @@ function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const stepName = createStepName(node);
 	const transformCode = (node.config.code as string) || "// Transform logic";
 	const captureResult = nodeHasOutputSchema(node);
-	const varDecl = captureResult ? `const ${nodeIdToVarName(node.id)} = ` : "";
+	const varName = nodeIdToVarName(node.id);
+	const varDecl = captureResult ? `const ${varName} = ` : "";
 	const resultCast = captureResult ? " as Record<string, unknown>" : "";
 
 	let code = `${indent}// Transform: ${node.title}\n`;
@@ -341,6 +390,11 @@ function generateTransformStep(node: WorkflowNode, indent: string): string {
 	const expandedCode = expandVariableRefs(transformCode);
 	code += `${indent}\t${expandedCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}})${resultCast};\n`;
+	code += generateCaseObjectCall(
+		node,
+		indent,
+		captureResult ? varName : undefined,
+	);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -485,6 +539,7 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 	}
 
 	code += `${indent}});\n`;
+	code += generateCaseObjectCall(node, indent);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -505,6 +560,7 @@ function generateCheckpointStep(node: WorkflowNode, indent: string): string {
 	}
 	code += `${indent}\treturn { checkpoint: "${stepName}", timestamp: Date.now() };\n`;
 	code += `${indent}});\n`;
+	code += generateCaseObjectCall(node, indent);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -531,6 +587,7 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
 	code += `${indent}\t},\n`;
 	code += `${indent});\n`;
+	code += generateCaseObjectCall(node, indent, varName);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -564,6 +621,7 @@ function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\t// Configure flag changes in the workflow editor\n`;
 	}
 	code += `${indent}});\n`;
+	code += generateCaseObjectCall(node, indent);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -586,6 +644,7 @@ function generateJoinStep(
 	code += `${indent}\t// Merge point for ${branchCount} branches\n`;
 	code += `${indent}\treturn { merged: true };\n`;
 	code += `${indent}});\n`;
+	code += generateCaseObjectCall(node, indent);
 	code += generateProgressCall(node, indent, "completed");
 
 	return code;
@@ -664,7 +723,13 @@ function generateNodeCode(
 ): string {
 	switch (node.type) {
 		case "Start":
-			return `${indent}// Workflow started\n`;
+			return (
+				`${indent}// Workflow started\n` +
+				`${indent}await this.env.CASES_SVC.updateCaseObject(\n` +
+				`${indent}\tevent.payload.caseId as string,\n` +
+				`${indent}\t{"_init": {instanceId: event.instanceId, startedAt: new Date().toISOString()}},\n` +
+				`${indent});\n`
+			);
 		case "Form":
 			return generateFormStep(node, indent);
 		case "API":
@@ -687,12 +752,14 @@ function generateNodeCode(
 		case "End":
 			return (
 				`${indent}// Workflow completed successfully\n` +
+				generateCaseObjectCall(node, indent) +
 				generateProgressCall(node, indent, "completed") +
 				`${indent}return { success: true, payload: event.payload };\n`
 			);
 		case "Reject":
 			return (
 				`${indent}// Workflow rejected\n` +
+				generateCaseObjectCall(node, indent) +
 				generateProgressCall(node, indent, "completed") +
 				`${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`
 			);
@@ -943,12 +1010,15 @@ export function generateWorkflowCode(
 		code += `\t\tsendTemplateEmail: (opts: unknown) => Promise<{ queued: number }>;\n`;
 		code += `\t\tsendSms: (opts: unknown) => Promise<{ queued: number }>;\n`;
 		code += `\t};\n`;
-		code += `\tCASES_SVC: {\n`;
-		code += `\t\tgetCaseRoleContacts: (input: { caseId: string }) => Promise<{\n`;
-		code += `\t\t\troleContacts: Record<string, { email: string; name: string | null; phone?: string | null }>;\n`;
-		code += `\t\t}>;\n`;
-		code += `\t};\n`;
 	}
+	// CASES_SVC is always included: updateCaseObject is emitted for every node,
+	// and getCaseRoleContacts is needed for Message nodes.
+	code += `\tCASES_SVC: {\n`;
+	code += `\t\tgetCaseRoleContacts: (input: { caseId: string }) => Promise<{\n`;
+	code += `\t\t\troleContacts: Record<string, { email: string; name: string | null; phone?: string | null }>;\n`;
+	code += `\t\t}>;\n`;
+	code += `\t\tupdateCaseObject: (caseId: string, data: Record<string, unknown>) => Promise<void>;\n`;
+	code += `\t};\n`;
 	code += `}\n\n`;
 
 	// Generate workflow params interface
