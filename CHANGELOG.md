@@ -1,3 +1,10 @@
+# [1.1.0-rc.16](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.15...v1.1.0-rc.16) (2026-04-01)
+
+
+### Features
+
+* integrate updateCaseObject calls in workflow code generation ([6207c0c](https://github.com/carteracredit/workflow/commit/6207c0c4fdfcae3a941c45760980ec4a537eb0fc))
+
 # [1.1.0-rc.15](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.14...v1.1.0-rc.15) (2026-03-27)
 
 
