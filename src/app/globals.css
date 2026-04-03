@@ -198,7 +198,6 @@ body {
 	letter-spacing: var(--tracking-normal);
 }
 
-
 :root {
 	/* Workflow node colors - Cartera design system (icon colors in light theme) */
 	--node-start: #345151;
