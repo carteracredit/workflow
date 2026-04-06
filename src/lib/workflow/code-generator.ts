@@ -233,8 +233,16 @@ export interface RetryZone {
 	checkpointNodeId: string;
 	/** ID of the Reject node that triggers the retry */
 	rejectNodeId: string;
-	/** Maximum number of retries (from Reject.config.maxRetries) */
+	/**
+	 * Maximum number of retries (from Reject.config.maxRetries).
+	 * Ignored when unlimited=true.
+	 */
 	maxRetries: number;
+	/**
+	 * When true the retry loop has no upper bound (maxRetries=0 in the editor,
+	 * which means "unlimited" per the UI label "0 = ilimitados").
+	 */
+	unlimited: boolean;
 	/** JS variable name used as the loop counter, e.g. "retryCP1" */
 	retryVarName: string;
 }
@@ -261,7 +269,11 @@ export function detectRetryZones(
 		const targetNode = nodes.find((n) => n.id === outEdge.to);
 		if (!targetNode || targetNode.type !== "Checkpoint") continue;
 
-		const maxRetries = Math.max(0, Number(node.config.maxRetries ?? 0));
+		const rawMaxRetries = Number(node.config.maxRetries ?? 0);
+		// In the editor, maxRetries=0 means "unlimited" ("0 = ilimitados").
+		// maxRetries>0 is the explicit cap.
+		const unlimited = rawMaxRetries === 0 || Number.isNaN(rawMaxRetries);
+		const maxRetries = unlimited ? 0 : Math.max(1, rawMaxRetries);
 
 		// Derive a unique JS variable name from the checkpoint title
 		const cpSlug = createVariableName(targetNode.title || targetNode.id, "cp");
@@ -274,6 +286,7 @@ export function detectRetryZones(
 			checkpointNodeId: targetNode.id,
 			rejectNodeId: node.id,
 			maxRetries,
+			unlimited,
 			retryVarName,
 		});
 	}
@@ -1005,6 +1018,15 @@ function generateNodeCode(
 			if (zone) {
 				// Pattern 1: Reject with retry — generate continue/return logic
 				const rv = zone.retryVarName;
+				if (zone.unlimited) {
+					// Unlimited retries: always continue (the for loop has no upper bound)
+					return (
+						`${indent}// Workflow rejected — retrying (unlimited)\n` +
+						generateCaseObjectCall(node, indent) +
+						generateProgressCall(node, indent, "completed", undefined, rv) +
+						`${indent}continue; // Unlimited retry from checkpoint\n`
+					);
+				}
 				return (
 					`${indent}// Workflow rejected (retry zone)\n` +
 					generateCaseObjectCall(node, indent) +
@@ -1075,7 +1097,13 @@ function traverseBranch(
 		if (retryZone && !ctx.activeRetryZone) {
 			// Open the for loop
 			const rv = retryZone.retryVarName;
-			code += `${indent}for (let ${rv} = 0; ${rv} <= ${retryZone.maxRetries}; ${rv}++) {\n`;
+			if (retryZone.unlimited) {
+				// maxRetries=0 in editor means "unlimited" — loop forever until
+				// the accepted path returns { success: true }.
+				code += `${indent}for (let ${rv} = 0; ; ${rv}++) {\n`;
+			} else {
+				code += `${indent}for (let ${rv} = 0; ${rv} <= ${retryZone.maxRetries}; ${rv}++) {\n`;
+			}
 
 			// Traverse inside the zone with increased indentation and active zone set
 			const prevZone = ctx.activeRetryZone;

@@ -2786,7 +2786,46 @@ describe("detectRetryZones", () => {
 		expect(zones[0].checkpointNodeId).toBe("cp");
 		expect(zones[0].rejectNodeId).toBe("rej");
 		expect(zones[0].maxRetries).toBe(2);
+		expect(zones[0].unlimited).toBe(false);
 		expect(zones[0].retryVarName).toMatch(/^retry_/);
+	});
+
+	it("marks zone as unlimited when maxRetries=0 (editor default = unlimited)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({ id: "cp", type: "Checkpoint", title: "CP" }),
+			createNode({
+				id: "rej",
+				type: "Reject",
+				config: { allowRetry: true, maxRetries: 0 },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp"),
+			createEdge("rej", "cp"),
+		];
+		const zones = detectRetryZones(nodes, edges);
+		expect(zones).toHaveLength(1);
+		expect(zones[0].unlimited).toBe(true);
+	});
+
+	it("marks zone as unlimited when maxRetries is not set (undefined)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({ id: "cp", type: "Checkpoint", title: "CP" }),
+			createNode({
+				id: "rej",
+				type: "Reject",
+				config: { allowRetry: true },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp"),
+			createEdge("rej", "cp"),
+		];
+		const zones = detectRetryZones(nodes, edges);
+		expect(zones).toHaveLength(1);
+		expect(zones[0].unlimited).toBe(true);
 	});
 
 	it("detects two zones for two independent Reject -> Checkpoint edges", () => {
@@ -2895,6 +2934,31 @@ describe("Pattern 1 — Reject to Checkpoint retry loop", () => {
 		);
 		const { code } = generateWorkflowCode(nodes, edges);
 		expect(code).not.toMatch(/for\s*\(let \w+ = 0/);
+	});
+
+	it("generates an infinite for loop when maxRetries=0 (unlimited)", () => {
+		const nodes = buildPattern1Nodes().map((n) =>
+			n.id === "rej"
+				? { ...n, config: { allowRetry: true, maxRetries: 0 } }
+				: n,
+		);
+		const { code } = generateWorkflowCode(nodes, buildPattern1Edges());
+		// Infinite loop: no upper-bound in the for condition (only `; ;`)
+		expect(code).toMatch(/for\s*\(let \w+ = 0;\s*;\s*\w+\+\+\)/);
+		// Should NOT have a numeric upper bound like `<= 0`
+		expect(code).not.toMatch(/\w+ <= 0/);
+	});
+
+	it("generates always-continue (no return false) when unlimited", () => {
+		const nodes = buildPattern1Nodes().map((n) =>
+			n.id === "rej"
+				? { ...n, config: { allowRetry: true, maxRetries: 0 } }
+				: n,
+		);
+		const { code } = generateWorkflowCode(nodes, buildPattern1Edges());
+		expect(code).toContain("continue;");
+		// With unlimited retries the Reject node should only emit continue, not return false
+		expect(code).not.toContain("return { success: false");
 	});
 
 	it("no-regression: workflow without retry generates same code structure as before", () => {
