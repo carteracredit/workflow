@@ -67,7 +67,7 @@ import {
 const mockSession = {
 	user: {
 		id: "user-1",
-		name: "Admin",
+		name: "org_manager",
 		email: "admin@example.com",
 		image: null,
 		emailVerified: true,

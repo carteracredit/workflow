@@ -14,21 +14,13 @@ export type NodeType =
 
 export type CheckpointType = "normal" | "safe";
 
-export type Role =
-	| "Solicitante"
-	| "Vendedor"
-	| "Dealer"
-	| "Agente de Crédito"
-	| "Cobranza"
-	| "Admin";
+export type Role = "client" | "seller" | "credit_agent" | "org_manager";
 
 export const ROLE_OPTIONS: Role[] = [
-	"Solicitante",
-	"Vendedor",
-	"Dealer",
-	"Agente de Crédito",
-	"Cobranza",
-	"Admin",
+	"client",
+	"seller",
+	"credit_agent",
+	"org_manager",
 ];
 
 // API Node Failure Handling Configuration

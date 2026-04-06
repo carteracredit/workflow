@@ -20,7 +20,7 @@ const SAMPLE_NODES: WorkflowNode[] = [
 		type: "Form",
 		title: "Formulario",
 		description: "Captura de datos",
-		roles: ["Solicitante"],
+		roles: ["client"],
 		config: {},
 		staleTimeout: null,
 		position: { x: 220, y: 0 },

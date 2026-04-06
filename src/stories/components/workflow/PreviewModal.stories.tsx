@@ -20,7 +20,7 @@ const PREVIEW_NODES: WorkflowNode[] = [
 		type: "Decision",
 		title: "Motor de riesgo",
 		description: "Evalúa score y buró",
-		roles: ["Agente de Crédito"],
+		roles: ["credit_agent"],
 		config: {},
 		staleTimeout: null,
 		position: { x: 220, y: 0 },

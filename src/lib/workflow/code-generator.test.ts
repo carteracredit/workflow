@@ -157,7 +157,7 @@ describe("generateWorkflowCode", () => {
 				id: "form",
 				type: "Form",
 				title: "Datos Personales",
-				roles: ["Solicitante"],
+				roles: ["client"],
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
 		];
@@ -171,7 +171,7 @@ describe("generateWorkflowCode", () => {
 
 		expect(result.code).toContain("step.waitForEvent");
 		expect(result.code).toContain("form-submission-datos-personales");
-		expect(result.code).toContain("Solicitante");
+		expect(result.code).toContain("client");
 		expect(result.code).toContain('"datos-personales"');
 	});
 
@@ -182,7 +182,7 @@ describe("generateWorkflowCode", () => {
 				id: "form",
 				type: "Form",
 				title: "Datos Personales",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: { formId: "550e8400-e29b-41d4-a716-446655440000" },
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
@@ -231,7 +231,7 @@ describe("generateWorkflowCode", () => {
 				id: "form",
 				type: "Form",
 				title: "Datos Personales",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					formId: "550e8400-e29b-41d4-a716-446655440000",
 					formVersion: 3,
@@ -259,7 +259,7 @@ describe("generateWorkflowCode", () => {
 				id: "form",
 				type: "Form",
 				title: "Datos Personales",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: { formId: "550e8400-e29b-41d4-a716-446655440000" },
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
@@ -514,7 +514,7 @@ describe("generateWorkflowCode", () => {
 				id: "message",
 				type: "Message",
 				title: "Send Notification",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					channel: "email",
 					templateName: "welcome",
@@ -924,7 +924,7 @@ describe("generateWorkflowCode edge cases", () => {
 				id: "message",
 				type: "Message",
 				title: "Notify Email",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					channel: "email",
 					templateName: "my-template",
@@ -998,7 +998,7 @@ describe("generateWorkflowCode edge cases", () => {
 				id: "message",
 				type: "Message",
 				title: "Notify SMS",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					channel: "sms",
 					body: "Tu solicitud fue procesada",
@@ -1059,7 +1059,7 @@ describe("generateWorkflowCode edge cases", () => {
 				id: "message",
 				type: "Message",
 				title: "Notify Multi",
-				roles: ["Solicitante", "Vendedor", "Dealer"],
+				roles: ["client", "seller", "org_manager"],
 				config: {
 					channel: "email",
 					templateName: "notify-all",
@@ -1081,9 +1081,9 @@ describe("generateWorkflowCode edge cases", () => {
 		expect(result.code).toContain("CASES_SVC.getCaseRoleContacts");
 		expect(result.code).toContain("event.payload.caseId");
 		// Should include all three roles as target list
-		expect(result.code).toContain('"Solicitante"');
-		expect(result.code).toContain('"Vendedor"');
-		expect(result.code).toContain('"Dealer"');
+		expect(result.code).toContain('"client"');
+		expect(result.code).toContain('"seller"');
+		expect(result.code).toContain('"org_manager"');
 		// Should have fallback to payload.roleContacts
 		expect(result.code).toContain("event.payload.roleContacts");
 		// Should collect emails from role contacts
@@ -1191,19 +1191,19 @@ describe("generateWorkflowCode edge cases", () => {
 				id: "form1",
 				type: "Form",
 				title: "Formulario A",
-				roles: ["Vendedor"],
+				roles: ["seller"],
 			}),
 			createNode({
 				id: "form2",
 				type: "Form",
 				title: "Formulario B",
-				roles: ["Vendedor"],
+				roles: ["seller"],
 			}),
 			createNode({
 				id: "form3",
 				type: "Form",
 				title: "Formulario C",
-				roles: ["Vendedor"],
+				roles: ["seller"],
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
 		];
@@ -1481,13 +1481,13 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 				id: "form-a",
 				type: "Form",
 				title: "Formulario A",
-				roles: ["Admin"],
+				roles: ["org_manager"],
 			}),
 			createNode({
 				id: "form-b",
 				type: "Form",
 				title: "Formulario B",
-				roles: ["Admin"],
+				roles: ["org_manager"],
 			}),
 			createNode({ id: "join", type: "Join", title: "Union" }),
 			createNode({ id: "end", type: "End", title: "Fin" }),
@@ -2141,7 +2141,7 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 				id: "form",
 				type: "Form",
 				title: "Formulario Inicial",
-				roles: ["Solicitante"],
+				roles: ["client"],
 			}),
 			createNode({
 				id: "api",
@@ -2359,7 +2359,7 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 				id: "form",
 				type: "Form",
 				title: "Datos",
-				roles: ["Admin"],
+				roles: ["org_manager"],
 			}),
 			createNode({
 				id: "api",
@@ -2480,7 +2480,7 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 				id: "message",
 				type: "Message",
 				title: "Notify",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					channel: "email",
 					templateName: "welcome-template",
@@ -2692,7 +2692,7 @@ describe("generateWorkflowCode – updateCaseObject calls", () => {
 			id: "node-msg",
 			type: "Message",
 			title: "Notify User",
-			roles: ["Solicitante"],
+			roles: ["client"],
 			config: {
 				channel: "email",
 				subject: "Hello",
