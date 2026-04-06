@@ -21,7 +21,7 @@ const mockNode: WorkflowNode = {
 	type: "Form",
 	title: "Formulario de Solicitud",
 	description: "Captura de datos del solicitante",
-	roles: ["Solicitante", "Vendedor"],
+	roles: ["client", "seller"],
 	config: { formId: "form-1" },
 	staleTimeout: null,
 	position: { x: 100, y: 200 },

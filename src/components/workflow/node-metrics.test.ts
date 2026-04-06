@@ -52,7 +52,7 @@ describe("estimateNodeDimensions", () => {
 	it("adds height for roles", () => {
 		const withRoles = estimateNodeDimensions({
 			...baseNode,
-			roles: ["Solicitante", "Vendedor", "Dealer"],
+			roles: ["client", "seller", "org_manager"],
 		});
 		expect(withRoles.height).toBeGreaterThan(60);
 	});

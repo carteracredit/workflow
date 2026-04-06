@@ -1261,7 +1261,7 @@ export function PropertiesPanel({
 											htmlFor={`role-${role}`}
 											className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 										>
-											{role}
+											{t(`propertiesPanel.roleNames.${role}`)}
 										</label>
 									</div>
 								))}
@@ -2508,7 +2508,7 @@ export function PropertiesPanel({
 															htmlFor={`retry-role-${role}`}
 															className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 														>
-															{role}
+															{t(`propertiesPanel.roleNames.${role}`)}
 														</label>
 													</div>
 												))}

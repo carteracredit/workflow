@@ -485,7 +485,7 @@ export function NodeRenderer({
 										key={role}
 										className="rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
 									>
-										{role}
+										{t(`propertiesPanel.roleNames.${role}`)}
 									</span>
 								))}
 								{node.roles.length > 2 && (
@@ -515,7 +515,10 @@ export function NodeRenderer({
 								</span>
 								{challengeRetries.roles.length > 0 && (
 									<span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-										{challengeRetries.roles.slice(0, 2).join(", ")}
+										{challengeRetries.roles
+											.slice(0, 2)
+											.map((role) => t(`propertiesPanel.roleNames.${role}`))
+											.join(", ")}
 										{challengeRetries.roles.length > 2 &&
 											` +${challengeRetries.roles.length - 2}`}
 									</span>
