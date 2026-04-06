@@ -2742,3 +2742,507 @@ describe("generateWorkflowCode – updateCaseObject calls", () => {
 		expect(code).toContain("(caseId: string, data: Record<string, unknown>)");
 	});
 });
+
+// =============================================================================
+// Retry patterns
+// =============================================================================
+
+import { detectRetryZones } from "./code-generator";
+
+describe("detectRetryZones", () => {
+	it("returns empty array when no Reject nodes have allowRetry", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({ id: "cp", type: "Checkpoint", title: "CP" }),
+			createNode({
+				id: "rej",
+				type: "Reject",
+				config: { allowRetry: false },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp"),
+			createEdge("cp", "rej"),
+		];
+		expect(detectRetryZones(nodes, edges)).toHaveLength(0);
+	});
+
+	it("detects one zone for a Reject -> Checkpoint retry edge", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({ id: "cp", type: "Checkpoint", title: "Test Checkpoint" }),
+			createNode({
+				id: "rej",
+				type: "Reject",
+				config: { allowRetry: true, maxRetries: 2 },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp"),
+			createEdge("rej", "cp"), // retry back-edge
+		];
+		const zones = detectRetryZones(nodes, edges);
+		expect(zones).toHaveLength(1);
+		expect(zones[0].checkpointNodeId).toBe("cp");
+		expect(zones[0].rejectNodeId).toBe("rej");
+		expect(zones[0].maxRetries).toBe(2);
+		expect(zones[0].unlimited).toBe(false);
+		expect(zones[0].retryVarName).toMatch(/^retry_/);
+	});
+
+	it("marks zone as unlimited when maxRetries=0 (editor default = unlimited)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({ id: "cp", type: "Checkpoint", title: "CP" }),
+			createNode({
+				id: "rej",
+				type: "Reject",
+				config: { allowRetry: true, maxRetries: 0 },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp"),
+			createEdge("rej", "cp"),
+		];
+		const zones = detectRetryZones(nodes, edges);
+		expect(zones).toHaveLength(1);
+		expect(zones[0].unlimited).toBe(true);
+	});
+
+	it("marks zone as unlimited when maxRetries is not set (undefined)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({ id: "cp", type: "Checkpoint", title: "CP" }),
+			createNode({
+				id: "rej",
+				type: "Reject",
+				config: { allowRetry: true },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp"),
+			createEdge("rej", "cp"),
+		];
+		const zones = detectRetryZones(nodes, edges);
+		expect(zones).toHaveLength(1);
+		expect(zones[0].unlimited).toBe(true);
+	});
+
+	it("detects two zones for two independent Reject -> Checkpoint edges", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({ id: "cp1", type: "Checkpoint", title: "CP 1" }),
+			createNode({ id: "cp2", type: "Checkpoint", title: "CP 2" }),
+			createNode({
+				id: "rej1",
+				type: "Reject",
+				config: { allowRetry: true, maxRetries: 1 },
+			}),
+			createNode({
+				id: "rej2",
+				type: "Reject",
+				config: { allowRetry: true, maxRetries: 3 },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp1"),
+			createEdge("rej1", "cp1"),
+			createEdge("cp1", "cp2"),
+			createEdge("rej2", "cp2"),
+		];
+		const zones = detectRetryZones(nodes, edges);
+		expect(zones).toHaveLength(2);
+	});
+});
+
+describe("Pattern 1 — Reject to Checkpoint retry loop", () => {
+	// Build a minimal workflow:
+	// Start -> Checkpoint -> Challenge --(accepted)--> End
+	//                                 --(rejected)--> Rejected (allowRetry: 2, -> Checkpoint)
+	const buildPattern1Nodes = (): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "cp",
+			type: "Checkpoint",
+			title: "Test Checkpoint",
+		}),
+		createNode({
+			id: "challenge",
+			type: "Challenge",
+			title: "Mi Challenge",
+			config: { challengeType: "acceptance" },
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+		createNode({
+			id: "rej",
+			type: "Reject",
+			title: "Rechazado",
+			config: { allowRetry: true, maxRetries: 2 },
+		}),
+	];
+
+	const buildPattern1Edges = (): WorkflowEdge[] => [
+		createEdge("start", "cp"),
+		createEdge("cp", "challenge"),
+		createEdge("challenge", "end", { fromPort: "top" }),
+		createEdge("challenge", "rej", { fromPort: "bottom" }),
+		createEdge("rej", "cp"), // retry back-edge
+	];
+
+	it("generates a for loop around the retry zone", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern1Nodes(),
+			buildPattern1Edges(),
+		);
+		expect(code).toMatch(/for\s*\(let \w+ = 0; \w+ <= 2; \w+\+\+\)/);
+	});
+
+	it("generates continue inside the rejected branch", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern1Nodes(),
+			buildPattern1Edges(),
+		);
+		expect(code).toContain("continue; // Retry from checkpoint");
+	});
+
+	it("generates return false when retries are exhausted", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern1Nodes(),
+			buildPattern1Edges(),
+		);
+		expect(code).toContain("return { success: false");
+	});
+
+	it("uses in_progress status for Reject while retrying (prevents premature terminal detection)", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern1Nodes(),
+			buildPattern1Edges(),
+		);
+		// Inside the retry branch (if rv < maxRetries), Reject must emit "in_progress"
+		// so the cases-svc workflowProgress endpoint doesn't treat it as a final rejection.
+		// Pattern in generated code: status: "in_progress" appears inside the if(rv < N) block.
+		const rejectZoneStart = code.indexOf("// Workflow rejected (retry zone)");
+		expect(rejectZoneStart).toBeGreaterThan(-1);
+		const rejectZoneCode = code.slice(rejectZoneStart);
+		// The progress call for retrying uses in_progress
+		expect(rejectZoneCode).toMatch(/status:\s*"in_progress"/);
+	});
+
+	it("uses completed status for Reject only on final rejection", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern1Nodes(),
+			buildPattern1Edges(),
+		);
+		// After retries are exhausted (after the if/continue block), the progress call
+		// uses "completed" so the endpoint correctly marks the case as rejected.
+		const rejectZoneStart = code.indexOf("// Workflow rejected (retry zone)");
+		const rejectZoneCode = code.slice(rejectZoneStart);
+		// "in_progress" must appear first (inside the retry branch)
+		const inProgressIdx = rejectZoneCode.search(/status:\s*"in_progress"/);
+		// "completed" must appear after the retry branch
+		const completedIdx = rejectZoneCode.search(/"_prog-[^"]*-completed"/);
+		expect(inProgressIdx).toBeGreaterThan(-1);
+		expect(completedIdx).toBeGreaterThan(-1);
+		// The in_progress call must come before the completed call
+		expect(inProgressIdx).toBeLessThan(completedIdx);
+	});
+
+	it("uses retry-suffixed step names inside the loop", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern1Nodes(),
+			buildPattern1Edges(),
+		);
+		// Step names must reference the retry variable when > 0
+		expect(code).toMatch(/-r\$\{/);
+	});
+
+	it("does NOT generate a for loop when allowRetry is false", () => {
+		const nodes = buildPattern1Nodes().map((n) =>
+			n.id === "rej"
+				? { ...n, config: { allowRetry: false, maxRetries: 0 } }
+				: n,
+		);
+		// Remove retry back-edge
+		const edges = buildPattern1Edges().filter(
+			(e) => !(e.from === "rej" && e.to === "cp"),
+		);
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).not.toMatch(/for\s*\(let \w+ = 0/);
+	});
+
+	it("generates an infinite for loop when maxRetries=0 (unlimited)", () => {
+		const nodes = buildPattern1Nodes().map((n) =>
+			n.id === "rej"
+				? { ...n, config: { allowRetry: true, maxRetries: 0 } }
+				: n,
+		);
+		const { code } = generateWorkflowCode(nodes, buildPattern1Edges());
+		// Infinite loop: no upper-bound in the for condition (only `; ;`)
+		expect(code).toMatch(/for\s*\(let \w+ = 0;\s*;\s*\w+\+\+\)/);
+		// Should NOT have a numeric upper bound like `<= 0`
+		expect(code).not.toMatch(/\w+ <= 0/);
+	});
+
+	it("generates always-continue (no return false) when unlimited", () => {
+		const nodes = buildPattern1Nodes().map((n) =>
+			n.id === "rej"
+				? { ...n, config: { allowRetry: true, maxRetries: 0 } }
+				: n,
+		);
+		const { code } = generateWorkflowCode(nodes, buildPattern1Edges());
+		expect(code).toContain("continue; // Unlimited retry from checkpoint");
+		// With unlimited retries the Reject node should only emit continue, not return false
+		expect(code).not.toContain("return { success: false");
+		// Unlimited reject always uses "in_progress" (never reaches "completed" for the reject node)
+		const unlimitedSection = code.slice(
+			code.indexOf("// Workflow rejected — retrying (unlimited)"),
+		);
+		expect(unlimitedSection).toMatch(/status:\s*"in_progress"/);
+	});
+
+	it("no-regression: workflow without retry generates same code structure as before", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "form", type: "Form", title: "Formulario" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).not.toMatch(/for\s*\(let \w+ = 0/);
+		expect(code).toContain("waitForEvent");
+		expect(code).toContain("return { success: true");
+	});
+});
+
+describe("Pattern 2 — Challenge inline retry loop", () => {
+	const buildPattern2Nodes = (): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "challenge",
+			type: "Challenge",
+			title: "Mi Challenge",
+			config: {
+				challengeType: "acceptance",
+				retries: { maxRetries: 3 },
+			},
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+		createNode({ id: "rej", type: "Reject", title: "Rechazado", config: {} }),
+	];
+
+	const buildPattern2Edges = (): WorkflowEdge[] => [
+		createEdge("start", "challenge"),
+		createEdge("challenge", "end", { fromPort: "top" }),
+		createEdge("challenge", "rej", { fromPort: "bottom" }),
+	];
+
+	it("generates an inline for loop around the waitForEvent", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern2Nodes(),
+			buildPattern2Edges(),
+		);
+		// Should have a loop for inline challenge retries
+		expect(code).toMatch(/for\s*\(let \w+ = 0; \w+ <= 3; \w+\+\+\)/);
+	});
+
+	it("breaks out of the inline loop when accepted", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern2Nodes(),
+			buildPattern2Edges(),
+		);
+		expect(code).toContain("break;");
+	});
+
+	it("does NOT generate inline loop when no retries configured", () => {
+		const nodes = buildPattern2Nodes().map((n) =>
+			n.id === "challenge"
+				? {
+						...n,
+						config: { challengeType: "acceptance" } as Record<string, unknown>,
+					}
+				: n,
+		);
+		const { code } = generateWorkflowCode(nodes, buildPattern2Edges());
+		expect(code).not.toMatch(/for\s*\(let \w+ = 0/);
+	});
+});
+
+describe("Pattern 3 — API return-to-checkpoint retry", () => {
+	const buildPattern3Nodes = (): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "cp",
+			type: "Checkpoint",
+			title: "Mi Checkpoint",
+		}),
+		createNode({
+			id: "api",
+			type: "API",
+			title: "External API",
+			config: {
+				url: "https://example.com/api",
+				method: "POST",
+				failureHandling: {
+					onFailure: "return-to-checkpoint",
+					maxRetries: 2,
+					timeout: 30000,
+				},
+			},
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+		createNode({
+			id: "rej",
+			type: "Reject",
+			title: "Rechazado",
+			config: { allowRetry: true, maxRetries: 2 },
+		}),
+	];
+
+	const buildPattern3Edges = (): WorkflowEdge[] => [
+		createEdge("start", "cp"),
+		createEdge("cp", "api"),
+		createEdge("api", "end"),
+		createEdge("rej", "cp"), // retry back-edge (needed for zone detection)
+	];
+
+	it("generates try/catch around the API step.do call", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern3Nodes(),
+			buildPattern3Edges(),
+		);
+		expect(code).toContain("try {");
+		expect(code).toContain("} catch (_apiErr)");
+	});
+
+	it("generates continue inside catch to return to checkpoint", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern3Nodes(),
+			buildPattern3Edges(),
+		);
+		expect(code).toContain("continue; // Return to checkpoint and retry");
+	});
+
+	it("rethrows after max retries are exhausted", () => {
+		const { code } = generateWorkflowCode(
+			buildPattern3Nodes(),
+			buildPattern3Edges(),
+		);
+		expect(code).toContain("throw _apiErr;");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Snapshot test — exact user workflow (Form → Checkpoint → Challenge → Reject)
+// ---------------------------------------------------------------------------
+describe("Snapshot — user workflow: Form → Checkpoint → Challenge → Reject(retry=2)", () => {
+	/**
+	 * Mirrors the real workflow the user is testing:
+	 * Start → Form → Checkpoint → Challenge → (top: End, bottom: Reject(retry=2) → Checkpoint)
+	 */
+	const buildUserWorkflowNodes = (): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "form",
+			type: "Form",
+			title: "Formulario",
+			config: { outputSchema: [{ key: "data", label: "Data", type: "text" }] },
+		}),
+		createNode({ id: "cp", type: "Checkpoint", title: "test de checkpoint" }),
+		createNode({
+			id: "challenge",
+			type: "Challenge",
+			title: "Challenge",
+			config: { challengeType: "acceptance" },
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+		createNode({
+			id: "rej",
+			type: "Reject",
+			title: "Rechazado",
+			config: { allowRetry: true, maxRetries: 2 },
+		}),
+	];
+
+	const buildUserWorkflowEdges = (): WorkflowEdge[] => [
+		createEdge("start", "form"),
+		createEdge("form", "cp"),
+		createEdge("cp", "challenge"),
+		createEdge("challenge", "end", { fromPort: "top" }),
+		createEdge("challenge", "rej", { fromPort: "bottom" }),
+		createEdge("rej", "cp"), // retry back-edge
+	];
+
+	it("generates correct for loop structure (snapshot)", () => {
+		const { code, warnings } = generateWorkflowCode(
+			buildUserWorkflowNodes(),
+			buildUserWorkflowEdges(),
+		);
+
+		// Print generated code for inspection
+		// eslint-disable-next-line no-console
+		console.log("\n=== GENERATED CODE SNAPSHOT ===\n", code);
+		// eslint-disable-next-line no-console
+		console.log("=== WARNINGS ===", warnings);
+
+		// The for loop must wrap the Checkpoint → Challenge → Reject path
+		// createVariableName converts "test de checkpoint" → "testDeCheckpoint"
+		// so retryVarName = "retry_testDeCheckpoint"
+		expect(code).toMatch(
+			/for\s*\(let retry_testDeCheckpoint = 0; retry_testDeCheckpoint <= 2; retry_testDeCheckpoint\+\+\)/,
+		);
+
+		// The `continue` must be inside the else (rejected) branch
+		expect(code).toContain("continue; // Retry from checkpoint");
+
+		// Must return success: false after retries exhausted
+		expect(code).toContain("return { success: false");
+
+		// Must return success: true on the accepted path
+		expect(code).toContain("return { success: true");
+
+		// Step names inside the loop must use the retry variable
+		expect(code).toMatch(
+			/retry_testDeCheckpoint > 0 \? `test-de-checkpoint-r\$\{retry_testDeCheckpoint\}`/,
+		);
+
+		// Reject uses in_progress while retrying (prevents premature terminal detection)
+		expect(code).toContain(`status: "in_progress"`);
+		// Only the FINAL rejection uses "completed" for the reject node
+		const rejectZoneCode = code.slice(
+			code.indexOf("// Workflow rejected (retry zone)"),
+		);
+		expect(rejectZoneCode).toContain(`status: "completed"`);
+
+		// Progress calls are wrapped in step.do for durability
+		expect(code).toContain(`await step.do("_prog-`);
+		// Case object calls are wrapped in step.do for durability
+		expect(code).toContain(`await step.do("_case-`);
+
+		// No warnings expected
+		expect(warnings).toHaveLength(0);
+	});
+
+	it("produces code where accepted path falls through to End", () => {
+		const { code } = generateWorkflowCode(
+			buildUserWorkflowNodes(),
+			buildUserWorkflowEdges(),
+		);
+
+		// Accepted path (if block) should be empty or only contain the End code
+		// The `return { success: true }` must come AFTER the for loop closes
+		const forLoopStart = code.indexOf("for (let retry_test_de_checkpoint");
+		const returnTrue = code.indexOf("return { success: true");
+		const closingBrace = code.lastIndexOf("}\n\n", returnTrue);
+		// The return { success: true } should be OUTSIDE the for loop
+		expect(returnTrue).toBeGreaterThan(forLoopStart);
+		// There should be no `return { success: true }` inside the rejected branch
+		const rejectBranchStart = code.indexOf("} else {");
+		const rejectBranchEnd = code.indexOf("}\n\n", rejectBranchStart);
+		const codeInRejectedBranch = code.slice(rejectBranchStart, rejectBranchEnd);
+		expect(codeInRejectedBranch).not.toContain("return { success: true");
+		expect(closingBrace).toBeGreaterThan(-1);
+	});
+});

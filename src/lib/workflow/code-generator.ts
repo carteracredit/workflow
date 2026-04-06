@@ -216,52 +216,180 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
 }
 
 // ---------------------------------------------------------------------------
+// Retry zone analysis
+// ---------------------------------------------------------------------------
+
+/**
+ * Describes a "retry zone": the segment of the graph between a Checkpoint and a
+ * Reject node that has `config.allowRetry === true`. During code generation, this
+ * zone is wrapped in a `for` loop so the workflow re-executes from the checkpoint
+ * on each rejection (up to `maxRetries` times).
+ *
+ * Step names inside the zone are suffixed with `-r${retryVarName}` (when > 0) to
+ * satisfy Cloudflare Workflows' requirement that each step name is unique.
+ */
+export interface RetryZone {
+	/** ID of the Checkpoint node that is the retry target */
+	checkpointNodeId: string;
+	/** ID of the Reject node that triggers the retry */
+	rejectNodeId: string;
+	/**
+	 * Maximum number of retries (from Reject.config.maxRetries).
+	 * Ignored when unlimited=true.
+	 */
+	maxRetries: number;
+	/**
+	 * When true the retry loop has no upper bound (maxRetries=0 in the editor,
+	 * which means "unlimited" per the UI label "0 = ilimitados").
+	 */
+	unlimited: boolean;
+	/** JS variable name used as the loop counter, e.g. "retryCP1" */
+	retryVarName: string;
+}
+
+/**
+ * Scans all Reject nodes with `config.allowRetry === true` and resolves the
+ * associated Checkpoint target from their outgoing edge. Returns one RetryZone
+ * per qualifying Reject node.
+ */
+export function detectRetryZones(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+): RetryZone[] {
+	const zones: RetryZone[] = [];
+	const cpVarCounters = new Map<string, number>();
+
+	for (const node of nodes) {
+		if (node.type !== "Reject") continue;
+		if ((node.config.allowRetry as boolean) !== true) continue;
+
+		const outEdge = edges.find((e) => e.from === node.id);
+		if (!outEdge) continue;
+
+		const targetNode = nodes.find((n) => n.id === outEdge.to);
+		if (!targetNode || targetNode.type !== "Checkpoint") continue;
+
+		const rawMaxRetries = Number(node.config.maxRetries ?? 0);
+		// In the editor, maxRetries=0 means "unlimited" ("0 = ilimitados").
+		// maxRetries>0 is the explicit cap.
+		const unlimited = rawMaxRetries === 0 || Number.isNaN(rawMaxRetries);
+		const maxRetries = unlimited ? 0 : Math.max(1, rawMaxRetries);
+
+		// Derive a unique JS variable name from the checkpoint title
+		const cpSlug = createVariableName(targetNode.title || targetNode.id, "cp");
+		const count = cpVarCounters.get(cpSlug) ?? 0;
+		cpVarCounters.set(cpSlug, count + 1);
+		const retryVarName =
+			count === 0 ? `retry_${cpSlug}` : `retry_${cpSlug}_${count}`;
+
+		zones.push({
+			checkpointNodeId: targetNode.id,
+			rejectNodeId: node.id,
+			maxRetries,
+			unlimited,
+			retryVarName,
+		});
+	}
+
+	return zones;
+}
+
+/**
+ * Generates a step-name expression (TS source code) that:
+ *  - On the first attempt (retryVar === 0) returns the plain base name.
+ *  - On subsequent retries appends `-r${retryVar}` to guarantee uniqueness.
+ *
+ * Cloudflare Workflows uses step names as cache keys, so each loop iteration
+ * must produce a distinct name for every step inside the retry zone.
+ *
+ * Example output:  `retry_cp > 0 ? \`my-step-r${retry_cp}\` : "my-step"`
+ */
+function retryStepNameExpr(baseName: string, retryVarName: string): string {
+	return `${retryVarName} > 0 ? \`${baseName}-r\${${retryVarName}}\` : "${baseName}"`;
+}
+
+// ---------------------------------------------------------------------------
 // Progress tracking helper
 // ---------------------------------------------------------------------------
 
 /**
- * Emit a WORKFLOW_SVC.updateInstanceProgress call for step tracking.
- * This is injected before/after each step so the UI can display progress.
+ * Emit a `step.do`-wrapped WORKFLOW_SVC.updateInstanceProgress call.
+ *
+ * Wrapping in `step.do` makes the call durable: on replay Cloudflare returns
+ * the cached void result without re-executing the RPC, which means:
+ *  - No redundant network calls to workflow-svc during replay
+ *  - Transient RPC failures are auto-retried by the platform instead of
+ *    crashing the whole workflow run
+ *
+ * The step name is unique per (node, status) tuple and per retry iteration so
+ * Cloudflare's cache key never collides across loop iterations.
+ *
+ * When inside a retry loop, `retryVarName` is passed to record the count.
+ * When inside a nested Challenge inline-retry loop, `innerRetryVarName` is
+ * additionally passed to keep names unique per (outer, inner) combination.
  */
 function generateProgressCall(
 	node: WorkflowNode,
 	indent: string,
 	status: "in_progress" | "completed" | "waiting_event",
 	eventType?: string,
+	retryVarName?: string,
+	innerRetryVarName?: string,
 ): string {
 	const stepName = createStepName(node);
 	const nodeType = node.type;
 	const nodeId = node.id;
-	let code = `${indent}await this.env.WORKFLOW_SVC.updateInstanceProgress({\n`;
-	code += `${indent}\tworkflowId: this.env.WORKFLOW_ID,\n`;
-	code += `${indent}\tinstanceId: event.instanceId,\n`;
-	code += `${indent}\tnodeId: "${escapeString(nodeId)}",\n`;
-	code += `${indent}\tnodeType: "${escapeString(nodeType)}",\n`;
-	code += `${indent}\tstepName: "${escapeString(stepName)}",\n`;
-	code += `${indent}\tstatus: "${status}",\n`;
-	if (eventType) {
-		code += `${indent}\teventType: "${escapeString(eventType)}",\n`;
+
+	// Build a unique step.do cache key: _prog-<nodeId>-<status>[retry suffix]
+	const baseProgName = `_prog-${nodeId}-${status}`;
+	let stepDoNameExpr: string;
+	if (retryVarName && innerRetryVarName) {
+		stepDoNameExpr =
+			`(${retryVarName} > 0 || ${innerRetryVarName} > 0)` +
+			` ? \`${baseProgName}\${${retryVarName} > 0 ? \`-r\${${retryVarName}}\` : ""}\${${innerRetryVarName} > 0 ? \`-ch\${${innerRetryVarName}}\` : ""}\`` +
+			` : "${baseProgName}"`;
+	} else if (retryVarName) {
+		stepDoNameExpr = `${retryVarName} > 0 ? \`${baseProgName}-r\${${retryVarName}}\` : "${baseProgName}"`;
+	} else {
+		stepDoNameExpr = `"${baseProgName}"`;
 	}
+
+	const i2 = indent + "\t";
+	const i3 = indent + "\t\t";
+	let code = `${indent}await step.do(${stepDoNameExpr}, async () => {\n`;
+	code += `${i2}await this.env.WORKFLOW_SVC.updateInstanceProgress({\n`;
+	code += `${i3}workflowId: this.env.WORKFLOW_ID,\n`;
+	code += `${i3}instanceId: event.instanceId,\n`;
+	code += `${i3}nodeId: "${escapeString(nodeId)}",\n`;
+	code += `${i3}nodeType: "${escapeString(nodeType)}",\n`;
+	code += `${i3}stepName: "${escapeString(stepName)}",\n`;
+	code += `${i3}status: "${status}",\n`;
+	if (eventType) {
+		code += `${i3}eventType: "${escapeString(eventType)}",\n`;
+	}
+	if (retryVarName) {
+		code += `${i3}retryCount: ${retryVarName},\n`;
+	}
+	code += `${i2}});\n`;
 	code += `${indent}});\n`;
 	return code;
 }
 
 /**
- * Emit a CASES_SVC.updateCaseObject call to persist node data in the
- * CaseRealtimeDO and broadcast a real-time update to connected WebSocket clients.
+ * Emit a `step.do`-wrapped CASES_SVC.updateCaseObject call.
  *
- * For nodes that produce output (captureResult=true), the variable name is
- * passed so the actual runtime value is stored.
- * For nodes without output, a status record {_status, _type} is stored so
- * the DO always has a complete execution history.
+ * Same durability rationale as generateProgressCall: wrapping prevents
+ * redundant RPC calls on replay and enables platform-level retry on failure.
  *
- * The call is placed after the node's step.do / waitForEvent completes —
- * matching the pattern shown in the workflow code preview.
+ * The step.do cache key is unique per node (and per retry iteration when
+ * inside a retry zone) so different loop iterations don't share a cached entry.
  */
 function generateCaseObjectCall(
 	node: WorkflowNode,
 	indent: string,
 	varName?: string,
+	retryVarName?: string,
+	innerRetryVarName?: string,
 ): string {
 	const stepName = createStepName(node);
 	const nodeType = escapeString(node.type);
@@ -275,10 +403,27 @@ function generateCaseObjectCall(
 		data = `{"${escapeString(stepName)}": {_status: "completed", _type: "${nodeType}"}}`;
 	}
 
-	let code = `${indent}await this.env.CASES_SVC.updateCaseObject(\n`;
-	code += `${indent}\tevent.payload.caseId as string,\n`;
-	code += `${indent}\t${data},\n`;
-	code += `${indent});\n`;
+	// Build a unique step.do cache key: _case-<nodeId>[retry suffix]
+	const baseCaseName = `_case-${node.id}`;
+	let stepDoNameExpr: string;
+	if (retryVarName && innerRetryVarName) {
+		stepDoNameExpr =
+			`(${retryVarName} > 0 || ${innerRetryVarName} > 0)` +
+			` ? \`${baseCaseName}\${${retryVarName} > 0 ? \`-r\${${retryVarName}}\` : ""}\${${innerRetryVarName} > 0 ? \`-ch\${${innerRetryVarName}}\` : ""}\`` +
+			` : "${baseCaseName}"`;
+	} else if (retryVarName) {
+		stepDoNameExpr = `${retryVarName} > 0 ? \`${baseCaseName}-r\${${retryVarName}}\` : "${baseCaseName}"`;
+	} else {
+		stepDoNameExpr = `"${baseCaseName}"`;
+	}
+
+	const i2 = indent + "\t";
+	let code = `${indent}await step.do(${stepDoNameExpr}, async () => {\n`;
+	code += `${i2}await this.env.CASES_SVC.updateCaseObject(\n`;
+	code += `${i2}\tevent.payload.caseId as string,\n`;
+	code += `${i2}\t${data},\n`;
+	code += `${i2});\n`;
+	code += `${indent}});\n`;
 	return code;
 }
 
@@ -291,19 +436,32 @@ function generateCaseObjectCall(
  * Uses step.waitForEvent so the workflow pauses until the client sends form data
  * via sendEvent({ type: "form-submission-<stepName>", payload }). No FORMS binding.
  */
-function generateFormStep(node: WorkflowNode, indent: string): string {
+function generateFormStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
 	const stepName = createStepName(node);
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const captureResult = nodeHasOutputSchema(node);
 	const varName = nodeIdToVarName(node.id);
 	const varDecl = captureResult ? `const ${varName} = ` : "";
 	const eventType = `form-submission-${stepName}`;
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
 
 	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
 	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload }) from cases-svc\n`;
-	code += generateProgressCall(node, indent, "waiting_event", eventType);
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		eventType,
+		retryVarName,
+	);
 	code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
-	code += `${indent}\t"${escapeString(stepName)}",\n`;
+	code += `${indent}\t${stepNameExpr},\n`;
 	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
 	code += `${indent})).payload as Record<string, unknown>;\n`;
 	code += generateCaseObjectCall(
@@ -311,7 +469,13 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 		indent,
 		captureResult ? varName : undefined,
 	);
-	code += generateProgressCall(node, indent, "completed");
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
 
 	return code;
 }
@@ -319,7 +483,11 @@ function generateFormStep(node: WorkflowNode, indent: string): string {
 /**
  * Generate code for an API node
  */
-function generateAPIStep(node: WorkflowNode, indent: string): string {
+function generateAPIStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
 	const stepName = createStepName(node);
 	const endpoint =
 		(node.config.url as string) ||
@@ -333,10 +501,29 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 	const captureResult = nodeHasOutputSchema(node);
 	const varName = nodeIdToVarName(node.id);
 	const varDecl = captureResult ? `const ${varName} = ` : "";
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	const isReturnToCheckpoint =
+		failureHandling?.onFailure === "return-to-checkpoint";
 
 	let code = `${indent}// API Call: ${node.title}\n`;
-	code += generateProgressCall(node, indent, "in_progress");
-	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"in_progress",
+		undefined,
+		retryVarName,
+	);
+
+	// Wrap in try/catch for return-to-checkpoint failure handling
+	if (isReturnToCheckpoint && retryVarName) {
+		code += `${indent}try {\n`;
+		indent += "\t";
+	}
+
+	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
 	code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
 	code += `${indent}\t\tmethod: "${method}",\n`;
 	if (hasBody) {
@@ -367,8 +554,29 @@ function generateAPIStep(node: WorkflowNode, indent: string): string {
 		node,
 		indent,
 		captureResult ? varName : undefined,
+		retryVarName,
 	);
-	code += generateProgressCall(node, indent, "completed");
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	// Close try/catch for return-to-checkpoint
+	if (isReturnToCheckpoint && retryVarName) {
+		indent = indent.slice(1);
+		const retryVarOrig = retryVarName;
+		// We need to get maxRetries from failureHandling; use a fallback
+		const maxR = failureHandling?.maxRetries ?? 0;
+		code += `${indent}} catch (_apiErr) {\n`;
+		code += `${indent}\tif (${retryVarOrig} < ${maxR}) {\n`;
+		code += `${indent}\t\tcontinue; // Return to checkpoint and retry\n`;
+		code += `${indent}\t}\n`;
+		code += `${indent}\tthrow _apiErr; // Max retries exhausted — propagate error\n`;
+		code += `${indent}}\n`;
+	}
 
 	return code;
 }
@@ -548,20 +756,39 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 /**
  * Generate code for a Checkpoint node
  */
-function generateCheckpointStep(node: WorkflowNode, indent: string): string {
+function generateCheckpointStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
 	const stepName = createStepName(node);
 	const isSafe = node.checkpointType === "safe";
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
 
 	let code = `${indent}// Checkpoint: ${node.title}${isSafe ? " (safe)" : ""}\n`;
-	code += generateProgressCall(node, indent, "in_progress");
-	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"in_progress",
+		undefined,
+		retryVarName,
+	);
+	code += `${indent}await step.do(${stepNameExpr}, async () => {\n`;
 	if (isSafe) {
 		code += `${indent}\t// Safe checkpoint - workflow can be safely retried from here\n`;
 	}
 	code += `${indent}\treturn { checkpoint: "${stepName}", timestamp: Date.now() };\n`;
 	code += `${indent}});\n`;
-	code += generateCaseObjectCall(node, indent);
-	code += generateProgressCall(node, indent, "completed");
+	code += generateCaseObjectCall(node, indent, undefined, retryVarName);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
 
 	return code;
 }
@@ -569,7 +796,11 @@ function generateCheckpointStep(node: WorkflowNode, indent: string): string {
 /**
  * Generate code for a Challenge node (waitForEvent)
  */
-function generateChallengeStep(node: WorkflowNode, indent: string): string {
+function generateChallengeStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
 	const stepName = createStepName(node);
 	const varName = createVariableName(node.title, "challengeResult");
 	const config = node.config as ChallengeNodeConfig | undefined;
@@ -578,17 +809,93 @@ function generateChallengeStep(node: WorkflowNode, indent: string): string {
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 	const eventType = challengeType;
 
+	const inlineRetries = config?.retries;
+	const hasInlineRetry = inlineRetries && (inlineRetries.maxRetries ?? 0) > 0;
+
 	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
-	code += generateProgressCall(node, indent, "waiting_event", eventType);
-	code += `${indent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
-	code += `${indent}\t"${stepName}",\n`;
-	code += `${indent}\t{\n`;
-	code += `${indent}\t\ttype: "${challengeType}",\n`;
-	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
-	code += `${indent}\t},\n`;
-	code += `${indent});\n`;
-	code += generateCaseObjectCall(node, indent, varName);
-	code += generateProgressCall(node, indent, "completed");
+
+	if (hasInlineRetry) {
+		// Pattern 2: Wrap waitForEvent in a local for loop for inline retries.
+		// Step names are suffixed with -chN to stay unique per iteration.
+		const chVar = createVariableName(node.title || node.id, "challengeRetry");
+		const maxR = inlineRetries!.maxRetries;
+		code += `${indent}for (let ${chVar} = 0; ${chVar} <= ${maxR}; ${chVar}++) {\n`;
+		const innerIndent = indent + "\t";
+
+		// Compose step name: outer retry suffix + inner challenge retry suffix
+		let stepNameExpr: string;
+		if (retryVarName) {
+			// Combined: zone retry + challenge inline retry
+			stepNameExpr =
+				`(${retryVarName} > 0 || ${chVar} > 0)` +
+				` ? \`${stepName}\${${retryVarName} > 0 ? \`-r\${${retryVarName}}\` : ""}\${${chVar} > 0 ? \`-ch\${${chVar}}\` : ""}\`` +
+				` : "${stepName}"`;
+		} else {
+			stepNameExpr = `${chVar} > 0 ? \`${stepName}-ch\${${chVar}}\` : "${stepName}"`;
+		}
+
+		code += generateProgressCall(
+			node,
+			innerIndent,
+			"waiting_event",
+			eventType,
+			retryVarName,
+			chVar,
+		);
+		code += `${innerIndent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${innerIndent}\t${stepNameExpr},\n`;
+		code += `${innerIndent}\t{\n`;
+		code += `${innerIndent}\t\ttype: "${challengeType}",\n`;
+		code += `${innerIndent}\t\ttimeout: "${timeoutStr}",\n`;
+		code += `${innerIndent}\t},\n`;
+		code += `${innerIndent});\n`;
+		code += generateCaseObjectCall(
+			node,
+			innerIndent,
+			varName,
+			retryVarName,
+			chVar,
+		);
+		code += generateProgressCall(
+			node,
+			innerIndent,
+			"completed",
+			undefined,
+			retryVarName,
+			chVar,
+		);
+		// If the challenge was accepted, exit the inline retry loop
+		code += `${innerIndent}if ((${varName} as { payload: { accepted: boolean } }).payload.accepted) break;\n`;
+		code += `${indent}}\n`;
+	} else {
+		// No inline retry — single waitForEvent
+		const stepNameExpr = retryVarName
+			? retryStepNameExpr(stepName, retryVarName)
+			: `"${stepName}"`;
+
+		code += generateProgressCall(
+			node,
+			indent,
+			"waiting_event",
+			eventType,
+			retryVarName,
+		);
+		code += `${indent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${indent}\t${stepNameExpr},\n`;
+		code += `${indent}\t{\n`;
+		code += `${indent}\t\ttype: "${challengeType}",\n`;
+		code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
+		code += `${indent}\t},\n`;
+		code += `${indent});\n`;
+		code += generateCaseObjectCall(node, indent, varName, retryVarName);
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
+	}
 
 	return code;
 }
@@ -668,21 +975,36 @@ function trimTrailingBlankLines(code: string): string {
  *
  * Returns null when the branches never converge (e.g. each ends in its own
  * End/Reject with no shared successor).
+ *
+ * `retryZones` is used to filter out retry back-edges (Reject → Checkpoint)
+ * so they do not influence convergence detection.
  */
 function findConvergenceNode(
 	topStartId: string,
 	bottomStartId: string,
 	outgoingMap: Map<string, WorkflowEdge[]>,
+	retryZones: RetryZone[] = [],
 ): string | null {
-	// Collect all nodes reachable from the top branch
+	// Build a set of back-edges to exclude: Reject → Checkpoint edges
+	const backEdges = new Set<string>();
+	for (const zone of retryZones) {
+		backEdges.add(`${zone.rejectNodeId}→${zone.checkpointNodeId}`);
+	}
+
+	const forwardEdges = (id: string): string[] =>
+		(outgoingMap.get(id) ?? [])
+			.filter((e) => !backEdges.has(`${id}→${e.to}`))
+			.map((e) => e.to);
+
+	// Collect all nodes reachable from the top branch (excluding back-edges)
 	const topReachable = new Set<string>();
 	const topQueue: string[] = [topStartId];
 	while (topQueue.length > 0) {
 		const id = topQueue.shift()!;
 		if (topReachable.has(id)) continue;
 		topReachable.add(id);
-		for (const edge of outgoingMap.get(id) ?? []) {
-			if (!topReachable.has(edge.to)) topQueue.push(edge.to);
+		for (const to of forwardEdges(id)) {
+			if (!topReachable.has(to)) topQueue.push(to);
 		}
 	}
 
@@ -694,8 +1016,8 @@ function findConvergenceNode(
 		if (bottomVisited.has(id)) continue;
 		bottomVisited.add(id);
 		if (topReachable.has(id)) return id;
-		for (const edge of outgoingMap.get(id) ?? []) {
-			if (!bottomVisited.has(edge.to)) bottomQueue.push(edge.to);
+		for (const to of forwardEdges(id)) {
+			if (!bottomVisited.has(to)) bottomQueue.push(to);
 		}
 	}
 
@@ -711,6 +1033,10 @@ interface TraversalContext {
 	incomingMap: Map<string, WorkflowEdge[]>;
 	visited: Set<string>;
 	warnings: string[];
+	/** All detected retry zones in this workflow */
+	retryZones: RetryZone[];
+	/** The retry zone currently active during code generation (null = no zone) */
+	activeRetryZone: RetryZone | null;
 }
 
 /**
@@ -721,6 +1047,8 @@ function generateNodeCode(
 	indent: string,
 	ctx: TraversalContext,
 ): string {
+	const retryVar = ctx.activeRetryZone?.retryVarName;
+
 	switch (node.type) {
 		case "Start":
 			return (
@@ -731,17 +1059,17 @@ function generateNodeCode(
 				`${indent});\n`
 			);
 		case "Form":
-			return generateFormStep(node, indent);
+			return generateFormStep(node, indent, retryVar);
 		case "API":
-			return generateAPIStep(node, indent);
+			return generateAPIStep(node, indent, retryVar);
 		case "Transform":
 			return generateTransformStep(node, indent);
 		case "Message":
 			return generateMessageStep(node, indent);
 		case "Checkpoint":
-			return generateCheckpointStep(node, indent);
+			return generateCheckpointStep(node, indent, retryVar);
 		case "Challenge":
-			return generateChallengeStep(node, indent);
+			return generateChallengeStep(node, indent, retryVar);
 		case "Decision":
 			// Decision generates an if/else, code is handled in traversal
 			return "";
@@ -752,17 +1080,53 @@ function generateNodeCode(
 		case "End":
 			return (
 				`${indent}// Workflow completed successfully\n` +
-				generateCaseObjectCall(node, indent) +
-				generateProgressCall(node, indent, "completed") +
+				generateCaseObjectCall(node, indent, undefined, retryVar) +
+				generateProgressCall(node, indent, "completed", undefined, retryVar) +
 				`${indent}return { success: true, payload: event.payload };\n`
 			);
-		case "Reject":
+		case "Reject": {
+			const zone = ctx.retryZones.find((z) => z.rejectNodeId === node.id);
+			if (zone) {
+				// Pattern 1: Reject with retry — generate continue/return logic.
+				// IMPORTANT: use "in_progress" while retrying so that the cases-svc
+				// workflowProgress endpoint does NOT treat this as a terminal rejection
+				// (the workflow is still running — the retry loop will restart from the
+				// checkpoint). Only emit "completed" on the final (exhausted) rejection.
+				const rv = zone.retryVarName;
+				if (zone.unlimited) {
+					// Unlimited retries: always in_progress (never completed)
+					return (
+						`${indent}// Workflow rejected — retrying (unlimited)\n` +
+						generateCaseObjectCall(node, indent, undefined, rv) +
+						generateProgressCall(node, indent, "in_progress", undefined, rv) +
+						`${indent}continue; // Unlimited retry from checkpoint\n`
+					);
+				}
+				// Limited retries: in_progress while retrying, completed on last attempt
+				return (
+					`${indent}// Workflow rejected (retry zone)\n` +
+					generateCaseObjectCall(node, indent, undefined, rv) +
+					`${indent}if (${rv} < ${zone.maxRetries}) {\n` +
+					generateProgressCall(
+						node,
+						indent + "\t",
+						"in_progress",
+						undefined,
+						rv,
+					) +
+					`${indent}\tcontinue; // Retry from checkpoint\n` +
+					`${indent}}\n` +
+					generateProgressCall(node, indent, "completed", undefined, rv) +
+					`${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`
+				);
+			}
 			return (
 				`${indent}// Workflow rejected\n` +
 				generateCaseObjectCall(node, indent) +
 				generateProgressCall(node, indent, "completed") +
 				`${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`
 			);
+		}
 		default:
 			ctx.warnings.push(`Unknown node type: ${node.type}`);
 			return `${indent}// Unknown node type: ${node.type}\n`;
@@ -797,7 +1161,6 @@ function traverseBranch(
 		if (ctx.visited.has(currentNodeId)) {
 			break;
 		}
-		ctx.visited.add(currentNodeId);
 
 		const node = ctx.nodeMap.get(currentNodeId);
 		if (!node) {
@@ -805,14 +1168,69 @@ function traverseBranch(
 			break;
 		}
 
+		// -------------------------------------------------------------------
+		// Pattern 1: Checkpoint that is the start of a retry zone.
+		// Wrap the whole zone (Checkpoint … Reject) in a for loop.
+		// All descendant nodes will see ctx.activeRetryZone during traversal.
+		// -------------------------------------------------------------------
+		const retryZone = ctx.retryZones.find(
+			(z) => z.checkpointNodeId === currentNodeId,
+		);
+
+		if (retryZone && !ctx.activeRetryZone) {
+			// Open the for loop
+			const rv = retryZone.retryVarName;
+			if (retryZone.unlimited) {
+				// maxRetries=0 in editor means "unlimited" — loop forever until
+				// the accepted path returns { success: true }.
+				code += `${indent}for (let ${rv} = 0; ; ${rv}++) {\n`;
+			} else {
+				code += `${indent}for (let ${rv} = 0; ${rv} <= ${retryZone.maxRetries}; ${rv}++) {\n`;
+			}
+
+			// Traverse inside the zone with increased indentation and active zone set
+			const prevZone = ctx.activeRetryZone;
+			ctx.activeRetryZone = retryZone;
+
+			// We must NOT mark this node as visited yet so the inner traversal
+			// processes it with the retryVar active.
+			code += trimTrailingBlankLines(
+				traverseBranch(currentNodeId, indent + "\t", ctx, stopAtNodeId),
+			);
+
+			ctx.activeRetryZone = prevZone;
+			code += `${indent}}\n\n`;
+
+			// The inner traversal has already processed the rest of the path
+			// (including the Reject node which emits `continue` / `return`).
+			// After the loop closes there is nothing more to process on this path.
+			break;
+		}
+
+		// Mark as visited *after* retry-zone check so the inner traversal can
+		// see the node and process it with the correct activeRetryZone.
+		ctx.visited.add(currentNodeId);
+
 		// Get outgoing edges
 		const outgoing: WorkflowEdge[] = ctx.outgoingMap.get(currentNodeId) ?? [];
+
+		// Filter out the retry back-edge for traversal purposes (Reject -> Checkpoint).
+		// We keep only the "forward" edges; the retry loop handles re-entry.
+		const forwardOutgoing =
+			node.type === "Reject"
+				? outgoing.filter((e) => {
+						const target = ctx.nodeMap.get(e.to);
+						return !target || target.type !== "Checkpoint";
+					})
+				: outgoing;
 
 		// Handle Decision nodes (branching)
 		if (node.type === "Decision") {
 			const condition = (node.config.condition as string) || "/* condition */";
-			const topEdge = outgoing.find((e: WorkflowEdge) => e.fromPort === "top");
-			const bottomEdge = outgoing.find(
+			const topEdge = forwardOutgoing.find(
+				(e: WorkflowEdge) => e.fromPort === "top",
+			);
+			const bottomEdge = forwardOutgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "bottom",
 			);
 
@@ -820,7 +1238,12 @@ function traverseBranch(
 			// continue from it after the if/else block.
 			const convergenceNodeId =
 				topEdge && bottomEdge
-					? findConvergenceNode(topEdge.to, bottomEdge.to, ctx.outgoingMap)
+					? findConvergenceNode(
+							topEdge.to,
+							bottomEdge.to,
+							ctx.outgoingMap,
+							ctx.retryZones,
+						)
 					: null;
 
 			// Effective stop boundary for sub-branches: prefer the inner
@@ -854,17 +1277,24 @@ function traverseBranch(
 			}
 		}
 		// Handle Challenge nodes (branching based on acceptance)
-		else if (node.type === "Challenge" && outgoing.length === 2) {
+		else if (node.type === "Challenge" && forwardOutgoing.length === 2) {
 			const varName = createVariableName(node.title, "challengeResult");
-			const topEdge = outgoing.find((e: WorkflowEdge) => e.fromPort === "top");
-			const bottomEdge = outgoing.find(
+			const topEdge = forwardOutgoing.find(
+				(e: WorkflowEdge) => e.fromPort === "top",
+			);
+			const bottomEdge = forwardOutgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "bottom",
 			);
 
 			// Detect convergence point
 			const convergenceNodeId =
 				topEdge && bottomEdge
-					? findConvergenceNode(topEdge.to, bottomEdge.to, ctx.outgoingMap)
+					? findConvergenceNode(
+							topEdge.to,
+							bottomEdge.to,
+							ctx.outgoingMap,
+							ctx.retryZones,
+						)
 					: null;
 
 			const innerStop = convergenceNodeId ?? stopAtNodeId;
@@ -902,13 +1332,14 @@ function traverseBranch(
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			if (outgoing.length > 1) {
+			if (forwardOutgoing.length > 1) {
 				ctx.warnings.push(
 					`Node "${node.title}" has multiple outgoing edges but is not a Decision or Challenge node`,
 				);
 			}
 
-			currentNodeId = outgoing.length >= 1 ? outgoing[0].to : null;
+			currentNodeId =
+				forwardOutgoing.length >= 1 ? forwardOutgoing[0].to : null;
 		}
 	}
 
@@ -926,6 +1357,7 @@ function traverseAndGenerate(
 ): { code: string; warnings: string[] } {
 	const { outgoingMap, incomingMap } = buildAdjacencyMaps(edges);
 	const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+	const retryZones = detectRetryZones(nodes, edges);
 
 	const ctx: TraversalContext = {
 		nodeMap,
@@ -933,6 +1365,8 @@ function traverseAndGenerate(
 		incomingMap,
 		visited: new Set<string>(),
 		warnings: [],
+		retryZones,
+		activeRetryZone: null,
 	};
 
 	// Start traversal from the start node
@@ -1002,6 +1436,7 @@ export function generateWorkflowCode(
 	code += `\t\t\tstepName: string;\n`;
 	code += `\t\t\tstatus: "in_progress" | "completed" | "waiting_event";\n`;
 	code += `\t\t\teventType?: string;\n`;
+	code += `\t\t\tretryCount?: number;\n`;
 	code += `\t\t}) => Promise<{ ok: boolean }>;\n`;
 	code += `\t};\n`;
 	code += `\tWORKFLOW_ID: string;\n`;
