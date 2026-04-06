@@ -1,3 +1,12 @@
+# [1.1.0-rc.17](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.16...v1.1.0-rc.17) (2026-04-06)
+
+
+### Features
+
+* enhance retry zone functionality in workflow code generation ([081ed8e](https://github.com/carteracredit/workflow/commit/081ed8edb471556b064be5559339ba8338248854))
+* implement retry zone detection and code generation for workflows ([4e5cc69](https://github.com/carteracredit/workflow/commit/4e5cc69a8656ab4a92e3c25f988519550ec1c7ba))
+* improve workflow code generation for retry zones and progress tracking ([0845416](https://github.com/carteracredit/workflow/commit/08454160e28c70e25e072abdca1027184501b84f))
+
 # [1.1.0-rc.16](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.15...v1.1.0-rc.16) (2026-04-01)
 
 
