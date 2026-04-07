@@ -73,17 +73,6 @@ function toClassName(name: string): string {
 	);
 }
 
-/**
- * Extracts the major version number from a semver string.
- * e.g. "2.1.0" → 2, "v3" → 3. Falls back to 1.
- */
-function extractMajorVersion(version: string): number {
-	const match = version.match(/(\d+)/);
-	if (!match) return 1;
-	const parsed = Number.parseInt(match[1], 10);
-	return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-}
-
 type NodeWithOptionalStaleTimeout = Omit<WorkflowNode, "staleTimeout"> & {
 	staleTimeout?: WorkflowNode["staleTimeout"];
 	checkpointType?: WorkflowNode["checkpointType"];
@@ -625,9 +614,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				class_name: toClassName(
 					workflowState.metadata.name || "GeneratedWorkflow",
 				),
-				current_major_version: extractMajorVersion(
-					workflowState.metadata.version,
-				),
 				definition: definitionObj,
 			}).catch((err) => {
 				console.error(
@@ -915,9 +901,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			class_name: toClassName(
 				workflowState.metadata.name || "GeneratedWorkflow",
 			),
-			current_major_version: extractMajorVersion(
-				workflowState.metadata.version,
-			),
 			definition: definitionObj,
 		};
 
@@ -1128,7 +1111,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						slug: slugify(prev.metadata.name || "nuevo-flujo-de-trabajo"),
 						description: prev.metadata.description || "",
 						class_name: toClassName(prev.metadata.name || "GeneratedWorkflow"),
-						current_major_version: extractMajorVersion(prev.metadata.version),
 						definition: definitionObj,
 					}).catch((err) => {
 						console.error("[updateFlags] Failed to auto-save definition:", err);
@@ -1427,6 +1409,13 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						setWorkflowStatus(status);
 						if (majorVersion !== undefined) {
 							setCurrentMajorVersion(majorVersion);
+							setWorkflowState((prev) => ({
+								...prev,
+								metadata: {
+									...prev.metadata,
+									version: `${majorVersion}.0.0`,
+								},
+							}));
 						}
 					}}
 				/>

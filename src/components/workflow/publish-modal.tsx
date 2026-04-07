@@ -307,7 +307,7 @@ export function PublishModal({
 				setDeployResult(result as PublishWorkflowDeployedResponse);
 				setDeployStatus("done");
 				const deployedVersion = (result as PublishWorkflowDeployedResponse)
-					.version;
+					.major_version;
 				onPublished?.("published", deployedVersion ?? undefined);
 				toast.success(t("publishModal.toastPublished"), {
 					description: t("publishModal.toastPublishedDesc"),

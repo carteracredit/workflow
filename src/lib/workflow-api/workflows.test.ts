@@ -191,6 +191,7 @@ describe("workflow API functions", () => {
 			worker_name: "credit-app-dev-v1",
 			branch: "dev",
 			version: 1,
+			major_version: 1,
 		};
 
 		it("POSTs to correct publish URL", async () => {
