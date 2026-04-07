@@ -73,17 +73,6 @@ function toClassName(name: string): string {
 	);
 }
 
-/**
- * Extracts the major version number from a semver string.
- * e.g. "2.1.0" → 2, "v3" → 3. Falls back to 1.
- */
-function extractMajorVersion(version: string): number {
-	const match = version.match(/(\d+)/);
-	if (!match) return 1;
-	const parsed = Number.parseInt(match[1], 10);
-	return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-}
-
 type NodeWithOptionalStaleTimeout = Omit<WorkflowNode, "staleTimeout"> & {
 	staleTimeout?: WorkflowNode["staleTimeout"];
 	checkpointType?: WorkflowNode["checkpointType"];
@@ -523,6 +512,13 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [isValidating, setIsValidating] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
 	const hasMountedRef = useRef(false);
+	// Ref to hold the debounce timer for node-change auto-save
+	const nodeAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	// Track when the workflow has finished loading from the API so we don't
+	// auto-save on the initial hydration of workflowState.nodes.
+	const nodeAutoSaveEnabledRef = useRef(false);
 
 	useEffect(() => {
 		if (typeof window !== "undefined" && !isLoadingFromApi) {
@@ -582,6 +578,67 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const updateWorkflow = useCallback((updates: Partial<WorkflowState>) => {
 		setWorkflowState((prev) => ({ ...prev, ...updates }));
 	}, []);
+
+	// ─── Debounced backend auto-save on node changes ─────────────────────────
+	// When any node property (incl. roles) changes after the initial API load,
+	// persist the updated definition to the backend within 1.5 s of the last
+	// edit so users don't have to press "Save" manually for every property tweak.
+	useEffect(() => {
+		if (isLoadingFromApi) {
+			// Mark enabled once the initial load completes
+			nodeAutoSaveEnabledRef.current = false;
+			return;
+		}
+		if (!nodeAutoSaveEnabledRef.current) {
+			nodeAutoSaveEnabledRef.current = true;
+			return;
+		}
+		if (!workflowApiId) return;
+
+		if (nodeAutoSaveTimerRef.current) {
+			clearTimeout(nodeAutoSaveTimerRef.current);
+		}
+
+		nodeAutoSaveTimerRef.current = setTimeout(() => {
+			const definitionObj = buildDefinitionObject(
+				workflowState.nodes,
+				workflowState.edges,
+				workflowState.flags,
+				workflowState.zoom,
+				workflowState.pan,
+			);
+			updateWorkflowApi(workflowApiId, {
+				name: workflowState.metadata.name || "Nuevo Flujo de Trabajo",
+				slug: slugify(workflowState.metadata.name || "nuevo-flujo-de-trabajo"),
+				description: workflowState.metadata.description || "",
+				class_name: toClassName(
+					workflowState.metadata.name || "GeneratedWorkflow",
+				),
+				definition: definitionObj,
+			}).catch((err) => {
+				console.error(
+					"[WorkflowEditor] Failed to auto-save node changes:",
+					err,
+				);
+			});
+		}, 1500);
+
+		return () => {
+			if (nodeAutoSaveTimerRef.current) {
+				clearTimeout(nodeAutoSaveTimerRef.current);
+			}
+		};
+	}, [
+		workflowState.nodes,
+		// Include edges/flags/zoom/pan so any canvas change also triggers the save
+		workflowState.edges,
+		workflowState.flags,
+		workflowState.zoom,
+		workflowState.pan,
+		workflowApiId,
+		isLoadingFromApi,
+		workflowState.metadata,
+	]);
 
 	const applyHistoryChange = useCallback(
 		(getUpdates: (prev: WorkflowState) => HistoryChange) => {
@@ -844,9 +901,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			class_name: toClassName(
 				workflowState.metadata.name || "GeneratedWorkflow",
 			),
-			current_major_version: extractMajorVersion(
-				workflowState.metadata.version,
-			),
 			definition: definitionObj,
 		};
 
@@ -1057,7 +1111,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						slug: slugify(prev.metadata.name || "nuevo-flujo-de-trabajo"),
 						description: prev.metadata.description || "",
 						class_name: toClassName(prev.metadata.name || "GeneratedWorkflow"),
-						current_major_version: extractMajorVersion(prev.metadata.version),
 						definition: definitionObj,
 					}).catch((err) => {
 						console.error("[updateFlags] Failed to auto-save definition:", err);
@@ -1356,6 +1409,13 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						setWorkflowStatus(status);
 						if (majorVersion !== undefined) {
 							setCurrentMajorVersion(majorVersion);
+							setWorkflowState((prev) => ({
+								...prev,
+								metadata: {
+									...prev.metadata,
+									version: `${majorVersion}.0.0`,
+								},
+							}));
 						}
 					}}
 				/>

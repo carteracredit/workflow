@@ -27,7 +27,7 @@ export interface CreateWorkflowPayload {
 	definition?: Record<string, unknown> | null;
 	github_repo_url?: string | null;
 	class_name: string;
-	current_major_version: number;
+	current_major_version?: number;
 }
 
 /**
@@ -103,6 +103,7 @@ export interface PublishWorkflowDeployedResponse {
 	worker_name: string;
 	branch: string;
 	version: number;
+	major_version: number;
 }
 
 /**

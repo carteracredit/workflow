@@ -1,3 +1,10 @@
+# [1.1.0-rc.18](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.17...v1.1.0-rc.18) (2026-04-07)
+
+
+### Features
+
+* implement debounced auto-save for node changes in WorkflowEditor ([f75eca2](https://github.com/carteracredit/workflow/commit/f75eca2bda31a6a4a4ed4d72b0181b30a6cad482))
+
 # [1.1.0-rc.17](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.16...v1.1.0-rc.17) (2026-04-06)
 
 
