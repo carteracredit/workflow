@@ -16,6 +16,7 @@ import { JSONModal } from "./workflow/json-modal";
 import { CodeModal } from "./workflow/code-modal";
 import { FlagManagerModal } from "./workflow/flag-manager-modal";
 import { PublishModal } from "./workflow/publish-modal";
+import { VariablesPanel } from "./workflow/variables-panel";
 import { Toaster, toast } from "sonner";
 import type {
 	WorkflowNode,
@@ -502,6 +503,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [jsonMode, setJsonMode] = useState<"export" | "import">("export");
 	const [showCode, setShowCode] = useState(false);
 	const [showFlagManager, setShowFlagManager] = useState(false);
+	const [showVariables, setShowVariables] = useState(false);
 	const [showWorkflowProperties, setShowWorkflowProperties] = useState(false);
 	const [showPublish, setShowPublish] = useState(false);
 	const [panelWidth, setPanelWidth] = useState(320);
@@ -1184,6 +1186,13 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					}
 					setShowFlagManager(true);
 				}}
+				onManageVariables={() => {
+					if (!workflowApiId) {
+						toast.warning(t("workflowEditor.toastSaveBeforeFlags"));
+						return;
+					}
+					setShowVariables(true);
+				}}
 				onToggleWorkflowProperties={() => {
 					setShowWorkflowProperties((prev) => {
 						const newValue = !prev;
@@ -1382,6 +1391,13 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					flags={workflowState.flags}
 					onClose={() => setShowFlagManager(false)}
 					onUpdateFlags={updateFlags}
+				/>
+			)}
+
+			{showVariables && workflowApiId && (
+				<VariablesPanel
+					workflowId={workflowApiId}
+					onClose={() => setShowVariables(false)}
 				/>
 			)}
 
