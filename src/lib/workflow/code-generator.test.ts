@@ -195,9 +195,10 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Form step name comes from slugified title; formId config is no longer emitted
+		// formId is now included in the comment to ensure checksum changes when form changes
 		expect(result.code).toContain("step.waitForEvent");
 		expect(result.code).toContain('"datos-personales"');
+		expect(result.code).toContain("form: 550e8400-e29b-41d4-a716-446655440000");
 	});
 
 	it("should use slugified title as step name for Form nodes", () => {
@@ -247,12 +248,15 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// formId/formVersion are no longer emitted; verify waitForEvent pattern is present
+		// formId and formVersion are included in comment for change detection
 		expect(result.code).toContain("step.waitForEvent");
 		expect(result.code).toContain("form-submission-datos-personales");
+		expect(result.code).toContain(
+			"form: 550e8400-e29b-41d4-a716-446655440000 v3",
+		);
 	});
 
-	it("should omit formVersion when not set in node config", () => {
+	it("should omit formVersion from comment when not set in node config", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -272,7 +276,9 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).not.toContain("formVersion");
+		// formId present, but no version suffix
+		expect(result.code).toContain("form: 550e8400-e29b-41d4-a716-446655440000");
+		expect(result.code).not.toContain(" v");
 	});
 
 	it("should generate API step code", () => {
@@ -830,6 +836,153 @@ describe("generateWorkflowCode with Challenge branching", () => {
 		expect(result.code).toContain("return { success: true");
 		expect(result.code).toContain("} else {");
 		expect(result.code).toContain("return { success: false");
+	});
+
+	it("should include node.roles in Challenge comment for change detection", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion",
+				roles: ["credit_agent", "org_manager"],
+				config: {
+					challengeType: "acceptance",
+					challengeTimeout: { value: 5, unit: "minutes" },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("roles: credit_agent, org_manager");
+	});
+
+	it("should include retry roles in Challenge comment when retries are configured", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion",
+				roles: ["credit_agent"],
+				config: {
+					challengeType: "acceptance",
+					challengeTimeout: { value: 5, unit: "minutes" },
+					retries: { maxRetries: 2, roles: ["org_manager"] },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain("roles: credit_agent");
+		expect(result.code).toContain("retry-roles: org_manager");
+	});
+
+	it("should produce different checksums when Challenge roles change", () => {
+		const baseConfig = {
+			challengeType: "acceptance",
+			challengeTimeout: { value: 5, unit: "minutes" },
+		};
+
+		const nodes1: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion",
+				roles: ["credit_agent"],
+				config: baseConfig,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const nodes2: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion",
+				roles: ["credit_agent", "org_manager"],
+				config: baseConfig,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end"),
+		];
+
+		const result1 = generateWorkflowCode(nodes1, edges);
+		const result2 = generateWorkflowCode(nodes2, edges);
+
+		expect(result1.code).not.toBe(result2.code);
+	});
+
+	it("should produce different code when Form formId or formVersion changes", () => {
+		const sharedEdges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "end"),
+		];
+
+		const nodesWithoutForm: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos",
+				roles: ["client"],
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const nodesWithFormId: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos",
+				roles: ["client"],
+				config: { formId: "abc-123" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const nodesWithFormIdV2: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Datos",
+				roles: ["client"],
+				config: { formId: "abc-123", formVersion: 2 },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const codeNoForm = generateWorkflowCode(nodesWithoutForm, sharedEdges).code;
+		const codeFormId = generateWorkflowCode(nodesWithFormId, sharedEdges).code;
+		const codeFormV2 = generateWorkflowCode(
+			nodesWithFormIdV2,
+			sharedEdges,
+		).code;
+
+		expect(codeNoForm).not.toBe(codeFormId);
+		expect(codeFormId).not.toBe(codeFormV2);
 	});
 });
 

@@ -451,7 +451,14 @@ function generateFormStep(
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
 
-	let code = `${indent}// Form: ${node.title} (roles: ${roles})\n`;
+	const formId = node.config.formId as string | undefined;
+	const formVersion = node.config.formVersion as number | undefined;
+	const formMeta =
+		formId !== undefined
+			? ` | form: ${formId}${formVersion !== undefined ? ` v${formVersion}` : ""}`
+			: "";
+
+	let code = `${indent}// Form: ${node.title} (roles: ${roles}${formMeta})\n`;
 	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload }) from cases-svc\n`;
 	code += generateProgressCall(
 		node,
@@ -812,7 +819,13 @@ function generateChallengeStep(
 	const inlineRetries = config?.retries;
 	const hasInlineRetry = inlineRetries && (inlineRetries.maxRetries ?? 0) > 0;
 
-	let code = `${indent}// Challenge: ${node.title} (${challengeType})\n`;
+	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
+	const retryRoles =
+		inlineRetries?.roles && inlineRetries.roles.length > 0
+			? inlineRetries.roles.join(", ")
+			: null;
+
+	let code = `${indent}// Challenge: ${node.title} (${challengeType} | roles: ${roles}${retryRoles ? ` | retry-roles: ${retryRoles}` : ""})\n`;
 
 	if (hasInlineRetry) {
 		// Pattern 2: Wrap waitForEvent in a local for loop for inline retries.
