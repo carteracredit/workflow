@@ -91,9 +91,11 @@ function validateName(name: string): string | null {
 
 function EnvironmentBadge({ env }: { env: string }) {
 	const colors: Record<string, string> = {
-		all: "bg-gray-100 text-gray-700",
-		development: "bg-blue-100 text-blue-700",
-		production: "bg-orange-100 text-orange-700",
+		all: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
+		development:
+			"bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+		production:
+			"bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
 	};
 	const label = env === "all" ? "All" : env === "development" ? "Dev" : "Prod";
 	return (
@@ -294,7 +296,7 @@ export function VariablesPanel({
 
 	return (
 		<Dialog open onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="max-w-3xl">
+			<DialogContent className="w-full max-w-3xl">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2">
 						<Variable className="h-5 w-5" />
@@ -304,9 +306,9 @@ export function VariablesPanel({
 				</DialogHeader>
 
 				{/* Draft banner */}
-				<Alert className="border-amber-200 bg-amber-50">
-					<AlertTriangle className="h-4 w-4 text-amber-600" />
-					<AlertDescription className="text-amber-800">
+				<Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+					<AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+					<AlertDescription className="text-amber-800 dark:text-amber-300">
 						{t("variablesPanel.draftBanner")}
 					</AlertDescription>
 				</Alert>
@@ -346,15 +348,15 @@ export function VariablesPanel({
 				{/* Variables list */}
 				{isLoading ? (
 					<div className="flex items-center justify-center py-8">
-						<Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+						<Loader2 className="h-6 w-6 animate-spin text-gray-400 dark:text-gray-500" />
 					</div>
 				) : variables.length === 0 ? (
 					<div className="flex flex-col items-center justify-center py-10 text-center">
-						<Variable className="h-10 w-10 text-gray-300 mb-3" />
-						<p className="font-medium text-gray-500">
+						<Variable className="h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
+						<p className="font-medium text-gray-500 dark:text-gray-400">
 							{t("variablesPanel.noVarsTitle")}
 						</p>
-						<p className="text-sm text-gray-400 mt-1 max-w-sm">
+						<p className="text-sm text-gray-400 dark:text-gray-500 mt-1 max-w-sm">
 							{t("variablesPanel.noVarsDesc")}
 						</p>
 					</div>
@@ -362,7 +364,7 @@ export function VariablesPanel({
 					<ScrollArea className="max-h-64">
 						<table className="w-full text-sm">
 							<thead>
-								<tr className="border-b text-left text-gray-500">
+								<tr className="border-b dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
 									<th className="pb-2 font-medium">
 										{t("variablesPanel.columnName")}
 									</th>
@@ -380,18 +382,21 @@ export function VariablesPanel({
 							</thead>
 							<tbody>
 								{variables.map((v) => (
-									<tr key={v.id} className="border-b last:border-0">
+									<tr
+										key={v.id}
+										className="border-b dark:border-gray-700 last:border-0"
+									>
 										<td className="py-2 font-mono text-xs font-medium">
 											{v.name}
 										</td>
 										<td className="py-2">
 											{v.is_secret ? (
-												<span className="inline-flex items-center gap-1 text-xs text-purple-700">
+												<span className="inline-flex items-center gap-1 text-xs text-purple-700 dark:text-purple-400">
 													<KeyRound className="h-3 w-3" />
 													{t("variablesPanel.typeSecret")}
 												</span>
 											) : (
-												<span className="inline-flex items-center gap-1 text-xs text-blue-700">
+												<span className="inline-flex items-center gap-1 text-xs text-blue-700 dark:text-blue-400">
 													<Variable className="h-3 w-3" />
 													{t("variablesPanel.typeVariable")}
 												</span>
@@ -400,9 +405,9 @@ export function VariablesPanel({
 										<td className="py-2">
 											<EnvironmentBadge env={v.environment} />
 										</td>
-										<td className="py-2 font-mono text-xs text-gray-600">
+										<td className="py-2 font-mono text-xs text-gray-600 dark:text-gray-400">
 											{v.is_secret ? (
-												<span className="text-gray-400 italic">
+												<span className="text-gray-400 dark:text-gray-500 italic">
 													{t("variablesPanel.secretValueMasked")}
 												</span>
 											) : (
@@ -469,7 +474,7 @@ export function VariablesPanel({
 
 				{/* Create / Edit form */}
 				{showCreateForm && (
-					<div className="border rounded-lg p-4 bg-gray-50 space-y-3">
+					<div className="border dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50 space-y-3">
 						<h3 className="font-medium text-sm">
 							{editingVar
 								? t("variablesPanel.editTitle")
@@ -558,7 +563,7 @@ export function VariablesPanel({
 										)}
 									</button>
 								</div>
-								<p className="text-xs text-gray-500">
+								<p className="text-xs text-gray-500 dark:text-gray-400">
 									{t("variablesPanel.secretValueHelp")}
 								</p>
 							</div>
@@ -637,17 +642,17 @@ export function VariablesPanel({
 
 				{/* Rotate secret panel */}
 				{rotatingVar && (
-					<div className="border border-amber-200 rounded-lg p-4 bg-amber-50 space-y-3">
+					<div className="border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50 dark:bg-amber-950/30 space-y-3">
 						<h3 className="font-medium text-sm flex items-center gap-2">
-							<RotateCcw className="h-4 w-4 text-amber-600" />
+							<RotateCcw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
 							{t("variablesPanel.rotateSecretTitle")}
 						</h3>
-						<p className="text-xs text-gray-600">
+						<p className="text-xs text-gray-600 dark:text-gray-400">
 							{t("variablesPanel.rotateSecretDesc")}
 						</p>
-						<Alert className="border-red-200 bg-red-50">
-							<AlertTriangle className="h-4 w-4 text-red-600" />
-							<AlertDescription className="text-xs text-red-700">
+						<Alert className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30">
+							<AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+							<AlertDescription className="text-xs text-red-700 dark:text-red-300">
 								{t("variablesPanel.rotateSecretWarning")}
 							</AlertDescription>
 						</Alert>
