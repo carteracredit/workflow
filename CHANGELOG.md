@@ -1,3 +1,11 @@
+# [1.1.0-rc.19](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.18...v1.1.0-rc.19) (2026-04-08)
+
+
+### Features
+
+* add VariablesPanel for managing workflow variables and secrets ([65d5986](https://github.com/carteracredit/workflow/commit/65d59864311b32d1c37ccb301164ba75a3113a62))
+* implement sync functionality for Cloudflare in VariablesPanel ([4f3cd29](https://github.com/carteracredit/workflow/commit/4f3cd297f2aa9fdaf0652d9d21153cd1011d2fb7))
+
 # [1.1.0-rc.18](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.17...v1.1.0-rc.18) (2026-04-07)
 
 
