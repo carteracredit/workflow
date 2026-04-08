@@ -150,9 +150,6 @@ export function VariablesPanel({
 
 	// -- Sync all to Cloudflare state --
 	const [showSyncPanel, setShowSyncPanel] = useState(false);
-	const [syncSecretInputs, setSyncSecretInputs] = useState<
-		Record<string, string>
-	>({});
 	const [isSyncing, setIsSyncing] = useState(false);
 
 	const loadVariables = useCallback(async () => {
@@ -238,7 +235,7 @@ export function VariablesPanel({
 					workflowId,
 					{
 						name: form.name,
-						value: form.is_secret ? undefined : form.value || undefined,
+						value: form.value || undefined,
 						is_secret: form.is_secret,
 						environment: form.environment,
 						description: form.description || undefined,
@@ -304,11 +301,7 @@ export function VariablesPanel({
 	const handleSyncAll = async () => {
 		setIsSyncing(true);
 		try {
-			const result = await syncAllVariables(
-				workflowId,
-				{ secretValues: syncSecretInputs },
-				{ jwt },
-			);
+			const result = await syncAllVariables(workflowId, { jwt });
 			if (result.synced.length === 0 && result.failed.length === 0) {
 				toast.info(t("variablesPanel.syncSuccessNoDeployments"));
 			} else if (result.failed.length > 0) {
@@ -323,7 +316,6 @@ export function VariablesPanel({
 				);
 			}
 			setShowSyncPanel(false);
-			setSyncSecretInputs({});
 		} catch (err) {
 			const msg = extractApiErrorMessage(err);
 			toast.error(t("variablesPanel.syncError"), { description: msg });
@@ -368,7 +360,6 @@ export function VariablesPanel({
 							variant="outline"
 							size="sm"
 							onClick={() => {
-								setSyncSecretInputs({});
 								setShowSyncPanel(true);
 							}}
 							className="flex items-center gap-1"
@@ -768,39 +759,12 @@ export function VariablesPanel({
 						<p className="text-xs text-gray-600 dark:text-gray-400">
 							{t("variablesPanel.syncDesc")}
 						</p>
-						{variables.filter((v) => v.is_secret).length > 0 && (
-							<>
-								<p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-									{t("variablesPanel.syncSecretsNote")}
-								</p>
-								{variables
-									.filter((v) => v.is_secret)
-									.map((secret) => (
-										<div key={secret.id} className="space-y-1">
-											<Label className="text-xs font-mono">{secret.name}</Label>
-											<Input
-												type="password"
-												placeholder="••••••••"
-												value={syncSecretInputs[secret.name] ?? ""}
-												onChange={(e) =>
-													setSyncSecretInputs((prev) => ({
-														...prev,
-														[secret.name]: e.target.value,
-													}))
-												}
-												className="text-sm"
-											/>
-										</div>
-									))}
-							</>
-						)}
 						<div className="flex justify-end gap-2">
 							<Button
 								variant="outline"
 								size="sm"
 								onClick={() => {
 									setShowSyncPanel(false);
-									setSyncSecretInputs({});
 								}}
 							>
 								{t("variablesPanel.cancel")}

@@ -207,6 +207,8 @@ export interface WorkflowVariable {
 	workflow_id: string;
 	name: string;
 	value: string | null;
+	/** For secrets: true if an encrypted value is stored in D1, false if never set. */
+	has_value?: boolean;
 	is_secret: boolean;
 	environment: "all" | "development" | "production";
 	description: string | null;

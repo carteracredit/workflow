@@ -99,13 +99,11 @@ export async function deleteVariable(
 
 /**
  * POST /workflows/:id/variables/sync
- * Syncs all variables (non-secrets from D1 + provided secret values) to all
- * active deployed workers. Use this after a deployment completes when the
- * automatic sync at publish time may have failed.
+ * Syncs all variables and secrets (decrypted from D1) to all active deployed
+ * workers. No secret values needed — they are stored encrypted in the database.
  */
 export async function syncAllVariables(
 	workflowId: string,
-	payload: { secretValues?: Record<string, string> },
 	options?: ApiCallOptions,
 ): Promise<{ synced: string[]; failed: string[]; variableCount: number }> {
 	const baseUrl = getWorkflowServiceUrl();
@@ -119,7 +117,7 @@ export async function syncAllVariables(
 	>(`${baseUrl}/workflows/${workflowId}/variables/sync`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify(payload),
+		body: JSON.stringify({}),
 		jwt: options?.jwt,
 	});
 	return json.result;

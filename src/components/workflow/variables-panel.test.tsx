@@ -540,19 +540,23 @@ describe("VariablesPanel", () => {
 		});
 	});
 
-	it("shows secret value inputs for each secret when sync panel opens", async () => {
+	it("sync panel does NOT show secret value inputs (values are stored encrypted)", async () => {
 		mockListVariables.mockResolvedValue([mockVariable, mockSecret]);
 		render(<VariablesPanel {...defaultProps} />);
 		await waitFor(() => screen.getByText("API_BASE_URL"));
 
 		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
 
-		// After opening the sync panel, API_SECRET_KEY appears both in the variables
-		// table and as a label in the sync panel secret inputs section.
-		await waitFor(() => {
-			const allOccurrences = screen.getAllByText("API_SECRET_KEY");
-			expect(allOccurrences.length).toBeGreaterThanOrEqual(2);
-		});
+		await waitFor(() =>
+			screen.getByText("Sincronizar Variables con Cloudflare"),
+		);
+		// The old sync panel asked users to enter secret values — this should no longer be shown
+		// since secrets are stored encrypted in the database
+		expect(
+			screen.queryByText(/Ingresa el valor actual de cada secreto/i),
+		).not.toBeInTheDocument();
+		// The sync button should be directly available without filling in any secrets
+		expect(screen.getByText("Sincronizar Ahora")).toBeInTheDocument();
 	});
 
 	it("closes the sync panel when Cancel is clicked", async () => {
@@ -592,11 +596,9 @@ describe("VariablesPanel", () => {
 		fireEvent.click(screen.getByText("Sincronizar Ahora"));
 
 		await waitFor(() => {
-			expect(mockSyncAllVariables).toHaveBeenCalledWith(
-				WORKFLOW_ID,
-				{ secretValues: {} },
-				{ jwt: "test-token" },
-			);
+			expect(mockSyncAllVariables).toHaveBeenCalledWith(WORKFLOW_ID, {
+				jwt: "test-token",
+			});
 			expect(toast.success).toHaveBeenCalled();
 		});
 	});
