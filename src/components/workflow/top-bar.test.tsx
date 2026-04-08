@@ -366,6 +366,7 @@ describe("TopBar Integration", () => {
 		onImportJSON: vi.fn(),
 		onLoadExample: vi.fn(),
 		onManageFlags: vi.fn(),
+		onManageVariables: vi.fn(),
 		onToggleWorkflowProperties: vi.fn(),
 		workflowMetadata: mockWorkflowMetadata,
 		selectedNodeIds: [],
@@ -474,6 +475,7 @@ describe("TopBar Save button", () => {
 		onImportJSON: vi.fn(),
 		onLoadExample: vi.fn(),
 		onManageFlags: vi.fn(),
+		onManageVariables: vi.fn(),
 		onToggleWorkflowProperties: vi.fn(),
 		workflowMetadata: mockWorkflowMetadata,
 	};
@@ -562,6 +564,7 @@ describe("TopBar version badge", () => {
 		onImportJSON: vi.fn(),
 		onLoadExample: vi.fn(),
 		onManageFlags: vi.fn(),
+		onManageVariables: vi.fn(),
 		onToggleWorkflowProperties: vi.fn(),
 		selectedNodeIds: [],
 		selectedEdgeIds: [],

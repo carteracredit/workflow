@@ -37,6 +37,7 @@ import {
 	Keyboard,
 	ArrowLeft,
 	Loader2,
+	Variable,
 } from "lucide-react";
 import type { WorkflowMetadata, WorkflowNode } from "@/lib/workflow/types";
 import { Palette } from "@/components/workflow/palette";
@@ -173,6 +174,7 @@ interface TopBarProps {
 	onImportJSON: () => void;
 	onLoadExample: (key: "basic" | "api" | "manual") => void;
 	onManageFlags: () => void;
+	onManageVariables: () => void;
 	onToggleWorkflowProperties: () => void;
 	workflowMetadata: WorkflowMetadata;
 	/** If provided, show a back-to-list button */
@@ -198,6 +200,7 @@ export function TopBar({
 	onImportJSON,
 	onLoadExample,
 	onManageFlags,
+	onManageVariables,
 	onToggleWorkflowProperties,
 	workflowMetadata,
 	onBack,
@@ -390,6 +393,10 @@ export function TopBar({
 								<MenubarItem onClick={onManageFlags}>
 									<Flag className="mr-2 h-4 w-4" />
 									{t("topBar.menuManageFlags")}
+								</MenubarItem>
+								<MenubarItem onClick={onManageVariables}>
+									<Variable className="mr-2 h-4 w-4" />
+									{t("topBar.menuManageVariables")}
 								</MenubarItem>
 								<MenubarItem onClick={onExportJSON}>
 									<Download className="mr-2 h-4 w-4" />

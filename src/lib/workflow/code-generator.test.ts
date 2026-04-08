@@ -769,6 +769,59 @@ describe("generateWorkflowCode with FlagChange nodes", () => {
 		expect(result.code).not.toContain("FORMS?: unknown");
 	});
 
+	it("should include user-defined variables in WorkflowEnv when userVariables are provided", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const userVariables = [
+			{ name: "API_BASE_URL", isSecret: false },
+			{ name: "API_SECRET_KEY", isSecret: true },
+			{ name: "NLS_CLIENT_ID", isSecret: false },
+		];
+
+		const result = generateWorkflowCode(
+			nodes,
+			edges,
+			undefined,
+			{},
+			userVariables,
+		);
+
+		expect(result.code).toContain("API_BASE_URL: string;");
+		expect(result.code).toContain("API_SECRET_KEY: string;");
+		expect(result.code).toContain("NLS_CLIENT_ID: string;");
+	});
+
+	it("should not add extra env bindings when userVariables is empty array", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const withEmpty = generateWorkflowCode(nodes, edges, undefined, {}, []);
+		const withUndefined = generateWorkflowCode(nodes, edges);
+
+		expect(withEmpty.code).toContain("interface WorkflowEnv");
+		expect(withUndefined.code).toContain("interface WorkflowEnv");
+	});
+
+	it("should not add extra env bindings when userVariables is not provided", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).not.toContain("API_BASE_URL: string;");
+		expect(result.code).not.toContain("API_SECRET_KEY: string;");
+	});
+
 	it("should produce stable checksum for FlagChange node (no formatting drift)", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),

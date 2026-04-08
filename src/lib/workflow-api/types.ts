@@ -193,3 +193,51 @@ export interface UpdateFlagPayload {
 	}>;
 	sort_order?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Variable types
+// ---------------------------------------------------------------------------
+
+/**
+ * A workflow variable or secret as returned by workflow-svc.
+ * For secrets, value is always null (never returned from the API).
+ */
+export interface WorkflowVariable {
+	id: string;
+	workflow_id: string;
+	name: string;
+	value: string | null;
+	is_secret: boolean;
+	environment: "all" | "development" | "production";
+	description: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+/**
+ * Payload for creating a workflow variable or secret.
+ */
+export interface CreateVariablePayload {
+	name: string;
+	value?: string;
+	is_secret?: boolean;
+	environment?: "all" | "development" | "production";
+	description?: string;
+}
+
+/**
+ * Payload for updating a workflow variable or secret.
+ */
+export interface UpdateVariablePayload {
+	value?: string;
+	environment?: "all" | "development" | "production";
+	description?: string;
+}
+
+/**
+ * Payload for rotating a secret across all active workers.
+ */
+export interface RotateSecretPayload {
+	name: string;
+	value: string;
+}

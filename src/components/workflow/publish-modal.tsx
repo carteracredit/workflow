@@ -42,6 +42,8 @@ export interface PublishModalProps {
 	edges: WorkflowEdge[];
 	metadata: WorkflowMetadata;
 	flags: Flag[];
+	/** User-defined variables/secrets for this workflow (names only, used to extend WorkflowEnv) */
+	userVariables?: Array<{ name: string; isSecret: boolean }>;
 	/** Current canvas zoom level — included in the definition snapshot */
 	zoom?: number;
 	/** Current canvas pan offset — included in the definition snapshot */
@@ -188,6 +190,7 @@ export function PublishModal({
 	edges,
 	metadata,
 	flags,
+	userVariables = [],
 	zoom = 1,
 	pan = { x: 0, y: 0 },
 	workflowApiId,
@@ -239,6 +242,7 @@ export function PublishModal({
 				(updatedPhases) => {
 					setPhases(updatedPhases);
 				},
+				userVariables,
 			);
 
 			setTranspileResult(result);
@@ -326,6 +330,7 @@ export function PublishModal({
 		edges,
 		metadata,
 		flags,
+		userVariables,
 		zoom,
 		pan,
 		workflowApiId,

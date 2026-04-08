@@ -1406,6 +1406,7 @@ export function generateWorkflowCode(
 	edges: WorkflowEdge[],
 	metadata?: WorkflowMetadata,
 	options: CodeGeneratorOptions = {},
+	userVariables: Array<{ name: string; isSecret: boolean }> = [],
 ): GeneratedCode {
 	const {
 		className = "GeneratedWorkflow",
@@ -1467,6 +1468,10 @@ export function generateWorkflowCode(
 	code += `\t\t}>;\n`;
 	code += `\t\tupdateCaseObject: (caseId: string, data: Record<string, unknown>) => Promise<void>;\n`;
 	code += `\t};\n`;
+	// User-defined variables and secrets from the variables panel (all are strings at runtime)
+	for (const v of userVariables) {
+		code += `\t${v.name}: string;\n`;
+	}
 	code += `}\n\n`;
 
 	// Generate workflow params interface
@@ -1652,6 +1657,7 @@ export async function generateWorkflowCodeWithProgress(
 	metadata?: WorkflowMetadata,
 	options: CodeGeneratorOptions = {},
 	onPhaseUpdate?: (phases: TranspilationPhase[]) => void,
+	userVariables: Array<{ name: string; isSecret: boolean }> = [],
 ): Promise<TranspilationResult> {
 	const startTime = Date.now();
 	const phases: TranspilationPhase[] = [
@@ -1827,7 +1833,13 @@ export async function generateWorkflowCodeWithProgress(
 	updatePhase("transpile", "running");
 	const transpileStart = Date.now();
 
-	const generated = generateWorkflowCode(nodes, edges, metadata, options);
+	const generated = generateWorkflowCode(
+		nodes,
+		edges,
+		metadata,
+		options,
+		userVariables,
+	);
 
 	const transpileDuration = Date.now() - transpileStart;
 	const linesOfCode = generated.code.split("\n").length;
