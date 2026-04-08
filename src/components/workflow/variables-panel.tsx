@@ -24,6 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import {
 	AlertTriangle,
+	CloudUpload,
 	Eye,
 	EyeOff,
 	KeyRound,
@@ -41,6 +42,7 @@ import {
 	updateVariable,
 	deleteVariable,
 	rotateSecret,
+	syncAllVariables,
 } from "@/lib/workflow-api/variables";
 import { extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { toast } from "sonner";
@@ -145,6 +147,13 @@ export function VariablesPanel({
 	const [rotateValue, setRotateValue] = useState("");
 	const [rotateShowValue, setRotateShowValue] = useState(false);
 	const [isRotating, setIsRotating] = useState(false);
+
+	// -- Sync all to Cloudflare state --
+	const [showSyncPanel, setShowSyncPanel] = useState(false);
+	const [syncSecretInputs, setSyncSecretInputs] = useState<
+		Record<string, string>
+	>({});
+	const [isSyncing, setIsSyncing] = useState(false);
 
 	const loadVariables = useCallback(async () => {
 		setIsLoading(true);
@@ -292,6 +301,37 @@ export function VariablesPanel({
 		}
 	};
 
+	const handleSyncAll = async () => {
+		setIsSyncing(true);
+		try {
+			const result = await syncAllVariables(
+				workflowId,
+				{ secretValues: syncSecretInputs },
+				{ jwt },
+			);
+			if (result.synced.length === 0 && result.failed.length === 0) {
+				toast.info(t("variablesPanel.syncSuccessNoDeployments"));
+			} else if (result.failed.length > 0) {
+				toast.error(t("variablesPanel.syncError"), {
+					description: `Failed: ${result.failed.join(", ")}`,
+				});
+			} else {
+				toast.success(
+					t("variablesPanel.syncSuccess")
+						.replace("{n}", String(result.variableCount))
+						.replace("{w}", String(result.synced.length)),
+				);
+			}
+			setShowSyncPanel(false);
+			setSyncSecretInputs({});
+		} catch (err) {
+			const msg = extractApiErrorMessage(err);
+			toast.error(t("variablesPanel.syncError"), { description: msg });
+		} finally {
+			setIsSyncing(false);
+		}
+	};
+
 	const hasDraftChanges = variables.length > 0;
 
 	return (
@@ -324,6 +364,18 @@ export function VariablesPanel({
 						</Badge>
 					)}
 					<div className="flex gap-2 ml-auto">
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => {
+								setSyncSecretInputs({});
+								setShowSyncPanel(true);
+							}}
+							className="flex items-center gap-1"
+						>
+							<CloudUpload className="h-4 w-4" />
+							{t("variablesPanel.syncButton")}
+						</Button>
 						<Button
 							variant="outline"
 							size="sm"
@@ -700,6 +752,67 @@ export function VariablesPanel({
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : (
 									t("variablesPanel.rotateConfirm")
+								)}
+							</Button>
+						</div>
+					</div>
+				)}
+
+				{/* Sync all to Cloudflare panel */}
+				{showSyncPanel && (
+					<div className="border border-blue-200 dark:border-blue-800 rounded-lg p-4 bg-blue-50 dark:bg-blue-950/30 space-y-3">
+						<h3 className="font-medium text-sm flex items-center gap-2">
+							<CloudUpload className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+							{t("variablesPanel.syncTitle")}
+						</h3>
+						<p className="text-xs text-gray-600 dark:text-gray-400">
+							{t("variablesPanel.syncDesc")}
+						</p>
+						{variables.filter((v) => v.is_secret).length > 0 && (
+							<>
+								<p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+									{t("variablesPanel.syncSecretsNote")}
+								</p>
+								{variables
+									.filter((v) => v.is_secret)
+									.map((secret) => (
+										<div key={secret.id} className="space-y-1">
+											<Label className="text-xs font-mono">{secret.name}</Label>
+											<Input
+												type="password"
+												placeholder="••••••••"
+												value={syncSecretInputs[secret.name] ?? ""}
+												onChange={(e) =>
+													setSyncSecretInputs((prev) => ({
+														...prev,
+														[secret.name]: e.target.value,
+													}))
+												}
+												className="text-sm"
+											/>
+										</div>
+									))}
+							</>
+						)}
+						<div className="flex justify-end gap-2">
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									setShowSyncPanel(false);
+									setSyncSecretInputs({});
+								}}
+							>
+								{t("variablesPanel.cancel")}
+							</Button>
+							<Button size="sm" disabled={isSyncing} onClick={handleSyncAll}>
+								{isSyncing ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<>
+										<CloudUpload className="h-4 w-4 mr-1" />
+										{t("variablesPanel.syncConfirm")}
+									</>
 								)}
 							</Button>
 						</div>

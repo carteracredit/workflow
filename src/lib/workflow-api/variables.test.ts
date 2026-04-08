@@ -5,6 +5,7 @@ import {
 	updateVariable,
 	deleteVariable,
 	rotateSecret,
+	syncAllVariables,
 } from "./variables";
 import type { WorkflowVariable } from "./types";
 
@@ -231,6 +232,96 @@ describe("variables API functions", () => {
 
 			expect(result.synced).toHaveLength(1);
 			expect(result.failed).toHaveLength(1);
+		});
+	});
+
+	describe("syncAllVariables", () => {
+		it("POSTs to the sync endpoint with empty secretValues", async () => {
+			mockFetch({
+				success: true,
+				result: {
+					synced: ["workflow-credit-dev-v1"],
+					failed: [],
+					variableCount: 2,
+				},
+			});
+
+			const result = await syncAllVariables(
+				WORKFLOW_ID,
+				{ secretValues: {} },
+				{ jwt: "test-token" },
+			);
+
+			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+				`${BASE_URL}/workflows/${WORKFLOW_ID}/variables/sync`,
+				expect.objectContaining({
+					method: "POST",
+					headers: expect.objectContaining({
+						"content-type": "application/json",
+					}),
+					body: JSON.stringify({ secretValues: {} }),
+				}),
+			);
+			expect(result.synced).toHaveLength(1);
+			expect(result.failed).toHaveLength(0);
+			expect(result.variableCount).toBe(2);
+		});
+
+		it("POSTs to the sync endpoint with secret values", async () => {
+			mockFetch({
+				success: true,
+				result: {
+					synced: ["workflow-credit-dev-v1"],
+					failed: [],
+					variableCount: 3,
+				},
+			});
+
+			const result = await syncAllVariables(WORKFLOW_ID, {
+				secretValues: { TOKEN: "abc", KEY: "xyz" },
+			});
+
+			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+				`${BASE_URL}/workflows/${WORKFLOW_ID}/variables/sync`,
+				expect.objectContaining({
+					body: JSON.stringify({
+						secretValues: { TOKEN: "abc", KEY: "xyz" },
+					}),
+				}),
+			);
+			expect(result.variableCount).toBe(3);
+		});
+
+		it("returns 0 synced on no deployments (message present)", async () => {
+			mockFetch({
+				success: true,
+				result: {
+					synced: [],
+					failed: [],
+					message: "No active deployments found for this workflow",
+				},
+			});
+
+			const result = await syncAllVariables(WORKFLOW_ID, {});
+			expect(result.synced).toHaveLength(0);
+		});
+
+		it("passes JWT header when provided", async () => {
+			mockFetch({
+				success: true,
+				result: { synced: [], failed: [], variableCount: 0 },
+			});
+
+			await syncAllVariables(WORKFLOW_ID, {}, { jwt: "bearer-token" });
+
+			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					headers: expect.objectContaining({
+						Authorization: "Bearer bearer-token",
+					}),
+				}),
+			);
 		});
 	});
 });

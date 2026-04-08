@@ -788,6 +788,16 @@ export const translations = {
 			rotateConfirm: "Rotate Secret",
 			rotateSuccess: "Secret rotated in {n} worker(s)",
 			rotateError: "Error rotating secret",
+			syncButton: "Sync to Cloudflare",
+			syncTitle: "Sync Variables to Cloudflare",
+			syncDesc:
+				"Pushes all variables and secrets to the active deployed workers. Use this after a deployment completes if variables are missing.",
+			syncSecretsNote:
+				"Enter the current value for each secret. These are sent directly to Cloudflare and never stored.",
+			syncConfirm: "Sync Now",
+			syncSuccess: "Synced {n} variable(s) to {w} worker(s)",
+			syncSuccessNoDeployments: "No active deployments to sync to",
+			syncError: "Error syncing variables",
 			toastCreated: "Variable created",
 			toastUpdated: "Variable updated",
 			toastDeleted: "Variable deleted",
@@ -1643,6 +1653,16 @@ export const translations = {
 			rotateConfirm: "Rotar Secreto",
 			rotateSuccess: "Secreto rotado en {n} worker(s)",
 			rotateError: "Error al rotar el secreto",
+			syncButton: "Sincronizar con Cloudflare",
+			syncTitle: "Sincronizar Variables con Cloudflare",
+			syncDesc:
+				"Envía todas las variables y secretos a los workers desplegados activos. Úsalo después de que un deployment termine si faltan variables.",
+			syncSecretsNote:
+				"Ingresa el valor actual de cada secreto. Se envían directamente a Cloudflare y no se almacenan.",
+			syncConfirm: "Sincronizar Ahora",
+			syncSuccess: "Se sincronizaron {n} variable(s) en {w} worker(s)",
+			syncSuccessNoDeployments: "No hay deployments activos para sincronizar",
+			syncError: "Error al sincronizar variables",
 			toastCreated: "Variable creada",
 			toastUpdated: "Variable actualizada",
 			toastDeleted: "Variable eliminada",

@@ -98,9 +98,32 @@ export async function deleteVariable(
 }
 
 /**
- * POST /workflows/:id/variables/rotate-secrets
- * Emergency: pushes a secret value to all active workers without republishing.
+ * POST /workflows/:id/variables/sync
+ * Syncs all variables (non-secrets from D1 + provided secret values) to all
+ * active deployed workers. Use this after a deployment completes when the
+ * automatic sync at publish time may have failed.
  */
+export async function syncAllVariables(
+	workflowId: string,
+	payload: { secretValues?: Record<string, string> },
+	options?: ApiCallOptions,
+): Promise<{ synced: string[]; failed: string[]; variableCount: number }> {
+	const baseUrl = getWorkflowServiceUrl();
+	const { json } = await fetchJson<
+		ApiResponse<{
+			synced: string[];
+			failed: string[];
+			variableCount: number;
+			message?: string;
+		}>
+	>(`${baseUrl}/workflows/${workflowId}/variables/sync`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(payload),
+		jwt: options?.jwt,
+	});
+	return json.result;
+}
 export async function rotateSecret(
 	workflowId: string,
 	payload: RotateSecretPayload,

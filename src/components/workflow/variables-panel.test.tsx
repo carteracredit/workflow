@@ -33,7 +33,7 @@ vi.mock("@/components/LanguageProvider", async () => {
 });
 
 vi.mock("sonner", () => ({
-	toast: { success: vi.fn(), error: vi.fn() },
+	toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 	Toaster: () => null,
 }));
 
@@ -42,6 +42,7 @@ const mockCreateVariable = vi.fn();
 const mockUpdateVariable = vi.fn();
 const mockDeleteVariable = vi.fn();
 const mockRotateSecret = vi.fn();
+const mockSyncAllVariables = vi.fn();
 
 vi.mock("@/lib/workflow-api/variables", () => ({
 	listVariables: (...args: unknown[]) => mockListVariables(...args),
@@ -49,6 +50,7 @@ vi.mock("@/lib/workflow-api/variables", () => ({
 	updateVariable: (...args: unknown[]) => mockUpdateVariable(...args),
 	deleteVariable: (...args: unknown[]) => mockDeleteVariable(...args),
 	rotateSecret: (...args: unknown[]) => mockRotateSecret(...args),
+	syncAllVariables: (...args: unknown[]) => mockSyncAllVariables(...args),
 }));
 
 vi.mock("@/lib/workflow-api/http", () => ({
@@ -509,5 +511,152 @@ describe("VariablesPanel", () => {
 			expect(toast.error).toHaveBeenCalled();
 		});
 		confirmSpy.mockRestore();
+	});
+
+	// -----------------------------------------------------------------------
+	// Sync to Cloudflare
+	// -----------------------------------------------------------------------
+
+	it("renders the Sync to Cloudflare button", async () => {
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() =>
+			expect(
+				screen.getByText("Sincronizar con Cloudflare"),
+			).toBeInTheDocument(),
+		);
+	});
+
+	it("opens the sync panel when Sync button is clicked", async () => {
+		mockListVariables.mockResolvedValue([mockVariable]);
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+
+		await waitFor(() => {
+			expect(
+				screen.getByText("Sincronizar Variables con Cloudflare"),
+			).toBeInTheDocument();
+		});
+	});
+
+	it("shows secret value inputs for each secret when sync panel opens", async () => {
+		mockListVariables.mockResolvedValue([mockVariable, mockSecret]);
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+
+		// After opening the sync panel, API_SECRET_KEY appears both in the variables
+		// table and as a label in the sync panel secret inputs section.
+		await waitFor(() => {
+			const allOccurrences = screen.getAllByText("API_SECRET_KEY");
+			expect(allOccurrences.length).toBeGreaterThanOrEqual(2);
+		});
+	});
+
+	it("closes the sync panel when Cancel is clicked", async () => {
+		mockListVariables.mockResolvedValue([mockVariable]);
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+		await waitFor(() =>
+			expect(
+				screen.getByText("Sincronizar Variables con Cloudflare"),
+			).toBeInTheDocument(),
+		);
+
+		fireEvent.click(screen.getByText("Cancelar"));
+		await waitFor(() =>
+			expect(
+				screen.queryByText("Sincronizar Variables con Cloudflare"),
+			).not.toBeInTheDocument(),
+		);
+	});
+
+	it("calls syncAllVariables and shows success toast on sync", async () => {
+		const { toast } = await import("sonner");
+		mockListVariables.mockResolvedValue([mockVariable]);
+		mockSyncAllVariables.mockResolvedValue({
+			synced: ["workflow-test-dev-v1"],
+			failed: [],
+			variableCount: 1,
+		});
+
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+		await waitFor(() => screen.getByText("Sincronizar Ahora"));
+		fireEvent.click(screen.getByText("Sincronizar Ahora"));
+
+		await waitFor(() => {
+			expect(mockSyncAllVariables).toHaveBeenCalledWith(
+				WORKFLOW_ID,
+				{ secretValues: {} },
+				{ jwt: "test-token" },
+			);
+			expect(toast.success).toHaveBeenCalled();
+		});
+	});
+
+	it("shows info toast when no deployments found", async () => {
+		const { toast } = await import("sonner");
+		mockListVariables.mockResolvedValue([mockVariable]);
+		mockSyncAllVariables.mockResolvedValue({
+			synced: [],
+			failed: [],
+			variableCount: 0,
+		});
+
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+		await waitFor(() => screen.getByText("Sincronizar Ahora"));
+		fireEvent.click(screen.getByText("Sincronizar Ahora"));
+
+		await waitFor(() => {
+			expect(toast.info).toHaveBeenCalled();
+		});
+	});
+
+	it("shows error toast when sync fails", async () => {
+		const { toast } = await import("sonner");
+		mockListVariables.mockResolvedValue([mockVariable]);
+		mockSyncAllVariables.mockRejectedValue(new Error("Cloudflare API error"));
+
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+		await waitFor(() => screen.getByText("Sincronizar Ahora"));
+		fireEvent.click(screen.getByText("Sincronizar Ahora"));
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalled();
+		});
+	});
+
+	it("shows error toast when sync has failed workers", async () => {
+		const { toast } = await import("sonner");
+		mockListVariables.mockResolvedValue([mockVariable]);
+		mockSyncAllVariables.mockResolvedValue({
+			synced: [],
+			failed: ["workflow-test-dev-v1"],
+			variableCount: 1,
+		});
+
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+		await waitFor(() => screen.getByText("Sincronizar Ahora"));
+		fireEvent.click(screen.getByText("Sincronizar Ahora"));
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalled();
+		});
 	});
 });
