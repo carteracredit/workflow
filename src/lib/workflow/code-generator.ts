@@ -4,6 +4,10 @@ import type {
 	WorkflowMetadata,
 	ChallengeNodeConfig,
 	APIFailureHandling,
+	APIAuthConfig,
+	APIHeaderEntry,
+	APIBodyConfig,
+	APIResponseConfig,
 	MessageNodeConfig,
 	OutputSchema,
 } from "./types";
@@ -159,6 +163,16 @@ function emitInterpolatedString(str: string): string {
 	// Escape any backticks inside the literal part (outside ${...}).
 	const escaped = expanded.replace(/`/g, "\\`");
 	return `\`${escaped}\``;
+}
+
+/**
+ * Emits a reference to a Cloudflare Worker environment variable.
+ * Used for credentials and API keys defined in the Variables panel.
+ *
+ * Example: emitEnvRef("NLS_TOKEN") → `this.env.NLS_TOKEN`
+ */
+function emitEnvRef(varName: string): string {
+	return `this.env.${varName}`;
 }
 
 /**
@@ -504,6 +518,12 @@ function generateAPIStep(
 	const failureHandling = node.config.failureHandling as
 		| APIFailureHandling
 		| undefined;
+	const authConfig = node.config.authConfig as APIAuthConfig | undefined;
+	const customHeaders = (node.config.customHeaders as APIHeaderEntry[]) ?? [];
+	const bodyConfig = node.config.bodyConfig as APIBodyConfig | undefined;
+	const responseConfig = node.config.responseConfig as
+		| APIResponseConfig
+		| undefined;
 	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
 	const captureResult = nodeHasOutputSchema(node);
 	const varName = nodeIdToVarName(node.id);
@@ -511,7 +531,11 @@ function generateAPIStep(
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
-
+	const isOAuth2 =
+		authConfig?.type === "oauth2-client-credentials" &&
+		authConfig.oauth2TokenUrl &&
+		authConfig.oauth2ClientId &&
+		authConfig.oauth2ClientSecret;
 	const isReturnToCheckpoint =
 		failureHandling?.onFailure === "return-to-checkpoint";
 
@@ -524,6 +548,11 @@ function generateAPIStep(
 		retryVarName,
 	);
 
+	// Emit OAuth2 token fetch step before the main API step
+	if (isOAuth2 && authConfig) {
+		code += generateOAuth2TokenFetch(authConfig, stepName, indent);
+	}
+
 	// Wrap in try/catch for return-to-checkpoint failure handling
 	if (isReturnToCheckpoint && retryVarName) {
 		code += `${indent}try {\n`;
@@ -531,17 +560,89 @@ function generateAPIStep(
 	}
 
 	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+
+	// Build headers
+	const hasCustomHeaders = customHeaders.length > 0;
+	const hasAuthHeader =
+		authConfig && authConfig.type !== "none" && authConfig.type !== undefined;
+	if (hasAuthHeader || hasCustomHeaders || hasBody) {
+		code += `${indent}\tconst headers: Record<string, string> = {};\n`;
+		if (hasBody) {
+			code += `${indent}\theaders["Content-Type"] = "application/json";\n`;
+		}
+		// Auth header
+		if (authConfig?.type === "bearer" && authConfig.bearerToken) {
+			code += `${indent}\theaders["Authorization"] = \`Bearer \${${emitEnvRef(authConfig.bearerToken)}}\`;\n`;
+		} else if (
+			authConfig?.type === "api-key" &&
+			authConfig.apiKeyHeader &&
+			authConfig.apiKeyValue
+		) {
+			code += `${indent}\theaders[${JSON.stringify(authConfig.apiKeyHeader)}] = ${emitEnvRef(authConfig.apiKeyValue)};\n`;
+		} else if (isOAuth2) {
+			code += `${indent}\theaders["Authorization"] = \`Bearer \${_oauth2Token_${nodeIdToVarName(node.id)}.access_token}\`;\n`;
+		}
+		// Custom headers
+		for (const h of customHeaders) {
+			const val = h.value.startsWith("env:")
+				? emitEnvRef(h.value.slice(4).trim())
+				: emitInterpolatedString(h.value);
+			code += `${indent}\theaders[${JSON.stringify(h.key)}] = ${val};\n`;
+		}
+	}
+
+	// Build fetch call
 	code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
 	code += `${indent}\t\tmethod: "${method}",\n`;
-	if (hasBody) {
-		code += `${indent}\t\theaders: { "Content-Type": "application/json" },\n`;
-		code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+
+	if (hasAuthHeader || hasCustomHeaders || hasBody) {
+		code += `${indent}\t\theaders,\n`;
 	}
+
+	// Body
+	if (hasBody) {
+		const mode = bodyConfig?.mode ?? "none";
+		if (mode === "raw-json" && bodyConfig?.rawJson) {
+			// Always use backticks: preserves inner JSON quotes and allows ${nodeId.prop} refs
+			const dehyphenated = bodyConfig.rawJson.replace(
+				/\$\{([^}]+)\}/g,
+				(_, path: string) => `\${${path.replace(/-/g, "_")}}`,
+			);
+			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
+		} else if (mode === "field-mapping" && bodyConfig?.fieldMappings?.length) {
+			const mappingsCode = bodyConfig.fieldMappings
+				.map(
+					(m) =>
+						`${JSON.stringify(m.targetKey)}: ${expandVariableRefs(m.sourceExpression)}`,
+				)
+				.join(`, `);
+			code += `${indent}\t\tbody: JSON.stringify({ ${mappingsCode} }),\n`;
+		} else {
+			code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+		}
+	}
+
 	code += `${indent}\t});\n`;
 	code += `${indent}\tif (!response.ok) {\n`;
 	code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
 	code += `${indent}\t}\n`;
-	code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
+
+	// Response extraction
+	const extractPath = responseConfig?.extractPath?.trim();
+	if (extractPath) {
+		code += `${indent}\tconst _responseData = (await response.json()) as Record<string, unknown>;\n`;
+		const accessExpr = extractPath
+			.split(".")
+			.reduce(
+				(acc, key) => `(${acc} as Record<string, unknown>)["${key}"]`,
+				"_responseData",
+			);
+		code += `${indent}\treturn ${accessExpr} as Record<string, unknown>;\n`;
+	} else {
+		code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
+	}
+
 	code += `${indent}}`;
 
 	// Add retry configuration if specified
@@ -575,7 +676,6 @@ function generateAPIStep(
 	if (isReturnToCheckpoint && retryVarName) {
 		indent = indent.slice(1);
 		const retryVarOrig = retryVarName;
-		// We need to get maxRetries from failureHandling; use a fallback
 		const maxR = failureHandling?.maxRetries ?? 0;
 		code += `${indent}} catch (_apiErr) {\n`;
 		code += `${indent}\tif (${retryVarOrig} < ${maxR}) {\n`;
@@ -585,6 +685,50 @@ function generateAPIStep(
 		code += `${indent}}\n`;
 	}
 
+	return code;
+}
+
+/**
+ * Generate a step.do that fetches an OAuth2 access token using client_credentials
+ * (or password grant if oauth2Username/oauth2Password are set).
+ * The token is stored in a local const for use in the subsequent API step.
+ */
+function generateOAuth2TokenFetch(
+	auth: APIAuthConfig,
+	stepName: string,
+	indent: string,
+): string {
+	const tokenVarSuffix = stepName.replace(/-/g, "_");
+	const grantType =
+		auth.oauth2Username && auth.oauth2Password
+			? "password"
+			: "client_credentials";
+
+	let code = `${indent}const _oauth2Token_${tokenVarSuffix} = await step.do("get-token-${stepName}", async () => {\n`;
+	code += `${indent}\tconst _tokenRes = await fetch(${auth.oauth2TokenUrl ? emitEnvRef(auth.oauth2TokenUrl) : '"<TOKEN_URL>"'}, {\n`;
+	code += `${indent}\t\tmethod: "POST",\n`;
+	code += `${indent}\t\theaders: { "Content-Type": "application/x-www-form-urlencoded" },\n`;
+	code += `${indent}\t\tbody: new URLSearchParams({\n`;
+	code += `${indent}\t\t\tgrant_type: "${grantType}",\n`;
+	if (auth.oauth2ClientId) {
+		code += `${indent}\t\t\tclient_id: ${emitEnvRef(auth.oauth2ClientId)},\n`;
+	}
+	if (auth.oauth2ClientSecret) {
+		code += `${indent}\t\t\tclient_secret: ${emitEnvRef(auth.oauth2ClientSecret)},\n`;
+	}
+	if (auth.oauth2Scope) {
+		code += `${indent}\t\t\tscope: ${emitEnvRef(auth.oauth2Scope)},\n`;
+	}
+	if (grantType === "password" && auth.oauth2Username && auth.oauth2Password) {
+		code += `${indent}\t\t\tusername: ${emitEnvRef(auth.oauth2Username)},\n`;
+		code += `${indent}\t\t\tpassword: ${emitEnvRef(auth.oauth2Password)},\n`;
+	}
+	code += `${indent}\t\t}),\n`;
+	code += `${indent}\t});\n`;
+	code += `${indent}\tif (!_tokenRes.ok) throw new Error(\`OAuth2 token request failed: \${_tokenRes.status}\`);\n`;
+	code += `${indent}\tconst _tokenData = await _tokenRes.json() as Record<string, unknown>;\n`;
+	code += `${indent}\treturn { access_token: _tokenData.access_token as string };\n`;
+	code += `${indent}});\n`;
 	return code;
 }
 

@@ -236,7 +236,7 @@ describe("variables API functions", () => {
 	});
 
 	describe("syncAllVariables", () => {
-		it("POSTs to the sync endpoint with empty secretValues", async () => {
+		it("POSTs to the sync endpoint with empty body (no secrets needed)", async () => {
 			mockFetch({
 				success: true,
 				result: {
@@ -246,11 +246,7 @@ describe("variables API functions", () => {
 				},
 			});
 
-			const result = await syncAllVariables(
-				WORKFLOW_ID,
-				{ secretValues: {} },
-				{ jwt: "test-token" },
-			);
+			const result = await syncAllVariables(WORKFLOW_ID, { jwt: "test-token" });
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
 				`${BASE_URL}/workflows/${WORKFLOW_ID}/variables/sync`,
@@ -259,37 +255,12 @@ describe("variables API functions", () => {
 					headers: expect.objectContaining({
 						"content-type": "application/json",
 					}),
-					body: JSON.stringify({ secretValues: {} }),
+					body: JSON.stringify({}),
 				}),
 			);
 			expect(result.synced).toHaveLength(1);
 			expect(result.failed).toHaveLength(0);
 			expect(result.variableCount).toBe(2);
-		});
-
-		it("POSTs to the sync endpoint with secret values", async () => {
-			mockFetch({
-				success: true,
-				result: {
-					synced: ["workflow-credit-dev-v1"],
-					failed: [],
-					variableCount: 3,
-				},
-			});
-
-			const result = await syncAllVariables(WORKFLOW_ID, {
-				secretValues: { TOKEN: "abc", KEY: "xyz" },
-			});
-
-			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-				`${BASE_URL}/workflows/${WORKFLOW_ID}/variables/sync`,
-				expect.objectContaining({
-					body: JSON.stringify({
-						secretValues: { TOKEN: "abc", KEY: "xyz" },
-					}),
-				}),
-			);
-			expect(result.variableCount).toBe(3);
 		});
 
 		it("returns 0 synced on no deployments (message present)", async () => {
@@ -302,7 +273,7 @@ describe("variables API functions", () => {
 				},
 			});
 
-			const result = await syncAllVariables(WORKFLOW_ID, {});
+			const result = await syncAllVariables(WORKFLOW_ID);
 			expect(result.synced).toHaveLength(0);
 		});
 
@@ -312,7 +283,7 @@ describe("variables API functions", () => {
 				result: { synced: [], failed: [], variableCount: 0 },
 			});
 
-			await syncAllVariables(WORKFLOW_ID, {}, { jwt: "bearer-token" });
+			await syncAllVariables(WORKFLOW_ID, { jwt: "bearer-token" });
 
 			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
 				expect.any(String),
