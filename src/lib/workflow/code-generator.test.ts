@@ -443,7 +443,7 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain("const node_1773093521695 =");
 	});
 
-	it("should NOT capture step result when node has no outputSchema", () => {
+	it("should always capture step result for API nodes (response is always visible in cases UI)", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -462,7 +462,8 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).not.toContain("const node_api =");
+		// API nodes ALWAYS capture result so it's visible in the cases UI
+		expect(result.code).toContain("const node_api =");
 		expect(result.code).toContain("await step.do(");
 	});
 
@@ -3503,11 +3504,20 @@ describe("generateWorkflowCode – Fase 2 API auth: none", () => {
 describe("generateWorkflowCode – Fase 2 API auth: bearer", () => {
 	it("generates Bearer Authorization header using this.env ref", () => {
 		const result = genApi({
-			authConfig: { type: "bearer", bearerToken: "NLS_TOKEN" },
+			authConfig: { type: "bearer", bearerToken: "env:NLS_TOKEN" },
 		});
 		expect(result.code).toContain("this.env.NLS_TOKEN");
 		expect(result.code).toContain("Bearer");
 		expect(result.code).toContain('headers["Authorization"]');
+	});
+
+	it("generates Bearer Authorization header using literal value", () => {
+		const result = genApi({
+			authConfig: { type: "bearer", bearerToken: "my-literal-token" },
+		});
+		expect(result.code).toContain('"my-literal-token"');
+		expect(result.code).not.toContain("this.env.my-literal-token");
+		expect(result.code).toContain("Bearer");
 	});
 });
 
@@ -3517,11 +3527,23 @@ describe("generateWorkflowCode – Fase 2 API auth: api-key", () => {
 			authConfig: {
 				type: "api-key",
 				apiKeyHeader: "X-Api-Key",
-				apiKeyValue: "NLS_API_KEY",
+				apiKeyValue: "env:NLS_API_KEY",
 			},
 		});
 		expect(result.code).toContain("this.env.NLS_API_KEY");
 		expect(result.code).toContain('"X-Api-Key"');
+	});
+
+	it("generates custom header using literal value for api-key auth", () => {
+		const result = genApi({
+			authConfig: {
+				type: "api-key",
+				apiKeyHeader: "X-Api-Key",
+				apiKeyValue: "literal-key-value",
+			},
+		});
+		expect(result.code).toContain('"literal-key-value"');
+		expect(result.code).not.toContain("this.env.literal-key-value");
 	});
 });
 
@@ -3530,9 +3552,9 @@ describe("generateWorkflowCode – Fase 2 API auth: oauth2", () => {
 		const result = genApi({
 			authConfig: {
 				type: "oauth2-client-credentials",
-				oauth2TokenUrl: "NLS_OAUTH_URL",
-				oauth2ClientId: "NLS_CLIENT_ID",
-				oauth2ClientSecret: "NLS_CLIENT_SECRET",
+				oauth2TokenUrl: "env:NLS_OAUTH_URL",
+				oauth2ClientId: "env:NLS_CLIENT_ID",
+				oauth2ClientSecret: "env:NLS_CLIENT_SECRET",
 			},
 		});
 		expect(result.code).toContain("get-token-");
@@ -3549,11 +3571,11 @@ describe("generateWorkflowCode – Fase 2 API auth: oauth2", () => {
 		const result = genApi({
 			authConfig: {
 				type: "oauth2-client-credentials",
-				oauth2TokenUrl: "NLS_URL",
-				oauth2ClientId: "NLS_CLIENT_ID",
-				oauth2ClientSecret: "NLS_CLIENT_SECRET",
-				oauth2Username: "NLS_USERNAME",
-				oauth2Password: "NLS_PASSWORD",
+				oauth2TokenUrl: "env:NLS_URL",
+				oauth2ClientId: "env:NLS_CLIENT_ID",
+				oauth2ClientSecret: "env:NLS_CLIENT_SECRET",
+				oauth2Username: "env:NLS_USERNAME",
+				oauth2Password: "env:NLS_PASSWORD",
 			},
 		});
 		expect(result.code).toContain("password");
@@ -3654,7 +3676,7 @@ describe("generateWorkflowCode – Fase 2 API combined: auth + headers + body + 
 	it("generates all features together correctly", () => {
 		const result = genApi({
 			method: "POST",
-			authConfig: { type: "bearer", bearerToken: "NLS_TOKEN" },
+			authConfig: { type: "bearer", bearerToken: "env:NLS_TOKEN" },
 			customHeaders: [{ key: "X-Client", value: "env:CLIENT_ID" }],
 			bodyConfig: {
 				mode: "field-mapping",

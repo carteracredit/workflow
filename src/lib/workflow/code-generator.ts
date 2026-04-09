@@ -166,6 +166,19 @@ function emitInterpolatedString(str: string): string {
 }
 
 /**
+ * Emits a value for use in generated TypeScript source code.
+ * Supports two modes:
+ *   - "env:VAR_NAME"  → this.env.VAR_NAME  (env variable reference)
+ *   - any other text  → "literal string"    (used as-is)
+ */
+function emitAuthValue(raw: string): string {
+	if (raw.startsWith("env:")) {
+		return emitEnvRef(raw.slice(4).trim());
+	}
+	return JSON.stringify(raw);
+}
+
+/**
  * Emits a reference to a Cloudflare Worker environment variable.
  * Used for credentials and API keys defined in the Variables panel.
  *
@@ -525,9 +538,10 @@ function generateAPIStep(
 		| APIResponseConfig
 		| undefined;
 	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
-	const captureResult = nodeHasOutputSchema(node);
+	// API nodes always capture the response so the cases UI can display it,
+	// regardless of whether an explicit outputSchema is configured.
 	const varName = nodeIdToVarName(node.id);
-	const varDecl = captureResult ? `const ${varName} = ` : "";
+	const varDecl = `const ${varName} = `;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
@@ -572,13 +586,13 @@ function generateAPIStep(
 		}
 		// Auth header
 		if (authConfig?.type === "bearer" && authConfig.bearerToken) {
-			code += `${indent}\theaders["Authorization"] = \`Bearer \${${emitEnvRef(authConfig.bearerToken)}}\`;\n`;
+			code += `${indent}\theaders["Authorization"] = \`Bearer \${${emitAuthValue(authConfig.bearerToken)}}\`;\n`;
 		} else if (
 			authConfig?.type === "api-key" &&
 			authConfig.apiKeyHeader &&
 			authConfig.apiKeyValue
 		) {
-			code += `${indent}\theaders[${JSON.stringify(authConfig.apiKeyHeader)}] = ${emitEnvRef(authConfig.apiKeyValue)};\n`;
+			code += `${indent}\theaders[${JSON.stringify(authConfig.apiKeyHeader)}] = ${emitAuthValue(authConfig.apiKeyValue)};\n`;
 		} else if (isOAuth2) {
 			code += `${indent}\theaders["Authorization"] = \`Bearer \${_oauth2Token_${nodeIdToVarName(node.id)}.access_token}\`;\n`;
 		}
@@ -658,12 +672,7 @@ function generateAPIStep(
 	}
 
 	code += `);\n`;
-	code += generateCaseObjectCall(
-		node,
-		indent,
-		captureResult ? varName : undefined,
-		retryVarName,
-	);
+	code += generateCaseObjectCall(node, indent, varName, retryVarName);
 	code += generateProgressCall(
 		node,
 		indent,
@@ -705,23 +714,23 @@ function generateOAuth2TokenFetch(
 			: "client_credentials";
 
 	let code = `${indent}const _oauth2Token_${tokenVarSuffix} = await step.do("get-token-${stepName}", async () => {\n`;
-	code += `${indent}\tconst _tokenRes = await fetch(${auth.oauth2TokenUrl ? emitEnvRef(auth.oauth2TokenUrl) : '"<TOKEN_URL>"'}, {\n`;
+	code += `${indent}\tconst _tokenRes = await fetch(${auth.oauth2TokenUrl ? emitAuthValue(auth.oauth2TokenUrl) : '"<TOKEN_URL>"'}, {\n`;
 	code += `${indent}\t\tmethod: "POST",\n`;
 	code += `${indent}\t\theaders: { "Content-Type": "application/x-www-form-urlencoded" },\n`;
 	code += `${indent}\t\tbody: new URLSearchParams({\n`;
 	code += `${indent}\t\t\tgrant_type: "${grantType}",\n`;
 	if (auth.oauth2ClientId) {
-		code += `${indent}\t\t\tclient_id: ${emitEnvRef(auth.oauth2ClientId)},\n`;
+		code += `${indent}\t\t\tclient_id: ${emitAuthValue(auth.oauth2ClientId)},\n`;
 	}
 	if (auth.oauth2ClientSecret) {
-		code += `${indent}\t\t\tclient_secret: ${emitEnvRef(auth.oauth2ClientSecret)},\n`;
+		code += `${indent}\t\t\tclient_secret: ${emitAuthValue(auth.oauth2ClientSecret)},\n`;
 	}
 	if (auth.oauth2Scope) {
-		code += `${indent}\t\t\tscope: ${emitEnvRef(auth.oauth2Scope)},\n`;
+		code += `${indent}\t\t\tscope: ${emitAuthValue(auth.oauth2Scope)},\n`;
 	}
 	if (grantType === "password" && auth.oauth2Username && auth.oauth2Password) {
-		code += `${indent}\t\t\tusername: ${emitEnvRef(auth.oauth2Username)},\n`;
-		code += `${indent}\t\t\tpassword: ${emitEnvRef(auth.oauth2Password)},\n`;
+		code += `${indent}\t\t\tusername: ${emitAuthValue(auth.oauth2Username)},\n`;
+		code += `${indent}\t\t\tpassword: ${emitAuthValue(auth.oauth2Password)},\n`;
 	}
 	code += `${indent}\t\t}),\n`;
 	code += `${indent}\t});\n`;
