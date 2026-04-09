@@ -3452,3 +3452,220 @@ describe("Snapshot — user workflow: Form → Checkpoint → Challenge → Reje
 		expect(closingBrace).toBeGreaterThan(-1);
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase 2 – API node auth / headers / body / response path
+// ─────────────────────────────────────────────────────────────────────────────
+function makeApiNode(config: Record<string, unknown> = {}) {
+	return createNode({
+		id: "api-1",
+		type: "API",
+		title: "Call API",
+		config: { url: "https://api.example.com/data", method: "GET", ...config },
+	});
+}
+
+function genApi(config: Record<string, unknown> = {}) {
+	const node = makeApiNode(config);
+	const startNode = createNode({
+		id: "start-1",
+		type: "Start",
+		title: "Start",
+		config: {},
+	});
+	const endNode = createNode({
+		id: "end-1",
+		type: "End",
+		title: "End",
+		config: {},
+	});
+	const nodes = [startNode, node, endNode];
+	const edges = [
+		{ id: "e1", from: "start-1", to: "api-1", label: null },
+		{ id: "e2", from: "api-1", to: "end-1", label: null },
+	];
+	return generateWorkflowCode(nodes, edges);
+}
+
+describe("generateWorkflowCode – Fase 2 API auth: none", () => {
+	it("generates plain fetch without Authorization when auth is none", () => {
+		const result = genApi({ authConfig: { type: "none" } });
+		expect(result.code).not.toContain("Authorization");
+		expect(result.code).toContain("fetch(");
+	});
+
+	it("generates plain fetch without Authorization when authConfig is absent", () => {
+		const result = genApi({});
+		expect(result.code).not.toContain("Authorization");
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API auth: bearer", () => {
+	it("generates Bearer Authorization header using this.env ref", () => {
+		const result = genApi({
+			authConfig: { type: "bearer", bearerToken: "NLS_TOKEN" },
+		});
+		expect(result.code).toContain("this.env.NLS_TOKEN");
+		expect(result.code).toContain("Bearer");
+		expect(result.code).toContain('headers["Authorization"]');
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API auth: api-key", () => {
+	it("generates custom header using this.env ref for api-key auth", () => {
+		const result = genApi({
+			authConfig: {
+				type: "api-key",
+				apiKeyHeader: "X-Api-Key",
+				apiKeyValue: "NLS_API_KEY",
+			},
+		});
+		expect(result.code).toContain("this.env.NLS_API_KEY");
+		expect(result.code).toContain('"X-Api-Key"');
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API auth: oauth2", () => {
+	it("generates a token step before the main API step", () => {
+		const result = genApi({
+			authConfig: {
+				type: "oauth2-client-credentials",
+				oauth2TokenUrl: "NLS_OAUTH_URL",
+				oauth2ClientId: "NLS_CLIENT_ID",
+				oauth2ClientSecret: "NLS_CLIENT_SECRET",
+			},
+		});
+		expect(result.code).toContain("get-token-");
+		expect(result.code).toContain("this.env.NLS_OAUTH_URL");
+		expect(result.code).toContain("this.env.NLS_CLIENT_ID");
+		expect(result.code).toContain("this.env.NLS_CLIENT_SECRET");
+		expect(result.code).toContain("client_credentials");
+		expect(result.code).toContain("access_token");
+		// OAuth2 Bearer header in main step
+		expect(result.code).toContain("Authorization");
+	});
+
+	it("generates password grant when username and password are set", () => {
+		const result = genApi({
+			authConfig: {
+				type: "oauth2-client-credentials",
+				oauth2TokenUrl: "NLS_URL",
+				oauth2ClientId: "NLS_CLIENT_ID",
+				oauth2ClientSecret: "NLS_CLIENT_SECRET",
+				oauth2Username: "NLS_USERNAME",
+				oauth2Password: "NLS_PASSWORD",
+			},
+		});
+		expect(result.code).toContain("password");
+		expect(result.code).toContain("this.env.NLS_USERNAME");
+		expect(result.code).toContain("this.env.NLS_PASSWORD");
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API custom headers", () => {
+	it("generates custom headers in fetch call", () => {
+		const result = genApi({
+			customHeaders: [
+				{ key: "X-Custom-Header", value: "literal-value" },
+				{ key: "X-Tenant", value: "env:TENANT_ID" },
+			],
+		});
+		expect(result.code).toContain('"X-Custom-Header"');
+		expect(result.code).toContain('"literal-value"');
+		expect(result.code).toContain('"X-Tenant"');
+		expect(result.code).toContain("this.env.TENANT_ID");
+	});
+
+	it("ignores empty custom headers array", () => {
+		const result = genApi({ customHeaders: [] });
+		expect(result.code).not.toContain("X-Custom-Header");
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API body: raw-json", () => {
+	it("generates raw JSON body with interpolation", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "raw-json",
+				rawJson: '{"loanId": "12345", "amount": 500}',
+			},
+		});
+		expect(result.code).toContain('"loanId"');
+		expect(result.code).toContain('"amount"');
+		expect(result.code).toContain("body:");
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API body: field-mapping", () => {
+	it("generates body from field mappings", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "field-mapping",
+				fieldMappings: [
+					{ sourceExpression: "${node-123.customerId}", targetKey: "cifNo" },
+					{ sourceExpression: "static-value", targetKey: "type" },
+				],
+			},
+		});
+		expect(result.code).toContain('"cifNo"');
+		expect(result.code).toContain('"type"');
+		expect(result.code).toContain("node_123.customerId");
+		expect(result.code).toContain("body:");
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API body: none (GET)", () => {
+	it("does not add body or Content-Type when method is GET", () => {
+		const result = genApi({
+			method: "GET",
+			bodyConfig: { mode: "none" },
+		});
+		expect(result.code).not.toContain("body:");
+		expect(result.code).not.toContain("Content-Type");
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API response path", () => {
+	it("extracts nested path from response", () => {
+		const result = genApi({
+			responseConfig: { extractPath: "payload.data" },
+		});
+		expect(result.code).toContain('"payload"');
+		expect(result.code).toContain('"data"');
+		expect(result.code).not.toContain("return (await response.json())");
+	});
+
+	it("returns full response when extractPath is empty", () => {
+		const result = genApi({
+			responseConfig: { extractPath: "" },
+		});
+		expect(result.code).toContain("return (await response.json())");
+	});
+
+	it("returns full response when responseConfig is absent", () => {
+		const result = genApi({});
+		expect(result.code).toContain("return (await response.json())");
+	});
+});
+
+describe("generateWorkflowCode – Fase 2 API combined: auth + headers + body + response", () => {
+	it("generates all features together correctly", () => {
+		const result = genApi({
+			method: "POST",
+			authConfig: { type: "bearer", bearerToken: "NLS_TOKEN" },
+			customHeaders: [{ key: "X-Client", value: "env:CLIENT_ID" }],
+			bodyConfig: {
+				mode: "field-mapping",
+				fieldMappings: [{ sourceExpression: "${node-1.id}", targetKey: "id" }],
+			},
+			responseConfig: { extractPath: "result" },
+		});
+		expect(result.code).toContain("this.env.NLS_TOKEN");
+		expect(result.code).toContain("Bearer");
+		expect(result.code).toContain("this.env.CLIENT_ID");
+		expect(result.code).toContain('"id"');
+		expect(result.code).toContain('"result"');
+	});
+});

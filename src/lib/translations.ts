@@ -577,6 +577,67 @@ export const translations = {
 			apiTerminalTitle: "ℹ️ Terminal Node",
 			apiTerminalDesc:
 				"This node cannot connect to other nodes. The workflow will end here in case of failure.",
+			// Authentication section
+			apiAuthTitle: "Authentication",
+			apiAuthTypeLabel: "Auth Type",
+			apiAuthNone: "None",
+			apiAuthBearer: "Bearer Token",
+			apiAuthApiKey: "API Key",
+			apiAuthOauth2: "OAuth2 Client Credentials",
+			apiAuthBearerTokenLabel: "Bearer Token Variable",
+			apiAuthBearerTokenPlaceholder: "e.g. NLS_TOKEN",
+			apiAuthBearerTokenDesc:
+				"Name of the env variable holding the Bearer token value.",
+			apiAuthApiKeyHeaderLabel: "Header Name",
+			apiAuthApiKeyHeaderPlaceholder: "e.g. X-API-Key",
+			apiAuthApiKeyValueLabel: "API Key Variable",
+			apiAuthApiKeyValuePlaceholder: "e.g. NLS_API_KEY",
+			apiAuthApiKeyValueDesc:
+				"Name of the env variable holding the API key value.",
+			apiAuthOauth2TokenUrlLabel: "Token URL Variable",
+			apiAuthOauth2TokenUrlPlaceholder: "e.g. NLS_OAUTH_URL",
+			apiAuthOauth2ClientIdLabel: "Client ID Variable",
+			apiAuthOauth2ClientIdPlaceholder: "e.g. NLS_CLIENT_ID",
+			apiAuthOauth2ClientSecretLabel: "Client Secret Variable",
+			apiAuthOauth2ClientSecretPlaceholder: "e.g. NLS_CLIENT_SECRET",
+			apiAuthOauth2ScopeLabel: "Scope Variable (optional)",
+			apiAuthOauth2ScopePlaceholder: "e.g. NLS_SCOPE",
+			apiAuthOauth2UsernameLabel: "Username Variable (optional)",
+			apiAuthOauth2UsernamePlaceholder: "e.g. NLS_USERNAME",
+			apiAuthOauth2PasswordLabel: "Password Variable (optional)",
+			apiAuthOauth2PasswordPlaceholder: "e.g. NLS_PASSWORD",
+			apiAuthOauth2Note:
+				"Fill Username/Password to use password grant; leave empty for client_credentials.",
+			apiAuthManageVarsLink: "Manage environment variables →",
+			// Custom Headers section
+			apiHeadersTitle: "Custom Headers",
+			apiHeadersAddBtn: "Add Header",
+			apiHeadersKeyPlaceholder: "Header name",
+			apiHeadersValuePlaceholder: 'Value or "env:VAR_NAME"',
+			apiHeadersValueDesc:
+				'Use "env:VAR_NAME" to reference an environment variable.',
+			apiHeadersMaxWarning: "Maximum 10 custom headers reached.",
+			// Body section
+			apiBodyTitle: "Request Body",
+			apiBodyModeNone: "No Body",
+			apiBodyModeRawJson: "JSON Template",
+			apiBodyModeFieldMapping: "Field Mapping",
+			apiBodyRawJsonLabel: "JSON Template",
+			apiBodyRawJsonPlaceholder:
+				'{"loanId": "${node-123.loanId}", "amount": 1000}',
+			apiBodyRawJsonDesc:
+				"Use ${nodeId.property} to reference upstream node data.",
+			apiBodyFieldMappingLabel: "Field Mappings",
+			apiBodyAddMappingBtn: "Add Field",
+			apiBodySourceLabel: "Source",
+			apiBodyTargetLabel: "Target key",
+			apiBodyTargetPlaceholder: "e.g. customerId",
+			// Response Path section
+			apiResponseTitle: "Response Extraction",
+			apiResponsePathLabel: "Extract Path",
+			apiResponsePathPlaceholder: "e.g. payload.data",
+			apiResponsePathDesc:
+				"Dot-notation path to extract from the JSON response. Leave empty to return the full response.",
 			formSelectLabel: "Form",
 			formSelectLoadingPlaceholder: "Loading forms...",
 			formSelectPlaceholder: "Select form",
@@ -1442,6 +1503,68 @@ export const translations = {
 			apiTerminalTitle: "ℹ️ Nodo Terminal",
 			apiTerminalDesc:
 				"Este nodo no puede conectarse a otros nodos. El workflow terminará aquí en caso de fallo.",
+			// Sección de autenticación
+			apiAuthTitle: "Autenticación",
+			apiAuthTypeLabel: "Tipo de Auth",
+			apiAuthNone: "Sin autenticación",
+			apiAuthBearer: "Bearer Token",
+			apiAuthApiKey: "API Key",
+			apiAuthOauth2: "OAuth2 Client Credentials",
+			apiAuthBearerTokenLabel: "Variable del Bearer Token",
+			apiAuthBearerTokenPlaceholder: "ej. NLS_TOKEN",
+			apiAuthBearerTokenDesc:
+				"Nombre de la variable de entorno que contiene el valor del Bearer token.",
+			apiAuthApiKeyHeaderLabel: "Nombre del Header",
+			apiAuthApiKeyHeaderPlaceholder: "ej. X-API-Key",
+			apiAuthApiKeyValueLabel: "Variable del API Key",
+			apiAuthApiKeyValuePlaceholder: "ej. NLS_API_KEY",
+			apiAuthApiKeyValueDesc:
+				"Nombre de la variable de entorno que contiene el valor del API key.",
+			apiAuthOauth2TokenUrlLabel: "Variable de Token URL",
+			apiAuthOauth2TokenUrlPlaceholder: "ej. NLS_OAUTH_URL",
+			apiAuthOauth2ClientIdLabel: "Variable de Client ID",
+			apiAuthOauth2ClientIdPlaceholder: "ej. NLS_CLIENT_ID",
+			apiAuthOauth2ClientSecretLabel: "Variable de Client Secret",
+			apiAuthOauth2ClientSecretPlaceholder: "ej. NLS_CLIENT_SECRET",
+			apiAuthOauth2ScopeLabel: "Variable de Scope (opcional)",
+			apiAuthOauth2ScopePlaceholder: "ej. NLS_SCOPE",
+			apiAuthOauth2UsernameLabel: "Variable de Username (opcional)",
+			apiAuthOauth2UsernamePlaceholder: "ej. NLS_USERNAME",
+			apiAuthOauth2PasswordLabel: "Variable de Password (opcional)",
+			apiAuthOauth2PasswordPlaceholder: "ej. NLS_PASSWORD",
+			apiAuthOauth2Note:
+				"Llena Username/Password para usar password grant; deja vacío para client_credentials.",
+			apiAuthManageVarsLink: "Gestionar variables de entorno →",
+			// Sección de headers personalizados
+			apiHeadersTitle: "Headers Personalizados",
+			apiHeadersAddBtn: "Agregar Header",
+			apiHeadersKeyPlaceholder: "Nombre del header",
+			apiHeadersValuePlaceholder: 'Valor o "env:NOMBRE_VAR"',
+			apiHeadersValueDesc:
+				'Usa "env:NOMBRE_VAR" para referenciar una variable de entorno.',
+			apiHeadersMaxWarning:
+				"Se alcanzó el máximo de 10 headers personalizados.",
+			// Sección de body
+			apiBodyTitle: "Cuerpo de la Solicitud",
+			apiBodyModeNone: "Sin Body",
+			apiBodyModeRawJson: "Template JSON",
+			apiBodyModeFieldMapping: "Mapeo de Campos",
+			apiBodyRawJsonLabel: "Template JSON",
+			apiBodyRawJsonPlaceholder:
+				'{"loanId": "${node-123.loanId}", "amount": 1000}',
+			apiBodyRawJsonDesc:
+				"Usa ${nodeId.property} para referenciar datos de nodos anteriores.",
+			apiBodyFieldMappingLabel: "Mapeo de Campos",
+			apiBodyAddMappingBtn: "Agregar Campo",
+			apiBodySourceLabel: "Origen",
+			apiBodyTargetLabel: "Clave destino",
+			apiBodyTargetPlaceholder: "ej. customerId",
+			// Sección de extracción de respuesta
+			apiResponseTitle: "Extracción de Respuesta",
+			apiResponsePathLabel: "Ruta de Extracción",
+			apiResponsePathPlaceholder: "ej. payload.data",
+			apiResponsePathDesc:
+				"Ruta en notación punto para extraer del JSON de respuesta. Deja vacío para retornar la respuesta completa.",
 			formSelectLabel: "Formulario",
 			formSelectLoadingPlaceholder: "Cargando formularios...",
 			formSelectPlaceholder: "Seleccionar formulario",

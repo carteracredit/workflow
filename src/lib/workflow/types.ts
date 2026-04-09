@@ -44,6 +44,54 @@ export interface APIFailureHandling {
 	timeout: number; // milliseconds (5000-300000)
 }
 
+// API Node Authentication Configuration
+export type APIAuthType =
+	| "none"
+	| "bearer"
+	| "api-key"
+	| "oauth2-client-credentials";
+
+export interface APIAuthConfig {
+	type: APIAuthType;
+	// Bearer: env var name whose value is the token
+	bearerToken?: string;
+	// API Key: header name + env var name holding the key value
+	apiKeyHeader?: string;
+	apiKeyValue?: string;
+	// OAuth2 Client Credentials / Password grant
+	oauth2TokenUrl?: string; // env var name or literal URL
+	oauth2ClientId?: string; // env var name
+	oauth2ClientSecret?: string; // env var name
+	oauth2Scope?: string; // env var name (optional)
+	oauth2Username?: string; // env var name (password grant)
+	oauth2Password?: string; // env var name (password grant)
+}
+
+// Custom request headers
+export interface APIHeaderEntry {
+	key: string;
+	value: string; // literal, env var name prefix "env:", or ${nodeId.prop}
+}
+
+// Request body configuration
+export type APIBodyMode = "none" | "raw-json" | "field-mapping";
+
+export interface APIBodyFieldMapping {
+	sourceExpression: string; // ${nodeId.prop} or literal
+	targetKey: string;
+}
+
+export interface APIBodyConfig {
+	mode: APIBodyMode;
+	rawJson?: string;
+	fieldMappings?: APIBodyFieldMapping[];
+}
+
+// Response extraction
+export interface APIResponseConfig {
+	extractPath?: string; // dot-notation, e.g. "payload.data"
+}
+
 export type TimeoutUnit = "seconds" | "minutes" | "hours" | "days";
 
 export type ChallengeType = "acceptance" | "signature";

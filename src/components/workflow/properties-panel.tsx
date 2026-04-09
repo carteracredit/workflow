@@ -8,6 +8,12 @@ import type {
 	WorkflowMetadata,
 	Flag,
 	APIFailureHandling,
+	APIAuthConfig,
+	APIAuthType,
+	APIHeaderEntry,
+	APIBodyConfig,
+	APIBodyMode,
+	APIResponseConfig,
 	StaleTimeoutConfig,
 	ChallengeNodeConfig,
 	ChallengeType,
@@ -158,6 +164,7 @@ interface PropertiesPanelProps {
 	position?: "left" | "right";
 	width?: number;
 	onWidthChange?: (width: number) => void;
+	onManageVariables?: () => void;
 }
 
 const NODES_WITH_ROLES = ["Form", "Challenge", "Message"];
@@ -225,6 +232,7 @@ export function PropertiesPanel({
 	position = "right",
 	width,
 	onWidthChange,
+	onManageVariables,
 }: PropertiesPanelProps) {
 	const { t } = useLanguage();
 	// For backward compatibility and single selection UI, use first selected item
@@ -1672,6 +1680,532 @@ export function PropertiesPanel({
 											onChange={handleUrlSegmentsChange}
 											placeholder="https://api.example.com/endpoint"
 										/>
+									</div>
+
+									{/* ── Authentication ───────────────────────── */}
+									<div className="border-t border-border pt-4 space-y-3">
+										<h3 className="font-semibold text-sm">
+											{t("propertiesPanel.apiAuthTitle")}
+										</h3>
+										<div className="space-y-2">
+											<Label>{t("propertiesPanel.apiAuthTypeLabel")}</Label>
+											<Select
+												value={
+													(
+														selectedNode.config.authConfig as
+															| APIAuthConfig
+															| undefined
+													)?.type ?? "none"
+												}
+												onValueChange={(value) =>
+													onUpdateNode(selectedNode.id, {
+														config: {
+															...selectedNode.config,
+															authConfig: {
+																...((selectedNode.config.authConfig as
+																	| APIAuthConfig
+																	| undefined) ?? {}),
+																type: value as APIAuthType,
+															},
+														},
+													})
+												}
+											>
+												<SelectTrigger>
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="none">
+														{t("propertiesPanel.apiAuthNone")}
+													</SelectItem>
+													<SelectItem value="bearer">
+														{t("propertiesPanel.apiAuthBearer")}
+													</SelectItem>
+													<SelectItem value="api-key">
+														{t("propertiesPanel.apiAuthApiKey")}
+													</SelectItem>
+													<SelectItem value="oauth2-client-credentials">
+														{t("propertiesPanel.apiAuthOauth2")}
+													</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+
+										{(() => {
+											const auth = (selectedNode.config.authConfig as
+												| APIAuthConfig
+												| undefined) ?? { type: "none" };
+											const updateAuth = (patch: Partial<APIAuthConfig>) =>
+												onUpdateNode(selectedNode.id, {
+													config: {
+														...selectedNode.config,
+														authConfig: { ...auth, ...patch },
+													},
+												});
+
+											if (auth.type === "bearer") {
+												return (
+													<div className="space-y-2">
+														<Label>
+															{t("propertiesPanel.apiAuthBearerTokenLabel")}
+														</Label>
+														<Input
+															value={auth.bearerToken ?? ""}
+															onChange={(e) =>
+																updateAuth({ bearerToken: e.target.value })
+															}
+															placeholder={t(
+																"propertiesPanel.apiAuthBearerTokenPlaceholder",
+															)}
+															className="font-mono text-sm"
+														/>
+														<p className="text-xs text-muted-foreground">
+															{t("propertiesPanel.apiAuthBearerTokenDesc")}
+														</p>
+													</div>
+												);
+											}
+											if (auth.type === "api-key") {
+												return (
+													<div className="space-y-2">
+														<div className="space-y-1">
+															<Label>
+																{t("propertiesPanel.apiAuthApiKeyHeaderLabel")}
+															</Label>
+															<Input
+																value={auth.apiKeyHeader ?? ""}
+																onChange={(e) =>
+																	updateAuth({ apiKeyHeader: e.target.value })
+																}
+																placeholder={t(
+																	"propertiesPanel.apiAuthApiKeyHeaderPlaceholder",
+																)}
+																className="font-mono text-sm"
+															/>
+														</div>
+														<div className="space-y-1">
+															<Label>
+																{t("propertiesPanel.apiAuthApiKeyValueLabel")}
+															</Label>
+															<Input
+																value={auth.apiKeyValue ?? ""}
+																onChange={(e) =>
+																	updateAuth({ apiKeyValue: e.target.value })
+																}
+																placeholder={t(
+																	"propertiesPanel.apiAuthApiKeyValuePlaceholder",
+																)}
+																className="font-mono text-sm"
+															/>
+															<p className="text-xs text-muted-foreground">
+																{t("propertiesPanel.apiAuthApiKeyValueDesc")}
+															</p>
+														</div>
+													</div>
+												);
+											}
+											if (auth.type === "oauth2-client-credentials") {
+												return (
+													<div className="space-y-2">
+														{(
+															[
+																[
+																	"oauth2TokenUrl",
+																	"apiAuthOauth2TokenUrlLabel",
+																	"apiAuthOauth2TokenUrlPlaceholder",
+																],
+																[
+																	"oauth2ClientId",
+																	"apiAuthOauth2ClientIdLabel",
+																	"apiAuthOauth2ClientIdPlaceholder",
+																],
+																[
+																	"oauth2ClientSecret",
+																	"apiAuthOauth2ClientSecretLabel",
+																	"apiAuthOauth2ClientSecretPlaceholder",
+																],
+																[
+																	"oauth2Scope",
+																	"apiAuthOauth2ScopeLabel",
+																	"apiAuthOauth2ScopePlaceholder",
+																],
+																[
+																	"oauth2Username",
+																	"apiAuthOauth2UsernameLabel",
+																	"apiAuthOauth2UsernamePlaceholder",
+																],
+																[
+																	"oauth2Password",
+																	"apiAuthOauth2PasswordLabel",
+																	"apiAuthOauth2PasswordPlaceholder",
+																],
+															] as const
+														).map(([field, labelKey, phKey]) => (
+															<div key={field} className="space-y-1">
+																<Label>
+																	{t(`propertiesPanel.${labelKey}`)}
+																</Label>
+																<Input
+																	value={
+																		(auth[field] as string | undefined) ?? ""
+																	}
+																	onChange={(e) =>
+																		updateAuth({ [field]: e.target.value })
+																	}
+																	placeholder={t(`propertiesPanel.${phKey}`)}
+																	className="font-mono text-sm"
+																/>
+															</div>
+														))}
+														<p className="text-xs text-muted-foreground">
+															{t("propertiesPanel.apiAuthOauth2Note")}
+														</p>
+													</div>
+												);
+											}
+											return null;
+										})()}
+
+										{onManageVariables && (
+											<button
+												type="button"
+												onClick={onManageVariables}
+												className="text-xs text-primary hover:underline"
+											>
+												{t("propertiesPanel.apiAuthManageVarsLink")}
+											</button>
+										)}
+									</div>
+
+									{/* ── Custom Headers ───────────────────────── */}
+									<div className="border-t border-border pt-4 space-y-3">
+										<div className="flex items-center justify-between">
+											<h3 className="font-semibold text-sm">
+												{t("propertiesPanel.apiHeadersTitle")}
+											</h3>
+											<Button
+												size="sm"
+												variant="outline"
+												className="h-7 text-xs"
+												disabled={
+													(
+														(selectedNode.config.customHeaders as
+															| APIHeaderEntry[]
+															| undefined) ?? []
+													).length >= 10
+												}
+												onClick={() => {
+													const headers: APIHeaderEntry[] = [
+														...((selectedNode.config.customHeaders as
+															| APIHeaderEntry[]
+															| undefined) ?? []),
+														{ key: "", value: "" },
+													];
+													onUpdateNode(selectedNode.id, {
+														config: {
+															...selectedNode.config,
+															customHeaders: headers,
+														},
+													});
+												}}
+											>
+												{t("propertiesPanel.apiHeadersAddBtn")}
+											</Button>
+										</div>
+										{(
+											(selectedNode.config.customHeaders as
+												| APIHeaderEntry[]
+												| undefined) ?? []
+										).length >= 10 && (
+											<p className="text-xs text-destructive">
+												{t("propertiesPanel.apiHeadersMaxWarning")}
+											</p>
+										)}
+										{(
+											(selectedNode.config.customHeaders as
+												| APIHeaderEntry[]
+												| undefined) ?? []
+										).map((header, idx) => (
+											<div key={idx} className="flex gap-1 items-start">
+												<Input
+													value={header.key}
+													onChange={(e) => {
+														const headers = [
+															...((selectedNode.config
+																.customHeaders as APIHeaderEntry[]) ?? []),
+														];
+														headers[idx] = {
+															...headers[idx],
+															key: e.target.value,
+														};
+														onUpdateNode(selectedNode.id, {
+															config: {
+																...selectedNode.config,
+																customHeaders: headers,
+															},
+														});
+													}}
+													placeholder={t(
+														"propertiesPanel.apiHeadersKeyPlaceholder",
+													)}
+													className="font-mono text-xs h-8"
+												/>
+												<Input
+													value={header.value}
+													onChange={(e) => {
+														const headers = [
+															...((selectedNode.config
+																.customHeaders as APIHeaderEntry[]) ?? []),
+														];
+														headers[idx] = {
+															...headers[idx],
+															value: e.target.value,
+														};
+														onUpdateNode(selectedNode.id, {
+															config: {
+																...selectedNode.config,
+																customHeaders: headers,
+															},
+														});
+													}}
+													placeholder={t(
+														"propertiesPanel.apiHeadersValuePlaceholder",
+													)}
+													className="font-mono text-xs h-8"
+												/>
+												<Button
+													size="sm"
+													variant="ghost"
+													className="h-8 w-8 shrink-0 px-0"
+													onClick={() => {
+														const headers = (
+															(selectedNode.config
+																.customHeaders as APIHeaderEntry[]) ?? []
+														).filter((_, i) => i !== idx);
+														onUpdateNode(selectedNode.id, {
+															config: {
+																...selectedNode.config,
+																customHeaders: headers,
+															},
+														});
+													}}
+												>
+													×
+												</Button>
+											</div>
+										))}
+										{(
+											(selectedNode.config.customHeaders as
+												| APIHeaderEntry[]
+												| undefined) ?? []
+										).length > 0 && (
+											<p className="text-xs text-muted-foreground">
+												{t("propertiesPanel.apiHeadersValueDesc")}
+											</p>
+										)}
+									</div>
+
+									{/* ── Body (POST/PUT/PATCH only) ───────────── */}
+									{["POST", "PUT", "PATCH"].includes(
+										(selectedNode.config.method as string) || "GET",
+									) && (
+										<div className="border-t border-border pt-4 space-y-3">
+											<h3 className="font-semibold text-sm">
+												{t("propertiesPanel.apiBodyTitle")}
+											</h3>
+											<div className="flex gap-1">
+												{(
+													[
+														["none", "apiBodyModeNone"],
+														["field-mapping", "apiBodyModeFieldMapping"],
+														["raw-json", "apiBodyModeRawJson"],
+													] as const
+												).map(([mode, labelKey]) => (
+													<Button
+														key={mode}
+														size="sm"
+														variant={
+															((
+																selectedNode.config.bodyConfig as
+																	| APIBodyConfig
+																	| undefined
+															)?.mode ?? "none") === mode
+																? "default"
+																: "outline"
+														}
+														className="flex-1 text-xs h-7"
+														onClick={() =>
+															onUpdateNode(selectedNode.id, {
+																config: {
+																	...selectedNode.config,
+																	bodyConfig: {
+																		...((selectedNode.config.bodyConfig as
+																			| APIBodyConfig
+																			| undefined) ?? {}),
+																		mode: mode as APIBodyMode,
+																	},
+																},
+															})
+														}
+													>
+														{t(`propertiesPanel.${labelKey}`)}
+													</Button>
+												))}
+											</div>
+
+											{(() => {
+												const bc = (selectedNode.config.bodyConfig as
+													| APIBodyConfig
+													| undefined) ?? { mode: "none" };
+												const updateBody = (patch: Partial<APIBodyConfig>) =>
+													onUpdateNode(selectedNode.id, {
+														config: {
+															...selectedNode.config,
+															bodyConfig: { ...bc, ...patch },
+														},
+													});
+
+												if (bc.mode === "raw-json") {
+													return (
+														<div className="space-y-1">
+															<Label>
+																{t("propertiesPanel.apiBodyRawJsonLabel")}
+															</Label>
+															<Textarea
+																value={bc.rawJson ?? ""}
+																onChange={(e) =>
+																	updateBody({ rawJson: e.target.value })
+																}
+																placeholder={t(
+																	"propertiesPanel.apiBodyRawJsonPlaceholder",
+																)}
+																rows={4}
+																className="font-mono text-xs resize-none"
+															/>
+															<p className="text-xs text-muted-foreground">
+																{t("propertiesPanel.apiBodyRawJsonDesc")}
+															</p>
+														</div>
+													);
+												}
+												if (bc.mode === "field-mapping") {
+													return (
+														<div className="space-y-2">
+															<div className="flex items-center justify-between">
+																<Label>
+																	{t(
+																		"propertiesPanel.apiBodyFieldMappingLabel",
+																	)}
+																</Label>
+																<Button
+																	size="sm"
+																	variant="outline"
+																	className="h-7 text-xs"
+																	onClick={() =>
+																		updateBody({
+																			fieldMappings: [
+																				...(bc.fieldMappings ?? []),
+																				{ sourceExpression: "", targetKey: "" },
+																			],
+																		})
+																	}
+																>
+																	{t("propertiesPanel.apiBodyAddMappingBtn")}
+																</Button>
+															</div>
+															{(bc.fieldMappings ?? []).map((mapping, idx) => (
+																<div
+																	key={idx}
+																	className="flex gap-1 items-start"
+																>
+																	<Input
+																		value={mapping.sourceExpression}
+																		onChange={(e) => {
+																			const mappings = [
+																				...(bc.fieldMappings ?? []),
+																			];
+																			mappings[idx] = {
+																				...mappings[idx],
+																				sourceExpression: e.target.value,
+																			};
+																			updateBody({ fieldMappings: mappings });
+																		}}
+																		placeholder={t(
+																			"propertiesPanel.apiBodySourceLabel",
+																		)}
+																		className="font-mono text-xs h-8 flex-1"
+																	/>
+																	<Input
+																		value={mapping.targetKey}
+																		onChange={(e) => {
+																			const mappings = [
+																				...(bc.fieldMappings ?? []),
+																			];
+																			mappings[idx] = {
+																				...mappings[idx],
+																				targetKey: e.target.value,
+																			};
+																			updateBody({ fieldMappings: mappings });
+																		}}
+																		placeholder={t(
+																			"propertiesPanel.apiBodyTargetPlaceholder",
+																		)}
+																		className="font-mono text-xs h-8 flex-1"
+																	/>
+																	<Button
+																		size="sm"
+																		variant="ghost"
+																		className="h-8 w-8 shrink-0 px-0"
+																		onClick={() =>
+																			updateBody({
+																				fieldMappings: (
+																					bc.fieldMappings ?? []
+																				).filter((_, i) => i !== idx),
+																			})
+																		}
+																	>
+																		×
+																	</Button>
+																</div>
+															))}
+														</div>
+													);
+												}
+												return null;
+											})()}
+										</div>
+									)}
+
+									{/* ── Response Path ────────────────────────── */}
+									<div className="border-t border-border pt-4 space-y-2">
+										<h3 className="font-semibold text-sm">
+											{t("propertiesPanel.apiResponseTitle")}
+										</h3>
+										<Label>{t("propertiesPanel.apiResponsePathLabel")}</Label>
+										<Input
+											value={
+												(
+													selectedNode.config.responseConfig as
+														| APIResponseConfig
+														| undefined
+												)?.extractPath ?? ""
+											}
+											onChange={(e) =>
+												onUpdateNode(selectedNode.id, {
+													config: {
+														...selectedNode.config,
+														responseConfig: { extractPath: e.target.value },
+													},
+												})
+											}
+											placeholder={t(
+												"propertiesPanel.apiResponsePathPlaceholder",
+											)}
+											className="font-mono text-sm"
+										/>
+										<p className="text-xs text-muted-foreground">
+											{t("propertiesPanel.apiResponsePathDesc")}
+										</p>
 									</div>
 
 									<Button
