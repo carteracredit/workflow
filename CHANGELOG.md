@@ -1,3 +1,10 @@
+# [1.1.0-rc.20](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.19...v1.1.0-rc.20) (2026-04-09)
+
+
+### Features
+
+* enhance API node configuration with authentication, headers, body, and response extraction ([0472022](https://github.com/carteracredit/workflow/commit/0472022ff53faa32b06767dc9c6d8dfa36fbd02c))
+
 # [1.1.0-rc.19](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.18...v1.1.0-rc.19) (2026-04-08)
 
 
