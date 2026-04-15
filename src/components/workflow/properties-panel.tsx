@@ -662,7 +662,7 @@ export function PropertiesPanel({
 									value={workflowMetadata.nameEs || ""}
 									onChange={(e) =>
 										onUpdateMetadata({
-											nameEs: e.target.value.trim() || undefined,
+											nameEs: e.target.value || undefined,
 										})
 									}
 									placeholder={t("propertiesPanel.workflowNameEsPlaceholder")}
@@ -696,7 +696,7 @@ export function PropertiesPanel({
 									value={workflowMetadata.descriptionEs || ""}
 									onChange={(e) =>
 										onUpdateMetadata({
-											descriptionEs: e.target.value.trim() || undefined,
+											descriptionEs: e.target.value || undefined,
 										})
 									}
 									placeholder={t("propertiesPanel.workflowDescEsPlaceholder")}
@@ -1228,7 +1228,7 @@ export function PropertiesPanel({
 								value={selectedNode.titleEs || ""}
 								onChange={(e) =>
 									onUpdateNode(selectedNode.id, {
-										titleEs: e.target.value.trim() || undefined,
+										titleEs: e.target.value || undefined,
 									})
 								}
 								placeholder={t("propertiesPanel.nodeTitleEsPlaceholder")}
@@ -1270,7 +1270,7 @@ export function PropertiesPanel({
 								value={selectedNode.descriptionEs || ""}
 								onChange={(e) =>
 									onUpdateNode(selectedNode.id, {
-										descriptionEs: e.target.value.trim() || undefined,
+										descriptionEs: e.target.value || undefined,
 									})
 								}
 								placeholder={t("propertiesPanel.nodeDescEsPlaceholder")}
