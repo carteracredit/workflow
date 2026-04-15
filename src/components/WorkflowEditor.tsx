@@ -140,11 +140,13 @@ const createInitialStartNode = (): WorkflowNode =>
 	withDefaultStaleTimeout({
 		id: `node-${Date.now()}`,
 		type: "Start",
-		title: "Inicio",
-		description: "Punto de inicio del flujo",
+		title: "Start",
+		titleEs: "Inicio",
+		description: "Flow start point",
+		descriptionEs: "Punto de inicio del flujo",
 		roles: [],
 		config: {},
-		position: { x: 200, y: 200 }, // Posición inicial pensada para layout horizontal
+		position: { x: 200, y: 200 },
 		groupId: null,
 	});
 
