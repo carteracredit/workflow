@@ -3519,6 +3519,14 @@ describe("generateWorkflowCode – Fase 2 API auth: bearer", () => {
 		expect(result.code).not.toContain("this.env.my-literal-token");
 		expect(result.code).toContain("Bearer");
 	});
+
+	it("auto-detects uppercase-only values as env var references (backward compat)", () => {
+		const result = genApi({
+			authConfig: { type: "bearer", bearerToken: "TOKEN_TEST" },
+		});
+		expect(result.code).toContain("this.env.TOKEN_TEST");
+		expect(result.code).not.toContain('"TOKEN_TEST"');
+	});
 });
 
 describe("generateWorkflowCode – Fase 2 API auth: api-key", () => {
