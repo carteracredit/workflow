@@ -234,7 +234,7 @@ export function PropertiesPanel({
 	onWidthChange,
 	onManageVariables,
 }: PropertiesPanelProps) {
-	const { t } = useLanguage();
+	const { t, getFieldLabel } = useLanguage();
 	// For backward compatibility and single selection UI, use first selected item
 	const selectedNode =
 		selectedNodes.length === 1 ? selectedNodes[0] : undefined;
@@ -647,33 +647,70 @@ export function PropertiesPanel({
 
 				<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 					<div className="space-y-4 p-4">
-						{/* Workflow Name */}
+						{/* Workflow Name (Bilingual) */}
 						<div className="space-y-2">
-							<Label htmlFor="workflow-name">
-								{t("propertiesPanel.workflowNameLabel")}
-							</Label>
-							<Input
-								id="workflow-name"
-								value={workflowMetadata.name}
-								onChange={(e) => onUpdateMetadata({ name: e.target.value })}
-								placeholder={t("propertiesPanel.workflowNamePlaceholder")}
-							/>
+							<Label>{t("propertiesPanel.workflowNameLabel")}</Label>
+							<div className="grid grid-cols-2 gap-2">
+								<Input
+									id="workflow-name"
+									value={workflowMetadata.name}
+									onChange={(e) => onUpdateMetadata({ name: e.target.value })}
+									placeholder={t("propertiesPanel.workflowNamePlaceholder")}
+								/>
+								<Input
+									id="workflow-name-es"
+									value={workflowMetadata.nameEs || ""}
+									onChange={(e) =>
+										onUpdateMetadata({
+											nameEs: e.target.value || undefined,
+										})
+									}
+									placeholder={t("propertiesPanel.workflowNameEsPlaceholder")}
+								/>
+							</div>
+							<div className="grid grid-cols-2 gap-2">
+								<span className="text-[10px] text-muted-foreground">
+									{t("common.english")}
+								</span>
+								<span className="text-[10px] text-muted-foreground">
+									{t("common.spanish")}
+								</span>
+							</div>
 						</div>
 
-						{/* Workflow Description */}
+						{/* Workflow Description (Bilingual) */}
 						<div className="space-y-2">
-							<Label htmlFor="workflow-description">
-								{t("propertiesPanel.workflowDescLabel")}
-							</Label>
-							<Textarea
-								id="workflow-description"
-								value={workflowMetadata.description}
-								onChange={(e) =>
-									onUpdateMetadata({ description: e.target.value })
-								}
-								placeholder={t("propertiesPanel.workflowDescPlaceholder")}
-								rows={4}
-							/>
+							<Label>{t("propertiesPanel.workflowDescLabel")}</Label>
+							<div className="grid grid-cols-2 gap-2">
+								<Textarea
+									id="workflow-description"
+									value={workflowMetadata.description}
+									onChange={(e) =>
+										onUpdateMetadata({ description: e.target.value })
+									}
+									placeholder={t("propertiesPanel.workflowDescPlaceholder")}
+									rows={3}
+								/>
+								<Textarea
+									id="workflow-description-es"
+									value={workflowMetadata.descriptionEs || ""}
+									onChange={(e) =>
+										onUpdateMetadata({
+											descriptionEs: e.target.value || undefined,
+										})
+									}
+									placeholder={t("propertiesPanel.workflowDescEsPlaceholder")}
+									rows={3}
+								/>
+							</div>
+							<div className="grid grid-cols-2 gap-2">
+								<span className="text-[10px] text-muted-foreground">
+									{t("common.english")}
+								</span>
+								<span className="text-[10px] text-muted-foreground">
+									{t("common.spanish")}
+								</span>
+							</div>
 						</div>
 
 						{/* Version — read-only, managed automatically by the publish system */}
@@ -803,21 +840,39 @@ export function PropertiesPanel({
 
 				<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 					<div className="space-y-4 p-4">
-						{/* Edge Label */}
+						{/* Edge Label (Bilingual) */}
 						<div className="space-y-2">
-							<Label htmlFor="edge-label">
-								{t("propertiesPanel.edgeLabelLabel")}
-							</Label>
-							<Input
-								id="edge-label"
-								value={selectedEdge.label || ""}
-								onChange={(e) =>
-									onUpdateEdge(selectedEdge.id, {
-										label: e.target.value || null,
-									})
-								}
-								placeholder={t("propertiesPanel.edgeLabelPlaceholder")}
-							/>
+							<Label>{t("propertiesPanel.edgeLabelLabel")}</Label>
+							<div className="grid grid-cols-2 gap-2">
+								<Input
+									id="edge-label"
+									value={selectedEdge.label || ""}
+									onChange={(e) =>
+										onUpdateEdge(selectedEdge.id, {
+											label: e.target.value || null,
+										})
+									}
+									placeholder={t("propertiesPanel.edgeLabelPlaceholder")}
+								/>
+								<Input
+									id="edge-label-es"
+									value={selectedEdge.labelEs || ""}
+									onChange={(e) =>
+										onUpdateEdge(selectedEdge.id, {
+											labelEs: e.target.value || null,
+										})
+									}
+									placeholder={t("propertiesPanel.edgeLabelEsPlaceholder")}
+								/>
+							</div>
+							<div className="grid grid-cols-2 gap-2">
+								<span className="text-[10px] text-muted-foreground">
+									{t("common.english")}
+								</span>
+								<span className="text-[10px] text-muted-foreground">
+									{t("common.spanish")}
+								</span>
+							</div>
 						</div>
 
 						{/* Edge Color */}
@@ -912,7 +967,10 @@ export function PropertiesPanel({
 											textAnchor="middle"
 											className="fill-foreground text-xs font-medium"
 										>
-											{selectedEdge.label}
+											{getFieldLabel(
+												selectedEdge.label,
+												selectedEdge.labelEs ?? undefined,
+											)}
 										</text>
 									)}
 								</svg>
@@ -1150,35 +1208,86 @@ export function PropertiesPanel({
 
 			<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 				<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
-					{/* Title */}
+					{/* Title (Bilingual) */}
 					<div className="space-y-2 w-full">
-						<Label htmlFor="title">{t("propertiesPanel.nodeTitleLabel")}</Label>
-						<Input
-							id="title"
-							value={selectedNode.title}
-							onChange={(e) =>
-								onUpdateNode(selectedNode.id, { title: e.target.value })
-							}
-							placeholder={t("propertiesPanel.nodeTitlePlaceholder")}
-							className="w-full"
-						/>
+						<Label>{t("propertiesPanel.nodeTitleLabel")}</Label>
+						<div className="grid grid-cols-2 gap-2">
+							<Input
+								id="title"
+								value={selectedNode.title}
+								onChange={(e) =>
+									onUpdateNode(selectedNode.id, { title: e.target.value })
+								}
+								placeholder={t("propertiesPanel.nodeTitlePlaceholder")}
+								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
+							/>
+							<Input
+								id="title-es"
+								value={selectedNode.titleEs || ""}
+								onChange={(e) =>
+									onUpdateNode(selectedNode.id, {
+										titleEs: e.target.value || undefined,
+									})
+								}
+								placeholder={t("propertiesPanel.nodeTitleEsPlaceholder")}
+								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
+							/>
+						</div>
+						<div className="grid grid-cols-2 gap-2">
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.english")}
+							</span>
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.spanish")}
+							</span>
+						</div>
 					</div>
 
-					{/* Description */}
+					{/* Description (Bilingual) */}
 					<div className="space-y-2 w-full">
-						<Label htmlFor="description">
-							{t("propertiesPanel.nodeDescLabel")}
-						</Label>
-						<Textarea
-							id="description"
-							value={selectedNode.description}
-							onChange={(e) =>
-								onUpdateNode(selectedNode.id, { description: e.target.value })
-							}
-							placeholder={t("propertiesPanel.nodeDescPlaceholder")}
-							rows={3}
-							className="w-full"
-						/>
+						<Label>{t("propertiesPanel.nodeDescLabel")}</Label>
+						<div className="grid grid-cols-2 gap-2">
+							<Textarea
+								id="description"
+								value={selectedNode.description}
+								onChange={(e) =>
+									onUpdateNode(selectedNode.id, {
+										description: e.target.value,
+									})
+								}
+								placeholder={t("propertiesPanel.nodeDescPlaceholder")}
+								rows={3}
+								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
+							/>
+							<Textarea
+								id="description-es"
+								value={selectedNode.descriptionEs || ""}
+								onChange={(e) =>
+									onUpdateNode(selectedNode.id, {
+										descriptionEs: e.target.value || undefined,
+									})
+								}
+								placeholder={t("propertiesPanel.nodeDescEsPlaceholder")}
+								rows={3}
+								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
+							/>
+						</div>
+						<div className="grid grid-cols-2 gap-2">
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.english")}
+							</span>
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.spanish")}
+							</span>
+						</div>
 					</div>
 
 					{supportsStaleTimeout && (

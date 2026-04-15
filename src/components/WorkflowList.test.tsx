@@ -38,7 +38,13 @@ vi.mock("@/components/LanguageProvider", async () => {
 		return val;
 	};
 	return {
-		useLanguage: () => ({ language: "es", setLanguage: vi.fn(), t: tFn }),
+		useLanguage: () => ({
+			language: "es",
+			setLanguage: vi.fn(),
+			t: tFn,
+			getFieldLabel: (label: string, labelEs?: string) => labelEs || label,
+			getFieldPlaceholder: (ph?: string, phEs?: string) => phEs || ph,
+		}),
 	};
 });
 // ---------------------------------------------------------------------------
@@ -534,6 +540,71 @@ describe("WorkflowList – diálogo de creación", () => {
 				expect.objectContaining({ description: "Una descripción" }),
 			);
 		});
+	});
+
+	it("guarda metadata ES en localStorage cuando se llenan campos en español", async () => {
+		makeHooksReturn([]);
+		mockCreateWorkflow.mockResolvedValue({
+			id: "wf-uuid-es",
+			name: "Credit Approval",
+		});
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
+		const nameInput = await screen.findByPlaceholderText(
+			"Ej: Aprobación de Crédito",
+		);
+		const nameEsInput = screen.getByPlaceholderText("Nombre en español");
+
+		await userEvent.type(nameInput, "Credit Approval");
+		await userEvent.type(nameEsInput, "Aprobación de Crédito");
+		fireEvent.click(screen.getByText("Crear workflow"));
+
+		await waitFor(() => {
+			expect(mockCreateWorkflow).toHaveBeenCalled();
+		});
+		const payload = mockCreateWorkflow.mock.calls[0][0] as Record<
+			string,
+			unknown
+		>;
+		expect(payload).not.toHaveProperty("definition");
+
+		const stored = localStorage.getItem("workflow_initial_meta_es_wf-uuid-es");
+		expect(stored).not.toBeNull();
+		expect(JSON.parse(stored!)).toEqual({
+			nameEs: "Aprobación de Crédito",
+			descriptionEs: undefined,
+		});
+		localStorage.removeItem("workflow_initial_meta_es_wf-uuid-es");
+	});
+
+	it("no guarda metadata ES en localStorage cuando no se llenan campos en español", async () => {
+		makeHooksReturn([]);
+		mockCreateWorkflow.mockResolvedValue({
+			id: "wf-uuid-no-es",
+			name: "Only English",
+		});
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
+		const nameInput = await screen.findByPlaceholderText(
+			"Ej: Aprobación de Crédito",
+		);
+
+		await userEvent.type(nameInput, "Only English");
+		fireEvent.click(screen.getByText("Crear workflow"));
+
+		await waitFor(() => {
+			expect(mockCreateWorkflow).toHaveBeenCalled();
+		});
+		const payload = mockCreateWorkflow.mock.calls[0][0] as Record<
+			string,
+			unknown
+		>;
+		expect(payload).not.toHaveProperty("definition");
+		expect(
+			localStorage.getItem("workflow_initial_meta_es_wf-uuid-no-es"),
+		).toBeNull();
 	});
 
 	it("muestra error cuando createWorkflow falla con 401", async () => {

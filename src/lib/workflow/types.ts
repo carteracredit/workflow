@@ -161,7 +161,9 @@ export interface WorkflowNode {
 	type: NodeType;
 	checkpointType?: CheckpointType;
 	title: string;
+	titleEs?: string;
 	description: string;
+	descriptionEs?: string;
 	roles: Role[];
 	config: Record<string, unknown>;
 	staleTimeout?: StaleTimeoutConfig | null;
@@ -203,6 +205,7 @@ export interface WorkflowEdge {
 	from: string;
 	to: string;
 	label: string | null;
+	labelEs?: string | null;
 	fromPort?: "top" | "bottom"; // For Decision/Challenge nodes with two outputs
 	toPort?: "top" | "middle" | "bottom"; // For Join nodes with multiple inputs
 	color?: string; // Custom edge color (defaults to theme colors)
@@ -217,7 +220,9 @@ export interface ValidationError {
 
 export interface WorkflowMetadata {
 	name: string;
+	nameEs?: string;
 	description: string;
+	descriptionEs?: string;
 	version: string;
 	author: string;
 	tags: string[];

@@ -105,7 +105,7 @@ export function NodeRenderer({
 	onConnectorClick,
 	onHeightMeasured,
 }: NodeRendererProps) {
-	const { t } = useLanguage();
+	const { t, getFieldLabel } = useLanguage();
 	const nodeRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const [hoveredConnector, setHoveredConnector] = useState<string | null>(null);
@@ -205,9 +205,11 @@ export function NodeRenderer({
 	const CONNECTOR_SIZE = 12; // Reducido de 16px a 12px para nodos más compactos
 	const GAP = 12;
 
-	// Calcular ancho dinámico basado en contenido real
-	const titleWidth = node.title.length * 9;
-	const descWidth = node.description ? node.description.length * 7.5 : 0;
+	// Calcular ancho dinámico basado en contenido real (use displayed text)
+	const displayTitle = getFieldLabel(node.title, node.titleEs);
+	const displayDesc = getFieldLabel(node.description, node.descriptionEs);
+	const titleWidth = displayTitle.length * 9;
+	const descWidth = displayDesc ? displayDesc.length * 7.5 : 0;
 
 	// Calcular ancho real de badges de flags basado en el texto
 	let flagsMaxWidth = 0;
@@ -349,7 +351,9 @@ export function NodeRenderer({
 	}, [
 		node.id,
 		node.title,
+		node.titleEs,
 		node.description,
+		node.descriptionEs,
 		node.roles,
 		node.config,
 		flags,
@@ -465,11 +469,11 @@ export function NodeRenderer({
 						<div className="flex items-start justify-between gap-2">
 							<div className="min-w-0 flex-1">
 								<div className="text-base font-semibold leading-tight text-foreground">
-									{node.title}
+									{getFieldLabel(node.title, node.titleEs)}
 								</div>
-								{node.description && (
+								{(node.description || node.descriptionEs) && (
 									<div className="mt-1 text-sm leading-relaxed text-muted-foreground line-clamp-2">
-										{node.description}
+										{getFieldLabel(node.description, node.descriptionEs)}
 									</div>
 								)}
 							</div>

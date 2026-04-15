@@ -126,6 +126,18 @@ interface WorkflowCardRowProps {
 	cloningId: string | null;
 }
 
+function getDefinitionMetadata(wf: Workflow): {
+	nameEs?: string;
+	descriptionEs?: string;
+} {
+	const def = wf.definition as Record<string, unknown> | null | undefined;
+	if (!def || typeof def !== "object") return {};
+	const meta = def.metadata as
+		| { nameEs?: string; descriptionEs?: string }
+		| undefined;
+	return meta ?? {};
+}
+
 function WorkflowCardRow({
 	workflow,
 	onEdit,
@@ -136,7 +148,8 @@ function WorkflowCardRow({
 	cloningId,
 }: WorkflowCardRowProps) {
 	const isBusy = deletingId === workflow.id || cloningId === workflow.id;
-	const { t } = useLanguage();
+	const { t, getFieldLabel } = useLanguage();
+	const meta = getDefinitionMetadata(workflow);
 	return (
 		<div
 			role="button"
@@ -151,9 +164,12 @@ function WorkflowCardRow({
 			className="flex cursor-pointer items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
 		>
 			<div className="min-w-0 flex-1">
-				<p className="font-medium truncate">{workflow.name}</p>
+				<p className="font-medium truncate">
+					{getFieldLabel(workflow.name, meta.nameEs)}
+				</p>
 				<p className="text-sm text-muted-foreground truncate">
-					{workflow.description || t("workflowList.noDescriptionPlaceholder")}
+					{getFieldLabel(workflow.description || "", meta.descriptionEs) ||
+						t("workflowList.noDescriptionPlaceholder")}
 				</p>
 				<div className="mt-2">
 					<StatusBadge status={workflow.status} />
@@ -346,7 +362,9 @@ function CreateWorkflowDialog({
 	onCreated,
 }: CreateWorkflowDialogProps) {
 	const [name, setName] = useState("");
+	const [nameEs, setNameEs] = useState("");
 	const [description, setDescription] = useState("");
+	const [descriptionEs, setDescriptionEs] = useState("");
 	const [isCreating, setIsCreating] = useState(false);
 	const { t } = useLanguage();
 
@@ -364,15 +382,27 @@ function CreateWorkflowDialog({
 				status: "draft",
 				class_name: toClassName(name.trim()),
 				current_major_version: 0,
-				// No definition on creation — the editor initialises with a default
-				// Start node when definition is null. That state gets persisted to
-				// localStorage automatically and to the DB on first explicit Save.
 			});
+
+			const trimmedNameEs = nameEs.trim() || undefined;
+			const trimmedDescEs = descriptionEs.trim() || undefined;
+			if (trimmedNameEs || trimmedDescEs) {
+				localStorage.setItem(
+					`workflow_initial_meta_es_${workflow.id}`,
+					JSON.stringify({
+						nameEs: trimmedNameEs,
+						descriptionEs: trimmedDescEs,
+					}),
+				);
+			}
+
 			toast.success(
 				t("workflowList.toastCreated").replace("{name}", workflow.name),
 			);
 			setName("");
+			setNameEs("");
 			setDescription("");
+			setDescriptionEs("");
 			onOpenChange(false);
 			onCreated(workflow.id);
 		} catch (err) {
@@ -396,7 +426,7 @@ function CreateWorkflowDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-md">
+			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle>{t("workflowList.createDialogTitle")}</DialogTitle>
 					<DialogDescription>
@@ -406,26 +436,64 @@ function CreateWorkflowDialog({
 				<div className="space-y-4 py-2">
 					<div className="space-y-2">
 						<Label htmlFor="wf-name">{t("workflowList.createFieldName")}</Label>
-						<Input
-							id="wf-name"
-							placeholder={t("workflowList.createFieldNamePlaceholder")}
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							onKeyDown={handleKeyDown}
-							autoFocus
-						/>
+						<div className="grid grid-cols-2 gap-2">
+							<Input
+								id="wf-name"
+								placeholder={t("workflowList.createFieldNamePlaceholder")}
+								value={name}
+								onChange={(e) => setName(e.target.value)}
+								onKeyDown={handleKeyDown}
+								autoFocus
+							/>
+							<Input
+								id="wf-name-es"
+								placeholder={t("workflowList.createFieldNameEsPlaceholder")}
+								value={nameEs}
+								onChange={(e) => setNameEs(e.target.value)}
+								onKeyDown={handleKeyDown}
+							/>
+						</div>
+						<div className="grid grid-cols-2 gap-2">
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.english")}
+							</span>
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.spanish")}
+							</span>
+						</div>
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="wf-desc">
 							{t("workflowList.createFieldDescription")}
 						</Label>
-						<Input
-							id="wf-desc"
-							placeholder={t("workflowList.createFieldDescriptionPlaceholder")}
-							value={description}
-							onChange={(e) => setDescription(e.target.value)}
-							onKeyDown={handleKeyDown}
-						/>
+						<div className="grid grid-cols-2 gap-2">
+							<Input
+								id="wf-desc"
+								placeholder={t(
+									"workflowList.createFieldDescriptionPlaceholder",
+								)}
+								value={description}
+								onChange={(e) => setDescription(e.target.value)}
+								onKeyDown={handleKeyDown}
+							/>
+							<Input
+								id="wf-desc-es"
+								placeholder={t(
+									"workflowList.createFieldDescriptionEsPlaceholder",
+								)}
+								value={descriptionEs}
+								onChange={(e) => setDescriptionEs(e.target.value)}
+								onKeyDown={handleKeyDown}
+							/>
+						</div>
+						<div className="grid grid-cols-2 gap-2">
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.english")}
+							</span>
+							<span className="text-[10px] text-muted-foreground">
+								{t("common.spanish")}
+							</span>
+						</div>
 					</div>
 				</div>
 				<div className="flex justify-end gap-2 pt-2">
@@ -464,7 +532,7 @@ type VersionFilter = "all" | "unpublished" | number;
 
 export function WorkflowList() {
 	const router = useRouter();
-	const { t, language } = useLanguage();
+	const { t, language, getFieldLabel } = useLanguage();
 	const locale = getLocaleForLanguage(language);
 	const [search, setSearch] = useState("");
 	const [searchScope, setSearchScope] = useState<SearchScope>("all");
@@ -861,103 +929,115 @@ export function WorkflowList() {
 										</TableRow>
 									</TableHeader>
 									<TableBody>
-										{filtered.map((wf) => (
-											<TableRow
-												key={wf.id}
-												className="cursor-pointer"
-												onClick={() => handleEdit(wf.id)}
-											>
-												<TableCell className="font-medium">{wf.name}</TableCell>
-												<TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">
-													{wf.description || (
-														<span className="italic opacity-50">
-															{t("workflowList.noDescriptionPlaceholder")}
-														</span>
-													)}
-												</TableCell>
-												<TableCell>
-													<StatusBadge status={wf.status} />
-												</TableCell>
-												<TableCell className="hidden md:table-cell">
-													{wf.current_major_version > 0 ? (
-														<span className="font-mono text-xs text-muted-foreground">
-															v{wf.current_major_version}
-														</span>
-													) : (
-														<span className="text-xs text-muted-foreground">
-															—
-														</span>
-													)}
-												</TableCell>
-												<TableCell className="hidden text-muted-foreground lg:table-cell">
-													{formatRelativeDate(wf.updated_at, t, locale)}
-												</TableCell>
-												<TableCell
-													onClick={(e) => e.stopPropagation()}
-													className="text-right"
+										{filtered.map((wf) => {
+											const wfMeta = getDefinitionMetadata(wf);
+											const displayDesc = getFieldLabel(
+												wf.description || "",
+												wfMeta.descriptionEs,
+											);
+											return (
+												<TableRow
+													key={wf.id}
+													className="cursor-pointer"
+													onClick={() => handleEdit(wf.id)}
 												>
-													<DropdownMenu>
-														<DropdownMenuTrigger asChild>
-															<Button
-																variant="ghost"
-																size="icon"
-																className="h-8 w-8"
-																disabled={
-																	deletingId === wf.id || cloningId === wf.id
-																}
-															>
-																{deletingId === wf.id || cloningId === wf.id ? (
-																	<Loader2 className="h-4 w-4 animate-spin" />
-																) : (
-																	<MoreHorizontal className="h-4 w-4" />
-																)}
-															</Button>
-														</DropdownMenuTrigger>
-														<DropdownMenuContent align="end">
-															<DropdownMenuItem
-																onClick={() => handleEdit(wf.id)}
-															>
-																<Pencil className="mr-2 h-4 w-4" />
-																{t("workflowList.rowActionEdit")}
-															</DropdownMenuItem>
-															<DropdownMenuItem
-																onClick={() => handleArchive(wf)}
-															>
-																{wf.status === "archived" ? (
-																	<>
-																		<WorkflowIcon className="mr-2 h-4 w-4" />
-																		{t("workflowList.rowActionRestore")}
-																	</>
-																) : (
-																	<>
-																		<WorkflowIcon className="mr-2 h-4 w-4" />
-																		{t("workflowList.rowActionArchive")}
-																	</>
-																)}
-															</DropdownMenuItem>
-															<DropdownMenuSeparator />
-															<DropdownMenuItem onClick={() => handleClone(wf)}>
-																<Copy className="mr-2 h-4 w-4" />
-																{t("workflowList.rowActionClone")}
-															</DropdownMenuItem>
-															{wf.current_major_version === 0 &&
-																wf.status === "draft" && (
-																	<>
-																		<DropdownMenuSeparator />
-																		<DropdownMenuItem
-																			className="text-destructive focus:text-destructive"
-																			onClick={() => handleDelete(wf)}
-																		>
-																			<Trash2 className="mr-2 h-4 w-4" />
-																			{t("workflowList.rowActionDelete")}
-																		</DropdownMenuItem>
-																	</>
-																)}
-														</DropdownMenuContent>
-													</DropdownMenu>
-												</TableCell>
-											</TableRow>
-										))}
+													<TableCell className="font-medium">
+														{getFieldLabel(wf.name, wfMeta.nameEs)}
+													</TableCell>
+													<TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">
+														{displayDesc || (
+															<span className="italic opacity-50">
+																{t("workflowList.noDescriptionPlaceholder")}
+															</span>
+														)}
+													</TableCell>
+													<TableCell>
+														<StatusBadge status={wf.status} />
+													</TableCell>
+													<TableCell className="hidden md:table-cell">
+														{wf.current_major_version > 0 ? (
+															<span className="font-mono text-xs text-muted-foreground">
+																v{wf.current_major_version}
+															</span>
+														) : (
+															<span className="text-xs text-muted-foreground">
+																—
+															</span>
+														)}
+													</TableCell>
+													<TableCell className="hidden text-muted-foreground lg:table-cell">
+														{formatRelativeDate(wf.updated_at, t, locale)}
+													</TableCell>
+													<TableCell
+														onClick={(e) => e.stopPropagation()}
+														className="text-right"
+													>
+														<DropdownMenu>
+															<DropdownMenuTrigger asChild>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-8 w-8"
+																	disabled={
+																		deletingId === wf.id || cloningId === wf.id
+																	}
+																>
+																	{deletingId === wf.id ||
+																	cloningId === wf.id ? (
+																		<Loader2 className="h-4 w-4 animate-spin" />
+																	) : (
+																		<MoreHorizontal className="h-4 w-4" />
+																	)}
+																</Button>
+															</DropdownMenuTrigger>
+															<DropdownMenuContent align="end">
+																<DropdownMenuItem
+																	onClick={() => handleEdit(wf.id)}
+																>
+																	<Pencil className="mr-2 h-4 w-4" />
+																	{t("workflowList.rowActionEdit")}
+																</DropdownMenuItem>
+																<DropdownMenuItem
+																	onClick={() => handleArchive(wf)}
+																>
+																	{wf.status === "archived" ? (
+																		<>
+																			<WorkflowIcon className="mr-2 h-4 w-4" />
+																			{t("workflowList.rowActionRestore")}
+																		</>
+																	) : (
+																		<>
+																			<WorkflowIcon className="mr-2 h-4 w-4" />
+																			{t("workflowList.rowActionArchive")}
+																		</>
+																	)}
+																</DropdownMenuItem>
+																<DropdownMenuSeparator />
+																<DropdownMenuItem
+																	onClick={() => handleClone(wf)}
+																>
+																	<Copy className="mr-2 h-4 w-4" />
+																	{t("workflowList.rowActionClone")}
+																</DropdownMenuItem>
+																{wf.current_major_version === 0 &&
+																	wf.status === "draft" && (
+																		<>
+																			<DropdownMenuSeparator />
+																			<DropdownMenuItem
+																				className="text-destructive focus:text-destructive"
+																				onClick={() => handleDelete(wf)}
+																			>
+																				<Trash2 className="mr-2 h-4 w-4" />
+																				{t("workflowList.rowActionDelete")}
+																			</DropdownMenuItem>
+																		</>
+																	)}
+															</DropdownMenuContent>
+														</DropdownMenu>
+													</TableCell>
+												</TableRow>
+											);
+										})}
 									</TableBody>
 								</Table>
 							</div>

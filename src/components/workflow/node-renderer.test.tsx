@@ -3,6 +3,7 @@ import { render, fireEvent } from "@testing-library/react";
 import { NodeRenderer } from "./node-renderer";
 import type { WorkflowNode } from "@/lib/workflow/types";
 
+let mockLanguage = "es";
 vi.mock("@/components/LanguageProvider", async () => {
 	const { translations } = await import("@/lib/translations");
 	const tFn = (key: string, params?: Record<string, string | number>) => {
@@ -24,7 +25,19 @@ vi.mock("@/components/LanguageProvider", async () => {
 		return val;
 	};
 	return {
-		useLanguage: () => ({ language: "es", setLanguage: vi.fn(), t: tFn }),
+		useLanguage: () => ({
+			language: mockLanguage,
+			setLanguage: vi.fn(),
+			t: tFn,
+			getFieldLabel: (label: string, labelEs?: string) => {
+				if (mockLanguage === "es" && labelEs) return labelEs;
+				return label;
+			},
+			getFieldPlaceholder: (ph?: string, phEs?: string) => {
+				if (mockLanguage === "es" && phEs) return phEs;
+				return ph;
+			},
+		}),
 	};
 });
 
@@ -275,5 +288,131 @@ describe("NodeRenderer onHeightMeasured callback", () => {
 				expect.any(Number),
 			);
 		}
+	});
+});
+
+describe("NodeRenderer bilingual support", () => {
+	beforeEach(() => {
+		vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+			cb(0);
+			return 0;
+		});
+	});
+
+	afterEach(() => {
+		mockLanguage = "es";
+		vi.unstubAllGlobals();
+	});
+
+	it("displays Spanish title when titleEs is provided and language is es", () => {
+		mockLanguage = "es";
+		const bilingualNode: WorkflowNode = {
+			...baseNode,
+			title: "Upload Documents",
+			titleEs: "Carga de documentos",
+		};
+
+		const { container } = render(
+			<NodeRenderer
+				node={bilingualNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		expect(container.textContent).toContain("Carga de documentos");
+		expect(container.textContent).not.toContain("Upload Documents");
+	});
+
+	it("falls back to English title when titleEs is not provided", () => {
+		mockLanguage = "es";
+		const englishOnlyNode: WorkflowNode = {
+			...baseNode,
+			title: "Upload Documents",
+		};
+
+		const { container } = render(
+			<NodeRenderer
+				node={englishOnlyNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		expect(container.textContent).toContain("Upload Documents");
+	});
+
+	it("displays English title when language is en regardless of titleEs", () => {
+		mockLanguage = "en";
+		const bilingualNode: WorkflowNode = {
+			...baseNode,
+			title: "Upload Documents",
+			titleEs: "Carga de documentos",
+		};
+
+		const { container } = render(
+			<NodeRenderer
+				node={bilingualNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		expect(container.textContent).toContain("Upload Documents");
+		expect(container.textContent).not.toContain("Carga de documentos");
+	});
+
+	it("displays Spanish description when descriptionEs is provided and language is es", () => {
+		mockLanguage = "es";
+		const bilingualNode: WorkflowNode = {
+			...baseNode,
+			description: "Form for uploading documents",
+			descriptionEs: "Formulario para carga de documentos",
+		};
+
+		const { container } = render(
+			<NodeRenderer
+				node={bilingualNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		expect(container.textContent).toContain(
+			"Formulario para carga de documentos",
+		);
+	});
+
+	it("falls back to English description when descriptionEs is not provided", () => {
+		mockLanguage = "es";
+		const englishOnlyNode: WorkflowNode = {
+			...baseNode,
+			description: "Form for uploading documents",
+		};
+
+		const { container } = render(
+			<NodeRenderer
+				node={englishOnlyNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		expect(container.textContent).toContain("Form for uploading documents");
 	});
 });

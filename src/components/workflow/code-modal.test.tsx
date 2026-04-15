@@ -22,7 +22,13 @@ vi.mock("@/components/LanguageProvider", async () => {
 		return typeof val === "string" ? val : key;
 	};
 	return {
-		useLanguage: () => ({ language: "es", setLanguage: vi.fn(), t: tFn }),
+		useLanguage: () => ({
+			language: "es",
+			setLanguage: vi.fn(),
+			t: tFn,
+			getFieldLabel: (label: string, labelEs?: string) => labelEs || label,
+			getFieldPlaceholder: (ph?: string, phEs?: string) => phEs || ph,
+		}),
 	};
 });
 
