@@ -502,9 +502,24 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						}));
 					}
 				} else {
+					let initialEsMeta: DefinitionMetadata = {};
+					if (typeof window !== "undefined" && wf.id) {
+						const key = `workflow_initial_meta_es_${wf.id}`;
+						const stored = localStorage.getItem(key);
+						if (stored) {
+							try {
+								initialEsMeta = JSON.parse(stored);
+							} catch {
+								/* ignore */
+							}
+							localStorage.removeItem(key);
+						}
+					}
 					const metadata: WorkflowMetadata = {
 						name: wf.name,
+						nameEs: initialEsMeta.nameEs,
 						description: wf.description,
+						descriptionEs: initialEsMeta.descriptionEs,
 						version:
 							wf.current_major_version > 0
 								? `${wf.current_major_version}.0.0`

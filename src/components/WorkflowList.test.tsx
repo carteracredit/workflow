@@ -542,7 +542,7 @@ describe("WorkflowList – diálogo de creación", () => {
 		});
 	});
 
-	it("envía definition con metadata ES cuando se llenan los campos en español", async () => {
+	it("guarda metadata ES en localStorage cuando se llenan campos en español", async () => {
 		makeHooksReturn([]);
 		mockCreateWorkflow.mockResolvedValue({
 			id: "wf-uuid-es",
@@ -567,15 +567,18 @@ describe("WorkflowList – diálogo de creación", () => {
 			string,
 			unknown
 		>;
-		expect(payload).toHaveProperty("definition");
-		const def = payload.definition as Record<string, unknown>;
-		expect(def.metadata).toEqual({
+		expect(payload).not.toHaveProperty("definition");
+
+		const stored = localStorage.getItem("workflow_initial_meta_es_wf-uuid-es");
+		expect(stored).not.toBeNull();
+		expect(JSON.parse(stored!)).toEqual({
 			nameEs: "Aprobación de Crédito",
 			descriptionEs: undefined,
 		});
+		localStorage.removeItem("workflow_initial_meta_es_wf-uuid-es");
 	});
 
-	it("no envía definition cuando no se llenan campos en español", async () => {
+	it("no guarda metadata ES en localStorage cuando no se llenan campos en español", async () => {
 		makeHooksReturn([]);
 		mockCreateWorkflow.mockResolvedValue({
 			id: "wf-uuid-no-es",
@@ -599,6 +602,9 @@ describe("WorkflowList – diálogo de creación", () => {
 			unknown
 		>;
 		expect(payload).not.toHaveProperty("definition");
+		expect(
+			localStorage.getItem("workflow_initial_meta_es_wf-uuid-no-es"),
+		).toBeNull();
 	});
 
 	it("muestra error cuando createWorkflow falla con 401", async () => {

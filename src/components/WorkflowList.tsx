@@ -375,10 +375,6 @@ function CreateWorkflowDialog({
 		}
 		setIsCreating(true);
 		try {
-			const trimmedNameEs = nameEs.trim() || undefined;
-			const trimmedDescEs = descriptionEs.trim() || undefined;
-			const hasEsMetadata = trimmedNameEs || trimmedDescEs;
-
 			const workflow = await createWorkflow({
 				name: name.trim(),
 				slug: slugify(name.trim()),
@@ -386,20 +382,20 @@ function CreateWorkflowDialog({
 				status: "draft",
 				class_name: toClassName(name.trim()),
 				current_major_version: 0,
-				...(hasEsMetadata && {
-					definition: {
-						nodes: [],
-						edges: [],
-						flags: [],
-						zoom: 1,
-						pan: { x: 0, y: 0 },
-						metadata: {
-							nameEs: trimmedNameEs,
-							descriptionEs: trimmedDescEs,
-						},
-					},
-				}),
 			});
+
+			const trimmedNameEs = nameEs.trim() || undefined;
+			const trimmedDescEs = descriptionEs.trim() || undefined;
+			if (trimmedNameEs || trimmedDescEs) {
+				localStorage.setItem(
+					`workflow_initial_meta_es_${workflow.id}`,
+					JSON.stringify({
+						nameEs: trimmedNameEs,
+						descriptionEs: trimmedDescEs,
+					}),
+				);
+			}
+
 			toast.success(
 				t("workflowList.toastCreated").replace("{name}", workflow.name),
 			);
