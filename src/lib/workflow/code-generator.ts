@@ -753,17 +753,30 @@ function generateOAuth2TokenFetch(
 /**
  * Generate code for a Transform node
  */
-function generateTransformStep(node: WorkflowNode, indent: string): string {
+function generateTransformStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
 	const stepName = createStepName(node);
 	const transformCode = (node.config.code as string) || "// Transform logic";
 	const captureResult = nodeHasOutputSchema(node);
 	const varName = nodeIdToVarName(node.id);
 	const varDecl = captureResult ? `const ${varName} = ` : "";
 	const resultCast = captureResult ? " as Record<string, unknown>" : "";
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
 
 	let code = `${indent}// Transform: ${node.title}\n`;
-	code += generateProgressCall(node, indent, "in_progress");
-	code += `${indent}${varDecl}await step.do("${stepName}", async () => {\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"in_progress",
+		undefined,
+		retryVarName,
+	);
+	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
 	const expandedCode = expandVariableRefs(transformCode);
 	code += `${indent}\t${expandedCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}})${resultCast};\n`;
@@ -771,8 +784,15 @@ function generateTransformStep(node: WorkflowNode, indent: string): string {
 		node,
 		indent,
 		captureResult ? varName : undefined,
+		retryVarName,
 	);
-	code += generateProgressCall(node, indent, "completed");
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
 
 	return code;
 }
@@ -1078,15 +1098,28 @@ function generateChallengeStep(
 /**
  * Generate code for a FlagChange node
  */
-function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
+function generateFlagChangeStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
 	const stepName = createStepName(node);
 	const flagChanges =
 		(node.config.flagChanges as Array<{ flagId: string; optionId: string }>) ||
 		[];
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
 
 	let code = `${indent}// Flag Change: ${node.title}\n`;
-	code += generateProgressCall(node, indent, "in_progress");
-	code += `${indent}await step.do("${stepName}", async () => {\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"in_progress",
+		undefined,
+		retryVarName,
+	);
+	code += `${indent}await step.do(${stepNameExpr}, async () => {\n`;
 	if (flagChanges.length > 0) {
 		const changes = flagChanges
 			.map(
@@ -1103,8 +1136,14 @@ function generateFlagChangeStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\t// Configure flag changes in the workflow editor\n`;
 	}
 	code += `${indent}});\n`;
-	code += generateCaseObjectCall(node, indent);
-	code += generateProgressCall(node, indent, "completed");
+	code += generateCaseObjectCall(node, indent, undefined, retryVarName);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
 
 	return code;
 }
@@ -1238,7 +1277,7 @@ function generateNodeCode(
 		case "API":
 			return generateAPIStep(node, indent, retryVar);
 		case "Transform":
-			return generateTransformStep(node, indent);
+			return generateTransformStep(node, indent, retryVar);
 		case "Message":
 			return generateMessageStep(node, indent);
 		case "Checkpoint":
@@ -1249,7 +1288,7 @@ function generateNodeCode(
 			// Decision generates an if/else, code is handled in traversal
 			return "";
 		case "FlagChange":
-			return generateFlagChangeStep(node, indent);
+			return generateFlagChangeStep(node, indent, retryVar);
 		case "Join":
 			return generateJoinStep(node, indent, ctx.incomingMap.get(node.id) || []);
 		case "End":
