@@ -1,3 +1,18 @@
+# [1.1.0-rc.21](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.20...v1.1.0-rc.21) (2026-04-15)
+
+
+### Bug Fixes
+
+* remove unnecessary trimming of input values in PropertiesPanel ([f602e06](https://github.com/carteracredit/workflow/commit/f602e06135cecb7c6db0138d0213336e9e3c609b))
+
+
+### Features
+
+* add bilingual support for start node metadata in WorkflowEditor ([9eb1c07](https://github.com/carteracredit/workflow/commit/9eb1c07fd31bde3a7f85ab00f4d507d9121e0243))
+* enhance bilingual support in workflow creation and display ([f730b82](https://github.com/carteracredit/workflow/commit/f730b823e69d9d7e6ff75087a150b8edfe4a75eb))
+* implement localStorage handling for Spanish metadata in workflow creation ([332caf8](https://github.com/carteracredit/workflow/commit/332caf8745af91b349d8ccafa6566a441650a299))
+* restrict editing of start node properties in PropertiesPanel ([40bfd77](https://github.com/carteracredit/workflow/commit/40bfd77f363d3f0d33520bf68f7fd46068445b0b))
+
 # [1.1.0-rc.20](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.19...v1.1.0-rc.20) (2026-04-09)
 
 
