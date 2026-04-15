@@ -1,3 +1,10 @@
+# [1.1.0-rc.22](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.21...v1.1.0-rc.22) (2026-04-15)
+
+
+### Features
+
+* enhance environment variable handling in code generation ([71baa80](https://github.com/carteracredit/workflow/commit/71baa80a5444184250ed42deee08942776a09a61))
+
 # [1.1.0-rc.21](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.20...v1.1.0-rc.21) (2026-04-15)
 
 
