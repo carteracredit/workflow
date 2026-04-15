@@ -1220,6 +1220,8 @@ export function PropertiesPanel({
 								}
 								placeholder={t("propertiesPanel.nodeTitlePlaceholder")}
 								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
 							/>
 							<Input
 								id="title-es"
@@ -1231,6 +1233,8 @@ export function PropertiesPanel({
 								}
 								placeholder={t("propertiesPanel.nodeTitleEsPlaceholder")}
 								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
 							/>
 						</div>
 						<div className="grid grid-cols-2 gap-2">
@@ -1258,6 +1262,8 @@ export function PropertiesPanel({
 								placeholder={t("propertiesPanel.nodeDescPlaceholder")}
 								rows={3}
 								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
 							/>
 							<Textarea
 								id="description-es"
@@ -1270,6 +1276,8 @@ export function PropertiesPanel({
 								placeholder={t("propertiesPanel.nodeDescEsPlaceholder")}
 								rows={3}
 								className="w-full"
+								readOnly={selectedNode.type === "Start"}
+								disabled={selectedNode.type === "Start"}
 							/>
 						</div>
 						<div className="grid grid-cols-2 gap-2">
