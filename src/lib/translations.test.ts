@@ -82,6 +82,21 @@ describe("translations", () => {
 			expect(translations.es.common.english).toBe("Inglés");
 			expect(translations.es.common.spanish).toBe("Español");
 		});
+
+		it("should have bilingual placeholders for create workflow dialog", () => {
+			expect(translations.en.workflowList.createFieldNameEsPlaceholder).toBe(
+				"Name in Spanish",
+			);
+			expect(translations.es.workflowList.createFieldNameEsPlaceholder).toBe(
+				"Nombre en español",
+			);
+			expect(
+				translations.en.workflowList.createFieldDescriptionEsPlaceholder,
+			).toBe("Description in Spanish");
+			expect(
+				translations.es.workflowList.createFieldDescriptionEsPlaceholder,
+			).toBe("Descripción en español");
+		});
 	});
 
 	describe("getLocaleForLanguage", () => {

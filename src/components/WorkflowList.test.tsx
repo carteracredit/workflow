@@ -542,6 +542,65 @@ describe("WorkflowList – diálogo de creación", () => {
 		});
 	});
 
+	it("envía definition con metadata ES cuando se llenan los campos en español", async () => {
+		makeHooksReturn([]);
+		mockCreateWorkflow.mockResolvedValue({
+			id: "wf-uuid-es",
+			name: "Credit Approval",
+		});
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
+		const nameInput = await screen.findByPlaceholderText(
+			"Ej: Aprobación de Crédito",
+		);
+		const nameEsInput = screen.getByPlaceholderText("Nombre en español");
+
+		await userEvent.type(nameInput, "Credit Approval");
+		await userEvent.type(nameEsInput, "Aprobación de Crédito");
+		fireEvent.click(screen.getByText("Crear workflow"));
+
+		await waitFor(() => {
+			expect(mockCreateWorkflow).toHaveBeenCalled();
+		});
+		const payload = mockCreateWorkflow.mock.calls[0][0] as Record<
+			string,
+			unknown
+		>;
+		expect(payload).toHaveProperty("definition");
+		const def = payload.definition as Record<string, unknown>;
+		expect(def.metadata).toEqual({
+			nameEs: "Aprobación de Crédito",
+			descriptionEs: undefined,
+		});
+	});
+
+	it("no envía definition cuando no se llenan campos en español", async () => {
+		makeHooksReturn([]);
+		mockCreateWorkflow.mockResolvedValue({
+			id: "wf-uuid-no-es",
+			name: "Only English",
+		});
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getAllByText("Nuevo Workflow")[0]);
+		const nameInput = await screen.findByPlaceholderText(
+			"Ej: Aprobación de Crédito",
+		);
+
+		await userEvent.type(nameInput, "Only English");
+		fireEvent.click(screen.getByText("Crear workflow"));
+
+		await waitFor(() => {
+			expect(mockCreateWorkflow).toHaveBeenCalled();
+		});
+		const payload = mockCreateWorkflow.mock.calls[0][0] as Record<
+			string,
+			unknown
+		>;
+		expect(payload).not.toHaveProperty("definition");
+	});
+
 	it("muestra error cuando createWorkflow falla con 401", async () => {
 		const { toast } = await import("sonner");
 		makeHooksReturn([]);

@@ -265,14 +265,24 @@ interface WorkflowEditorProps {
 	workflowId?: string;
 }
 
+interface DefinitionMetadata {
+	nameEs?: string;
+	descriptionEs?: string;
+}
+
 function buildDefinitionObject(
 	nodes: WorkflowNode[],
 	edges: WorkflowEdge[],
 	flags: Flag[],
 	zoom: number,
 	pan: { x: number; y: number },
+	metadata?: DefinitionMetadata,
 ): Record<string, unknown> {
-	return { nodes, edges, flags, zoom, pan };
+	const obj: Record<string, unknown> = { nodes, edges, flags, zoom, pan };
+	if (metadata?.nameEs || metadata?.descriptionEs) {
+		obj.metadata = metadata;
+	}
+	return obj;
 }
 
 function buildDefinitionJson(
@@ -281,8 +291,11 @@ function buildDefinitionJson(
 	flags: Flag[],
 	zoom: number,
 	pan: { x: number; y: number },
+	metadata?: DefinitionMetadata,
 ): string {
-	return JSON.stringify(buildDefinitionObject(nodes, edges, flags, zoom, pan));
+	return JSON.stringify(
+		buildDefinitionObject(nodes, edges, flags, zoom, pan, metadata),
+	);
 }
 
 function parseDefinitionJson(definition: string | Record<string, unknown>): {
@@ -291,6 +304,7 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 	flags: Flag[];
 	zoom: number;
 	pan: { x: number; y: number };
+	metadata?: DefinitionMetadata;
 } | null {
 	try {
 		const parsed =
@@ -303,6 +317,7 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 			flags: parsed.flags || [],
 			zoom: parsed.zoom ?? 1,
 			pan: parsed.pan || { ...DEFAULT_START_NODE_PAN },
+			metadata: parsed.metadata || undefined,
 		};
 	} catch {
 		return null;
@@ -355,9 +370,15 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				if (draft) {
 					const parsed = parseDefinitionJson(draft);
 					if (parsed) {
+						const { metadata: defMeta, ...parsedRest } = parsed;
+						const defaultMeta = createDefaultMetadata();
 						return createHistoryEnabledState({
-							metadata: createDefaultMetadata(),
-							...parsed,
+							...parsedRest,
+							metadata: {
+								...defaultMeta,
+								nameEs: defMeta?.nameEs,
+								descriptionEs: defMeta?.descriptionEs,
+							},
 							selectedNodeIds: [],
 							selectedEdgeIds: [],
 						});
@@ -419,20 +440,6 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				setWorkflowStatus(wf.status ?? "draft");
 				setCurrentMajorVersion(wf.current_major_version ?? 0);
 
-				// Build metadata from API data
-				const metadata: WorkflowMetadata = {
-					name: wf.name,
-					description: wf.description,
-					version:
-						wf.current_major_version > 0
-							? `${wf.current_major_version}.0.0`
-							: "",
-					author: "",
-					tags: [],
-					createdAt: wf.created_at,
-					updatedAt: wf.updated_at,
-				};
-
 				// Flags from the workflow_flags table are the authoritative source.
 				// Map them to the lightweight Flag shape used in WorkflowState.
 				const apiFlags: Flag[] = (apiFlagsFull ?? []).map((f) => ({
@@ -449,12 +456,25 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				if (wf.definition) {
 					const parsed = parseDefinitionJson(wf.definition);
 					if (parsed) {
+						const metadata: WorkflowMetadata = {
+							name: wf.name,
+							nameEs: parsed.metadata?.nameEs,
+							description: wf.description,
+							descriptionEs: parsed.metadata?.descriptionEs,
+							version:
+								wf.current_major_version > 0
+									? `${wf.current_major_version}.0.0`
+									: "",
+							author: "",
+							tags: [],
+							createdAt: wf.created_at,
+							updatedAt: wf.updated_at,
+						};
 						setWorkflowState(
 							createHistoryEnabledState({
 								metadata,
 								nodes: parsed.nodes,
 								edges: parsed.edges,
-								// API flags take priority over definition snapshot flags
 								flags: apiFlags.length > 0 ? apiFlags : parsed.flags,
 								zoom: parsed.zoom,
 								pan: parsed.pan,
@@ -463,6 +483,18 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 							}),
 						);
 					} else {
+						const metadata: WorkflowMetadata = {
+							name: wf.name,
+							description: wf.description,
+							version:
+								wf.current_major_version > 0
+									? `${wf.current_major_version}.0.0`
+									: "",
+							author: "",
+							tags: [],
+							createdAt: wf.created_at,
+							updatedAt: wf.updated_at,
+						};
 						setWorkflowState((prev) => ({
 							...prev,
 							metadata,
@@ -470,7 +502,18 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						}));
 					}
 				} else {
-					// No definition yet — just update the metadata and flags
+					const metadata: WorkflowMetadata = {
+						name: wf.name,
+						description: wf.description,
+						version:
+							wf.current_major_version > 0
+								? `${wf.current_major_version}.0.0`
+								: "",
+						author: "",
+						tags: [],
+						createdAt: wf.created_at,
+						updatedAt: wf.updated_at,
+					};
 					setWorkflowState((prev) => ({
 						...prev,
 						metadata,
@@ -530,6 +573,10 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				workflowState.flags,
 				workflowState.zoom,
 				workflowState.pan,
+				{
+					nameEs: workflowState.metadata.nameEs,
+					descriptionEs: workflowState.metadata.descriptionEs,
+				},
 			);
 
 			if (workflowId !== undefined) {
@@ -608,6 +655,10 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				workflowState.flags,
 				workflowState.zoom,
 				workflowState.pan,
+				{
+					nameEs: workflowState.metadata.nameEs,
+					descriptionEs: workflowState.metadata.descriptionEs,
+				},
 			);
 			updateWorkflowApi(workflowApiId, {
 				name: workflowState.metadata.name || "Nuevo Flujo de Trabajo",
@@ -894,6 +945,10 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			workflowState.flags,
 			workflowState.zoom,
 			workflowState.pan,
+			{
+				nameEs: workflowState.metadata.nameEs,
+				descriptionEs: workflowState.metadata.descriptionEs,
+			},
 		);
 
 		const payload = {
@@ -1107,6 +1162,10 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						newFlags,
 						nextState.zoom,
 						nextState.pan,
+						{
+							nameEs: prev.metadata.nameEs,
+							descriptionEs: prev.metadata.descriptionEs,
+						},
 					);
 					updateWorkflowApi(workflowApiId, {
 						name: prev.metadata.name || "Nuevo Flujo de Trabajo",
