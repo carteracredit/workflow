@@ -36,6 +36,52 @@ describe("translations", () => {
 			expect(translations.en.nodeTypes.start).toBe("Start");
 			expect(translations.es.nodeTypes.start).toBe("Inicio");
 		});
+
+		it("should have bilingual field placeholders for node properties", () => {
+			expect(translations.en.propertiesPanel.nodeTitleEsPlaceholder).toBe(
+				"Title in Spanish",
+			);
+			expect(translations.es.propertiesPanel.nodeTitleEsPlaceholder).toBe(
+				"Título en español",
+			);
+			expect(translations.en.propertiesPanel.nodeDescEsPlaceholder).toBe(
+				"Description in Spanish",
+			);
+			expect(translations.es.propertiesPanel.nodeDescEsPlaceholder).toBe(
+				"Descripción en español",
+			);
+		});
+
+		it("should have bilingual field placeholders for workflow metadata", () => {
+			expect(translations.en.propertiesPanel.workflowNameEsPlaceholder).toBe(
+				"Flow name in Spanish",
+			);
+			expect(translations.es.propertiesPanel.workflowNameEsPlaceholder).toBe(
+				"Nombre del flujo en español",
+			);
+			expect(translations.en.propertiesPanel.workflowDescEsPlaceholder).toBe(
+				"Description in Spanish",
+			);
+			expect(translations.es.propertiesPanel.workflowDescEsPlaceholder).toBe(
+				"Descripción en español",
+			);
+		});
+
+		it("should have bilingual field placeholders for edge labels", () => {
+			expect(translations.en.propertiesPanel.edgeLabelEsPlaceholder).toBe(
+				"Label in Spanish",
+			);
+			expect(translations.es.propertiesPanel.edgeLabelEsPlaceholder).toBe(
+				"Etiqueta en español",
+			);
+		});
+
+		it("should have language label keys in common section", () => {
+			expect(translations.en.common.english).toBe("English");
+			expect(translations.en.common.spanish).toBe("Spanish");
+			expect(translations.es.common.english).toBe("Inglés");
+			expect(translations.es.common.spanish).toBe("Español");
+		});
 	});
 
 	describe("getLocaleForLanguage", () => {
