@@ -167,13 +167,22 @@ function emitInterpolatedString(str: string): string {
 
 /**
  * Emits a value for use in generated TypeScript source code.
- * Supports two modes:
- *   - "env:VAR_NAME"  → this.env.VAR_NAME  (env variable reference)
- *   - any other text  → "literal string"    (used as-is)
+ * Supports three modes:
+ *   - "env:VAR_NAME"         → this.env.VAR_NAME  (explicit env reference)
+ *   - "TOKEN_TEST" (all-caps) → this.env.TOKEN_TEST (legacy / auto-detected env var)
+ *   - any other text          → "literal string"    (used as-is)
+ *
+ * The auto-detection keeps backward compatibility with workflows saved before
+ * the "env:" prefix convention was introduced.
  */
+const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+
 function emitAuthValue(raw: string): string {
 	if (raw.startsWith("env:")) {
 		return emitEnvRef(raw.slice(4).trim());
+	}
+	if (ENV_VAR_NAME_RE.test(raw)) {
+		return emitEnvRef(raw);
 	}
 	return JSON.stringify(raw);
 }
