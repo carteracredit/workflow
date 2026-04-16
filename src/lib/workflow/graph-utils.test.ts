@@ -3,6 +3,8 @@ import {
 	findNearestPreviousCheckpoint,
 	findAllNearestPreviousCheckpoints,
 	getCheckpointNode,
+	findUpstreamNodes,
+	buildVariableSourceNodes,
 } from "./graph-utils";
 import type { WorkflowNode, WorkflowEdge } from "./types";
 
@@ -292,6 +294,345 @@ describe("graph-utils", () => {
 
 			const result = findAllNearestPreviousCheckpoints("node-1", nodes, edges);
 			expect(result).toEqual([]);
+		});
+	});
+
+	describe("findUpstreamNodes", () => {
+		it("should return all upstream nodes excluding the target node itself", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form 1",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "api-1",
+					type: "API",
+					title: "API 1",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 200, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [
+				{ id: "e1", from: "start", to: "form-1", label: null },
+				{ id: "e2", from: "form-1", to: "api-1", label: null },
+			];
+
+			const result = findUpstreamNodes("api-1", nodes, edges);
+			const ids = result.map((n) => n.id);
+			expect(ids).toContain("start");
+			expect(ids).toContain("form-1");
+			expect(ids).not.toContain("api-1");
+		});
+
+		it("should return empty array for start node", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+			const result = findUpstreamNodes("start", nodes, []);
+			expect(result).toEqual([]);
+		});
+
+		it("should handle disconnected upstream (no incoming edges)", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "node-1",
+					type: "Form",
+					title: "Form 1",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+			const result = findUpstreamNodes("node-1", nodes, []);
+			expect(result).toEqual([]);
+		});
+	});
+
+	describe("buildVariableSourceNodes", () => {
+		it("should skip nodes without outputSchema", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "api-1",
+					type: "API",
+					title: "My API",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+			const result = buildVariableSourceNodes(nodes);
+			expect(result).toEqual([]);
+		});
+
+		it("should convert a flat outputSchema to VariableSourceNode", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "api-1",
+					type: "API",
+					title: "My API",
+					description: "",
+					roles: [],
+					config: {
+						outputSchema: {
+							name: "APIOutput",
+							properties: [
+								{ id: "p1", name: "status", type: "number" },
+								{ id: "p2", name: "message", type: "string" },
+							],
+						},
+					},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+
+			const result = buildVariableSourceNodes(nodes);
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe("api-1");
+			expect(result[0].name).toBe("My API");
+			expect(result[0].variables).toHaveLength(2);
+
+			const status = result[0].variables.find((v) => v.name === "status");
+			expect(status?.type).toBe("number");
+			expect(status?.path).toBe("api-1.status");
+
+			const message = result[0].variables.find((v) => v.name === "message");
+			expect(message?.type).toBe("string");
+			expect(message?.path).toBe("api-1.message");
+		});
+
+		it("should convert nested object properties", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "api-1",
+					type: "API",
+					title: "My API",
+					description: "",
+					roles: [],
+					config: {
+						outputSchema: {
+							name: "APIOutput",
+							properties: [
+								{
+									id: "p1",
+									name: "data",
+									type: "object",
+									properties: [
+										{ id: "p1a", name: "id", type: "number" },
+										{ id: "p1b", name: "name", type: "string" },
+									],
+								},
+							],
+						},
+					},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+
+			const result = buildVariableSourceNodes(nodes);
+			expect(result).toHaveLength(1);
+
+			const dataVar = result[0].variables.find((v) => v.name === "data");
+			expect(dataVar?.type).toBe("object");
+			expect(dataVar?.children).toHaveLength(2);
+			expect(dataVar?.children?.[0].path).toBe("api-1.data.id");
+		});
+
+		it("should map enum type to string for variable picker", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "api-1",
+					type: "API",
+					title: "My API",
+					description: "",
+					roles: [],
+					config: {
+						outputSchema: {
+							name: "APIOutput",
+							properties: [
+								{
+									id: "p1",
+									name: "status",
+									type: "enum",
+									enumValues: ["ACTIVE", "INACTIVE"],
+								},
+							],
+						},
+					},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+
+			const result = buildVariableSourceNodes(nodes);
+			const statusVar = result[0].variables.find((v) => v.name === "status");
+			expect(statusVar?.type).toBe("string");
+		});
+
+		it("should expand compound name field into children in the variable tree", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Personal Data",
+					description: "",
+					roles: [],
+					config: {
+						outputSchema: {
+							name: "personalDataOutput",
+							properties: [
+								{
+									id: "f1",
+									name: "userName",
+									type: "object",
+									description: "User Name",
+									properties: [
+										{
+											id: "f1_firstName",
+											name: "firstName",
+											type: "string",
+											description: "First name",
+										},
+										{
+											id: "f1_lastName",
+											name: "lastName",
+											type: "string",
+											description: "Last name",
+										},
+										{
+											id: "f1_fullName",
+											name: "fullName",
+											type: "string",
+											description: "Full name (computed)",
+										},
+									],
+								},
+							],
+						},
+					},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+
+			const result = buildVariableSourceNodes(nodes);
+			expect(result).toHaveLength(1);
+
+			const userNameVar = result[0].variables.find(
+				(v) => v.name === "userName",
+			);
+			expect(userNameVar).toBeDefined();
+			expect(userNameVar?.type).toBe("object");
+			expect(userNameVar?.children).toHaveLength(3);
+
+			const firstNameChild = userNameVar?.children?.find(
+				(c) => c.name === "firstName",
+			);
+			expect(firstNameChild).toBeDefined();
+			expect(firstNameChild?.path).toBe("form-1.userName.firstName");
+			expect(firstNameChild?.type).toBe("string");
+
+			const lastNameChild = userNameVar?.children?.find(
+				(c) => c.name === "lastName",
+			);
+			expect(lastNameChild?.path).toBe("form-1.userName.lastName");
+
+			const fullNameChild = userNameVar?.children?.find(
+				(c) => c.name === "fullName",
+			);
+			expect(fullNameChild?.path).toBe("form-1.userName.fullName");
+		});
+
+		it("should expand compound address field into children in the variable tree", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "form-2",
+					type: "Form",
+					title: "Contact Form",
+					description: "",
+					roles: [],
+					config: {
+						outputSchema: {
+							name: "contactFormOutput",
+							properties: [
+								{
+									id: "f2",
+									name: "homeAddress",
+									type: "object",
+									description: "Home Address",
+									properties: [
+										{
+											id: "f2_street",
+											name: "street",
+											type: "string",
+											description: "Street address",
+										},
+										{
+											id: "f2_city",
+											name: "city",
+											type: "string",
+											description: "City",
+										},
+										{
+											id: "f2_fullAddress",
+											name: "fullAddress",
+											type: "string",
+											description: "Full address (computed)",
+										},
+									],
+								},
+							],
+						},
+					},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+			];
+
+			const result = buildVariableSourceNodes(nodes);
+			const addressVar = result[0].variables.find(
+				(v) => v.name === "homeAddress",
+			);
+			expect(addressVar?.type).toBe("object");
+			expect(addressVar?.children).toHaveLength(3);
+
+			const streetChild = addressVar?.children?.find(
+				(c) => c.name === "street",
+			);
+			expect(streetChild?.path).toBe("form-2.homeAddress.street");
 		});
 	});
 

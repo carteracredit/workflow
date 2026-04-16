@@ -4,6 +4,12 @@ import type React from "react";
 
 import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
 import { Trash2 } from "lucide-react";
+import { estimateNodeDimensions } from "./node-metrics";
+
+const ARROW_MARKER_WIDTH = 12;
+const ARROW_MARKER_HEIGHT = 8;
+const ARROW_MARKER_REF_Y = ARROW_MARKER_HEIGHT / 2;
+const LINE_END_PADDING = 12;
 
 interface EdgeRendererProps {
 	edge: WorkflowEdge;
@@ -12,6 +18,7 @@ interface EdgeRendererProps {
 	selected: boolean;
 	onSelect: (e: React.MouseEvent) => void;
 	onDelete: () => void;
+	measuredNodeHeights?: Record<string, number>;
 	dragState?: {
 		nodeId: string;
 		offsetX: number;
@@ -26,6 +33,7 @@ export function EdgeRenderer({
 	selected,
 	onSelect,
 	onDelete,
+	measuredNodeHeights = {},
 	dragState,
 }: EdgeRendererProps) {
 	const fromNode = nodes.find((n) => n.id === edge.from);
@@ -48,94 +56,14 @@ export function EdgeRenderer({
 	const toNodeX = toNode.position.x + toNodeDragOffset.x;
 	const toNodeY = toNode.position.y + toNodeDragOffset.y;
 
-	// Tamaños dinámicos - deben coincidir con node-renderer
-	const MIN_NODE_WIDTH = 180; // Reducido para permitir nodos más estrechos
-	const MAX_NODE_WIDTH = 320;
-	const MIN_NODE_HEIGHT = 60;
-	const PADDING_X = 16; // Restaurado
-	const ICON_CONTAINER_SIZE = 40;
-
-	// Calcular tamaños aproximados para los nodos (debe coincidir con node-renderer)
-	// Nota: No tenemos acceso a flags aquí, así que usamos aproximación
+	// Calcular tamaños para los nodos usando alturas reales medidas cuando estén disponibles
 	const calculateNodeSize = (node: WorkflowNode) => {
-		const titleWidth = node.title.length * 9;
-		const descWidth = node.description ? node.description.length * 7.5 : 0;
-
-		// Calcular ancho aproximado de badges de flags
-		// En edge-renderer no tenemos acceso a flags, así que usamos aproximación
-		let flagsMaxWidth = 0;
-		if (node.type === "FlagChange" && node.config.flagChanges) {
-			const flagChanges = node.config.flagChanges as Array<{
-				flagId: string;
-				optionId: string;
-			}>;
-			// Aproximación conservadora basada en texto promedio
-			flagChanges.forEach(() => {
-				flagsMaxWidth = Math.max(flagsMaxWidth, 150);
-			});
-		}
-
-		const contentWidth =
-			Math.max(titleWidth, descWidth, flagsMaxWidth) +
-			ICON_CONTAINER_SIZE +
-			12 +
-			PADDING_X * 2;
-		const NODE_WIDTH = Math.max(
-			MIN_NODE_WIDTH,
-			Math.min(MAX_NODE_WIDTH, contentWidth),
-		);
-
-		const hasDescription = !!node.description;
-		const hasRoles = node.roles.length > 0;
-		const flagChangesCount =
-			node.type === "FlagChange" && node.config.flagChanges
-				? (
-						node.config.flagChanges as Array<{
-							flagId: string;
-							optionId: string;
-						}>
-					).length
-				: 0;
-		const hasSpecialBadges =
-			(node.type === "Reject" &&
-				(node.config.allowRetry as boolean) === true) ||
-			flagChangesCount > 0 ||
-			(node.type === "API" && node.config.failureHandling) ||
-			node.type === "Challenge";
-
-		// Calcular altura estimada - DEBE COINCIDIR EXACTAMENTE con node-renderer
-		// Usar exactamente la misma lógica que en node-renderer.tsx líneas 162-175
-		let estimatedHeight = MIN_NODE_HEIGHT;
-		if (hasDescription) estimatedHeight += 22;
-		if (hasRoles) {
-			const rolesRows = Math.ceil(node.roles.length / 3); // Aproximación: 3 roles por fila
-			estimatedHeight += rolesRows * 28;
-		}
-		if (hasSpecialBadges) {
-			if (flagChangesCount > 0) {
-				const flagRows = Math.ceil(flagChangesCount / 2); // Aproximación: 2 flags por fila
-				estimatedHeight += flagRows * 28;
-			} else {
-				estimatedHeight += 28;
-			}
-		}
-
-		// IMPORTANTE: Añadir un margen de seguridad para compensar diferencias entre altura estimada y real
-		// cuando el nodo tiene mucho contenido que puede hacer que crezca más de lo estimado
-		// Esto asegura que las flechas siempre apunten al círculo o más abajo, nunca más arriba
-		if (flagChangesCount > 2) {
-			estimatedHeight += 8; // Margen adicional para nodos con muchos flags (más conservador)
-		} else if (node.roles.length > 2 || hasDescription) {
-			estimatedHeight += 3; // Margen pequeño para otros nodos con contenido
-		}
-
-		// Añadir un pequeño margen de seguridad para asegurar que las flechas apunten correctamente
-		// cuando hay contenido que puede hacer que el nodo crezca más de lo estimado
-		if (flagChangesCount > 3 || node.roles.length > 3) {
-			estimatedHeight += 4; // Margen adicional para nodos con mucho contenido
-		}
-
-		return { width: NODE_WIDTH, height: estimatedHeight };
+		const estimated = estimateNodeDimensions(node);
+		const realHeight = measuredNodeHeights[node.id];
+		return {
+			width: estimated.width,
+			height: realHeight ?? estimated.height,
+		};
 	};
 
 	const hasDualOutputs =
@@ -144,33 +72,27 @@ export function EdgeRenderer({
 
 	const hasMultipleInputs = toNode.type === "Join";
 
-	// Posiciones de inicio desde la parte inferior del nodo origen (vertical layout)
+	// Posiciones de inicio desde el costado derecho del nodo origen (layout horizontal)
 	let startX: number;
 	let startY: number;
 
 	const fromNodeActualSize = calculateNodeSize(fromNode);
 
 	if (hasDualOutputs && edge.fromPort) {
-		const leftRatio = isChallengeSource ? 0.35 : 0.33;
-		const rightRatio = isChallengeSource ? 0.65 : 0.67;
-		// Para Decision: conectores en la parte inferior izquierda y derecha
-		startX =
+		const positiveRatio = isChallengeSource ? 0.35 : 0.33;
+		const negativeRatio = isChallengeSource ? 0.65 : 0.67;
+		startX = fromNodeX + fromNodeActualSize.width;
+		startY =
 			edge.fromPort === "top"
-				? fromNodeX + fromNodeActualSize.width * leftRatio
-				: fromNodeX + fromNodeActualSize.width * rightRatio;
-		// El círculo conector está posicionado en: top = realHeight - CONNECTOR_SIZE/2
-		// Su centro está en: node.position.y + realHeight - CONNECTOR_SIZE/2 + CONNECTOR_SIZE/2 = node.position.y + realHeight
-		// Usamos la altura estimada (será corregida por el renderizado real)
-		startY = fromNodeY + fromNodeActualSize.height;
+				? fromNodeY + fromNodeActualSize.height * positiveRatio
+				: fromNodeY + fromNodeActualSize.height * negativeRatio;
 	} else {
-		// Nodo normal: conector en el centro de la parte inferior
-		startX = fromNodeX + fromNodeActualSize.width / 2;
-		// El círculo conector está posicionado en: top = realHeight - CONNECTOR_SIZE/2
-		// Su centro está en: node.position.y + realHeight
-		startY = fromNodeY + fromNodeActualSize.height;
+		// Nodo normal: conector centrado en el costado derecho
+		startX = fromNodeX + fromNodeActualSize.width;
+		startY = fromNodeY + fromNodeActualSize.height / 2;
 	}
 
-	// Posiciones de fin hacia la parte superior del nodo destino (vertical layout)
+	// Posiciones de fin hacia el costado izquierdo del nodo destino (layout horizontal)
 	let endX: number;
 	let endY: number;
 
@@ -181,21 +103,21 @@ export function EdgeRenderer({
 		// Find all edges going to this node and calculate position based on index
 		const allEdgesToNode = edges.filter((e) => e.to === edge.to);
 
-		// Sort edges by the X position of their source nodes (left to right)
-		// This prevents connections from crossing each other
+		// Sort edges by the Y position of their source nodes (top to bottom)
+		// This prevents connections from crossing each other en layout horizontal
 		const sortedEdges = [...allEdgesToNode].sort(
 			(a: WorkflowEdge, b: WorkflowEdge) => {
 				const aSourceNode = nodes.find((n) => n.id === a.from);
 				const bSourceNode = nodes.find((n) => n.id === b.from);
 				if (!aSourceNode || !bSourceNode) return 0;
 
-				// Calculate center X position of source nodes
+				// Calculate center Y position of source nodes
 				const aSourceSize = calculateNodeSize(aSourceNode);
 				const bSourceSize = calculateNodeSize(bSourceNode);
-				const aCenterX = aSourceNode.position.x + aSourceSize.width / 2;
-				const bCenterX = bSourceNode.position.x + bSourceSize.width / 2;
+				const aCenterY = aSourceNode.position.y + aSourceSize.height / 2;
+				const bCenterY = bSourceNode.position.y + bSourceSize.height / 2;
 
-				return aCenterX - bCenterX;
+				return aCenterY - bCenterY;
 			},
 		);
 
@@ -203,38 +125,41 @@ export function EdgeRenderer({
 		const connectionIndex = sortedEdges.findIndex((e) => e.id === edge.id);
 		const totalConnections = sortedEdges.length;
 
-		// Distribute connections uniformly along the top edge
-		// Leave some margin on the sides (10% on each side = 0.1 to 0.9)
+		// Distribute connections uniformly along the left edge
+		// Leave some margin on top/bottom (10% on each side = 0.1 to 0.9)
 		const margin = 0.1;
-		const availableWidth = 1 - 2 * margin;
+		const availableHeight = 1 - 2 * margin;
 
 		if (totalConnections === 1) {
 			// Single connection: center
-			endX = toNodeX + toNodeActualSize.width * 0.5;
+			endY = toNodeY + toNodeActualSize.height * 0.5;
 		} else {
 			// Multiple connections: distribute uniformly
 			const positionRatio =
-				margin + (availableWidth * connectionIndex) / (totalConnections - 1);
-			endX = toNodeX + toNodeActualSize.width * positionRatio;
+				margin + (availableHeight * connectionIndex) / (totalConnections - 1);
+			endY = toNodeY + toNodeActualSize.height * positionRatio;
 		}
 
-		// El círculo conector está posicionado en: top = -CONNECTOR_SIZE/2 (relativo al nodo)
-		// Su centro está en: node.position.y - CONNECTOR_SIZE/2
-		endY = toNodeY;
+		endX = toNodeX;
 	} else {
-		endX = toNodeX + toNodeActualSize.width / 2;
-		// El círculo conector está posicionado en: top = -CONNECTOR_SIZE/2 (relativo al nodo)
-		// Su centro está en: node.position.y - CONNECTOR_SIZE/2
-		endY = toNodeY;
+		endX = toNodeX;
+		endY = toNodeY + toNodeActualSize.height / 2;
 	}
 
-	const distance = Math.abs(endY - startY);
+	const rawDistance = Math.abs(endX - startX);
+	const direction = Math.sign(endX - startX) || 1;
+	const arrowPadding =
+		rawDistance <= LINE_END_PADDING
+			? rawDistance * 0.5
+			: Math.min(LINE_END_PADDING, rawDistance * 0.45);
+	const pathEndX = endX - direction * arrowPadding;
+	const distance = Math.abs(pathEndX - startX);
 
 	// Detectar si es un edge de reintento para calcular mejor routing
 	const isRetryEdge =
 		edge.label === "Reintento" || edge.color === "rgb(234, 179, 8)";
 
-	// Función para calcular mejor path que rodee nodos intermedios (vertical layout)
+	// Función para calcular mejor path que rodee nodos intermedios (layout horizontal)
 	const calculateSmartPath = (
 		sx: number,
 		sy: number,
@@ -244,7 +169,7 @@ export function EdgeRenderer({
 		fromNodeId: string,
 		toNodeId: string,
 	): string => {
-		// Encontrar nodos que están entre el origen y destino (vertical)
+		// Encontrar nodos que están entre el origen y destino (horizontal)
 		const minX = Math.min(sx, ex);
 		const maxX = Math.max(sx, ex);
 		const minY = Math.min(sy, ey);
@@ -252,83 +177,87 @@ export function EdgeRenderer({
 
 		const intermediateNodes = allNodes.filter((node) => {
 			if (node.id === fromNodeId || node.id === toNodeId) return false;
-			const nodeX = node.position.x;
-			const nodeY = node.position.y;
 			const nodeSize = calculateNodeSize(node);
-			const nodeRight = nodeX + nodeSize.width;
-			const nodeBottom = nodeY + nodeSize.height;
+			const nodeLeft = node.position.x;
+			const nodeRight = nodeLeft + nodeSize.width;
+			const nodeTop = node.position.y;
+			const nodeBottom = nodeTop + nodeSize.height;
 
-			// Verificar si el nodo está en el área entre origen y destino (vertical)
+			// Verificar si el nodo está en el área entre origen y destino (horizontal)
 			return (
-				nodeX < maxX && nodeRight > minX && nodeY < maxY && nodeBottom > minY
+				nodeLeft < maxX &&
+				nodeRight > minX &&
+				nodeTop < maxY &&
+				nodeBottom > minY
 			);
 		});
 
 		if (intermediateNodes.length === 0) {
-			// Sin nodos intermedios, usar curva estándar vertical
-			const curveStrength = Math.min(distance * 0.5, 100);
-			const controlPoint1Y = sy + curveStrength;
-			const controlPoint2Y = ey - curveStrength;
-			return `M ${sx} ${sy} C ${sx} ${controlPoint1Y}, ${ex} ${controlPoint2Y}, ${ex} ${ey}`;
+			// Sin nodos intermedios, usar curva estándar horizontal
+			const curveStrength = Math.min(distance * 0.5, 160);
+			const controlPoint1X = sx + Math.sign(ex - sx) * curveStrength;
+			const controlPoint2X = ex - Math.sign(ex - sx) * curveStrength;
+			return `M ${sx} ${sy} C ${controlPoint1X} ${sy}, ${controlPoint2X} ${ey}, ${ex} ${ey}`;
 		}
 
-		// Hay nodos intermedios, calcular curva que los rodee horizontalmente
-		// Calcular posición promedio horizontal de los nodos intermedios
-		const avgX =
+		// Hay nodos intermedios, calcular curva que los rodee verticalmente
+		// Calcular posición promedio vertical de los nodos intermedios
+		const avgY =
 			intermediateNodes.reduce((sum, node) => {
 				const nodeSize = calculateNodeSize(node);
-				return sum + node.position.x + nodeSize.width / 2;
+				return sum + node.position.y + nodeSize.height / 2;
 			}, 0) / intermediateNodes.length;
 
-		// Decidir si rodear por la izquierda o derecha basado en la posición de los nodos
-		const midX = (sx + ex) / 2;
-		const shouldGoLeft = avgX > midX;
+		// Decidir si rodear por arriba o por abajo basado en la posición de los nodos
+		const midY = (sy + ey) / 2;
+		const shouldGoAbove = avgY > midY;
 
-		// Calcular el punto más izquierdo/derecho de los nodos intermedios
-		const maxNodeRight = Math.max(
+		// Calcular los límites verticales de los nodos intermedios
+		const maxNodeBottom = Math.max(
 			...intermediateNodes.map((n) => {
 				const nodeSize = calculateNodeSize(n);
-				return n.position.x + nodeSize.width;
+				return n.position.y + nodeSize.height;
 			}),
 		);
-		const minNodeLeft = Math.min(...intermediateNodes.map((n) => n.position.x));
+		const minNodeTop = Math.min(...intermediateNodes.map((n) => n.position.y));
 
-		// Calcular offset horizontal para rodear los nodos (con margen de 50px)
-		const margin = 50;
-		const curveX = shouldGoLeft
-			? Math.min(sx, ex, minNodeLeft) - margin // Rodear por la izquierda
-			: Math.max(sx, ex, maxNodeRight) + margin; // Rodear por la derecha
+		// Calcular offset vertical para rodear los nodos (con margen de 60px)
+		const margin = 60;
+		const curveY = shouldGoAbove
+			? Math.min(sy, ey, minNodeTop) - margin // Rodear por arriba
+			: Math.max(sy, ey, maxNodeBottom) + margin; // Rodear por abajo
 
-		// Usar curva más pronunciada con puntos de control horizontales
-		const curveStrength = Math.min(distance * 0.4, 120);
-		const controlPoint1X = curveX;
-		const controlPoint1Y = sy + curveStrength;
-		const controlPoint2X = curveX;
-		const controlPoint2Y = ey - curveStrength;
+		// Usar curva con control points horizontales hacia la zona libre
+		const curveStrength = Math.min(distance * 0.4, 160);
+		const direction = Math.sign(ex - sx) || 1;
+		const controlPoint1X = sx + direction * curveStrength;
+		const controlPoint2X = ex - direction * curveStrength;
 
-		return `M ${sx} ${sy} C ${controlPoint1X} ${controlPoint1Y}, ${controlPoint2X} ${controlPoint2Y}, ${ex} ${ey}`;
+		return `M ${sx} ${sy} C ${controlPoint1X} ${curveY}, ${controlPoint2X} ${curveY}, ${ex} ${ey}`;
 	};
+
+	const pathEndY = endY;
 
 	const path = isRetryEdge
 		? calculateSmartPath(
 				startX,
 				startY,
-				endX,
-				endY,
+				pathEndX,
+				pathEndY,
 				nodes,
 				fromNode.id,
 				toNode.id,
 			)
 		: (() => {
-				// Curva vertical estándar
-				const curveStrength = Math.min(distance * 0.5, 100);
-				const controlPoint1Y = startY + curveStrength;
-				const controlPoint2Y = endY - curveStrength;
-				return `M ${startX} ${startY} C ${startX} ${controlPoint1Y}, ${endX} ${controlPoint2Y}, ${endX} ${endY}`;
+				// Curva horizontal estándar
+				const curveStrength = Math.min(distance * 0.5, 160);
+				const controlPoint1X = startX + direction * curveStrength;
+				const controlPoint2X = pathEndX - direction * curveStrength;
+				return `M ${startX} ${startY} C ${controlPoint1X} ${startY}, ${controlPoint2X} ${pathEndY}, ${pathEndX} ${pathEndY}`;
 			})();
 
-	const midX = (startX + endX) / 2;
-	const midY = (startY + endY) / 2;
+	const midX = (startX + pathEndX) / 2;
+	const midY = (startY + pathEndY) / 2;
 
 	const defaultColor =
 		hasDualOutputs && edge.fromPort
@@ -363,11 +292,8 @@ export function EdgeRenderer({
 						"shift:",
 						e.shiftKey,
 					);
-					if (e.shiftKey) {
-						onDelete();
-					} else {
-						onSelect(e);
-					}
+					// Always call onSelect - let the canvas handle shift+click for selection toggling
+					onSelect(e);
 				}}
 				onMouseEnter={() => console.warn("[v0] Edge hover:", edge.id)}
 			/>
@@ -463,15 +389,16 @@ export function EdgeRenderer({
 			<defs>
 				<marker
 					id={`arrowhead-${edge.id}`}
-					markerWidth="10"
-					markerHeight="10"
-					refX="9"
-					refY="3"
+					markerWidth={ARROW_MARKER_WIDTH}
+					markerHeight={ARROW_MARKER_HEIGHT}
+					refX={0}
+					refY={ARROW_MARKER_REF_Y}
 					orient="auto"
-					markerUnits="strokeWidth"
+					markerUnits="userSpaceOnUse"
+					viewBox={`0 0 ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_HEIGHT}`}
 				>
 					<polygon
-						points="0 0, 10 3, 0 6"
+						points={`0 0, ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_REF_Y}, 0 ${ARROW_MARKER_HEIGHT}`}
 						fill={edgeColor}
 						className="pointer-events-none"
 					/>
@@ -480,15 +407,16 @@ export function EdgeRenderer({
 				{isRetryEdge && (
 					<marker
 						id={`arrowhead-retry-${edge.id}`}
-						markerWidth="10"
-						markerHeight="10"
-						refX="9"
-						refY="3"
+						markerWidth={ARROW_MARKER_WIDTH}
+						markerHeight={ARROW_MARKER_HEIGHT}
+						refX={0}
+						refY={ARROW_MARKER_REF_Y}
 						orient="auto"
-						markerUnits="strokeWidth"
+						markerUnits="userSpaceOnUse"
+						viewBox={`0 0 ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_HEIGHT}`}
 					>
 						<polygon
-							points="0 0, 10 3, 0 6"
+							points={`0 0, ${ARROW_MARKER_WIDTH} ${ARROW_MARKER_REF_Y}, 0 ${ARROW_MARKER_HEIGHT}`}
 							fill={retryColor}
 							fillOpacity="0.7"
 							className="pointer-events-none"

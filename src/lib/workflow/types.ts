@@ -14,21 +14,13 @@ export type NodeType =
 
 export type CheckpointType = "normal" | "safe";
 
-export type Role =
-	| "Solicitante"
-	| "Vendedor"
-	| "Dealer"
-	| "Agente de Crédito"
-	| "Cobranza"
-	| "Admin";
+export type Role = "client" | "seller" | "credit_agent" | "org_manager";
 
 export const ROLE_OPTIONS: Role[] = [
-	"Solicitante",
-	"Vendedor",
-	"Dealer",
-	"Agente de Crédito",
-	"Cobranza",
-	"Admin",
+	"client",
+	"seller",
+	"credit_agent",
+	"org_manager",
 ];
 
 // API Node Failure Handling Configuration
@@ -50,6 +42,54 @@ export interface APIFailureHandling {
 	cachedResponse?: unknown; // Runtime cache
 	cacheKey?: string; // Runtime cache key
 	timeout: number; // milliseconds (5000-300000)
+}
+
+// API Node Authentication Configuration
+export type APIAuthType =
+	| "none"
+	| "bearer"
+	| "api-key"
+	| "oauth2-client-credentials";
+
+export interface APIAuthConfig {
+	type: APIAuthType;
+	// Bearer: env var name whose value is the token
+	bearerToken?: string;
+	// API Key: header name + env var name holding the key value
+	apiKeyHeader?: string;
+	apiKeyValue?: string;
+	// OAuth2 Client Credentials / Password grant
+	oauth2TokenUrl?: string; // env var name or literal URL
+	oauth2ClientId?: string; // env var name
+	oauth2ClientSecret?: string; // env var name
+	oauth2Scope?: string; // env var name (optional)
+	oauth2Username?: string; // env var name (password grant)
+	oauth2Password?: string; // env var name (password grant)
+}
+
+// Custom request headers
+export interface APIHeaderEntry {
+	key: string;
+	value: string; // literal, env var name prefix "env:", or ${nodeId.prop}
+}
+
+// Request body configuration
+export type APIBodyMode = "none" | "raw-json" | "field-mapping";
+
+export interface APIBodyFieldMapping {
+	sourceExpression: string; // ${nodeId.prop} or literal
+	targetKey: string;
+}
+
+export interface APIBodyConfig {
+	mode: APIBodyMode;
+	rawJson?: string;
+	fieldMappings?: APIBodyFieldMapping[];
+}
+
+// Response extraction
+export interface APIResponseConfig {
+	extractPath?: string; // dot-notation, e.g. "payload.data"
 }
 
 export type TimeoutUnit = "seconds" | "minutes" | "hours" | "days";
@@ -121,7 +161,9 @@ export interface WorkflowNode {
 	type: NodeType;
 	checkpointType?: CheckpointType;
 	title: string;
+	titleEs?: string;
 	description: string;
+	descriptionEs?: string;
 	roles: Role[];
 	config: Record<string, unknown>;
 	staleTimeout?: StaleTimeoutConfig | null;
@@ -135,11 +177,35 @@ export function isChallengeNode(
 	return node.type === "Challenge";
 }
 
+export type MessageChannel = "email" | "sms";
+
+export interface MessageMergeVar {
+	key: string;
+	value: string;
+}
+
+export interface MessageNodeConfig extends Record<string, unknown> {
+	channel: MessageChannel;
+	// Email-specific
+	templateName?: string;
+	subject?: string;
+	mergeVars?: MessageMergeVar[];
+	// SMS-specific
+	body?: string;
+}
+
+export function isMessageNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "Message"; config: MessageNodeConfig } {
+	return node.type === "Message";
+}
+
 export interface WorkflowEdge {
 	id: string;
 	from: string;
 	to: string;
 	label: string | null;
+	labelEs?: string | null;
 	fromPort?: "top" | "bottom"; // For Decision/Challenge nodes with two outputs
 	toPort?: "top" | "middle" | "bottom"; // For Join nodes with multiple inputs
 	color?: string; // Custom edge color (defaults to theme colors)
@@ -154,7 +220,9 @@ export interface ValidationError {
 
 export interface WorkflowMetadata {
 	name: string;
+	nameEs?: string;
 	description: string;
+	descriptionEs?: string;
 	version: string;
 	author: string;
 	tags: string[];
@@ -175,13 +243,37 @@ export interface Flag {
 	options: FlagOption[];
 }
 
+// Output Schema Types
+export type SchemaPropertyType =
+	| "string"
+	| "number"
+	| "boolean"
+	| "object"
+	| "array"
+	| "enum";
+
+export interface OutputSchemaProperty {
+	id: string;
+	name: string;
+	type: SchemaPropertyType;
+	description?: string;
+	enumValues?: string[]; // only when type === "enum"
+	items?: OutputSchemaProperty; // only when type === "array"
+	properties?: OutputSchemaProperty[]; // only when type === "object"
+}
+
+export interface OutputSchema {
+	name: string;
+	properties: OutputSchemaProperty[];
+}
+
 export interface WorkflowState {
 	metadata: WorkflowMetadata; // Added metadata to workflow state
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
 	flags: Flag[]; // Global flags for the workflow
-	selectedNodeId: string | null;
-	selectedEdgeId: string | null;
+	selectedNodeIds: string[]; // Multiple node selection support
+	selectedEdgeIds: string[]; // Multiple edge selection support
 	zoom: number;
 	pan: { x: number; y: number };
 	history: Array<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] }>;

@@ -29,12 +29,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface NodeRendererProps {
 	node: WorkflowNode;
 	selected: boolean;
 	errors: ValidationError[];
 	connecting: boolean;
+	isAnyConnectionInProgress?: boolean;
 	highlightCheckpoint?: boolean; // Para iluminar checkpoint cuando API apunta a él
 	flags?: Flag[]; // Flags disponibles para mostrar en nodos FlagChange
 	onMouseDown: (e: React.MouseEvent) => void;
@@ -43,6 +45,7 @@ interface NodeRendererProps {
 		e: React.MouseEvent,
 		port?: "top" | "bottom" | "middle",
 	) => void;
+	onHeightMeasured?: (nodeId: string, height: number) => void;
 }
 
 const NODE_ICONS = {
@@ -60,7 +63,7 @@ const NODE_ICONS = {
 	FlagChange: Tag,
 };
 
-const NODE_BG_COLORS = {
+export const NODE_BG_COLORS = {
 	Start: "var(--node-bg-start)",
 	Reject: "var(--node-bg-end-reject)",
 	End: "var(--node-bg-end)",
@@ -75,7 +78,7 @@ const NODE_BG_COLORS = {
 	FlagChange: "var(--node-bg-status)",
 };
 
-const NODE_ICON_COLORS = {
+export const NODE_ICON_COLORS = {
 	Start: "var(--node-icon-start)",
 	Reject: "var(--node-icon-end-reject)",
 	End: "var(--node-icon-end)",
@@ -90,25 +93,24 @@ const NODE_ICON_COLORS = {
 	FlagChange: "var(--node-icon-status)",
 };
 
-const CHALLENGE_TYPE_LABELS: Record<ChallengeType, string> = {
-	acceptance: "Aceptación",
-	signature: "Firma",
-};
-
 export function NodeRenderer({
 	node,
 	selected,
 	errors,
 	connecting,
+	isAnyConnectionInProgress = false,
 	highlightCheckpoint,
 	flags = [],
 	onMouseDown,
 	onConnectorClick,
+	onHeightMeasured,
 }: NodeRendererProps) {
+	const { t, getFieldLabel } = useLanguage();
 	const nodeRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const [hoveredConnector, setHoveredConnector] = useState<string | null>(null);
 	const [actualNodeHeight, setActualNodeHeight] = useState<number>(0);
+	const [isNodeHovered, setIsNodeHovered] = useState(false);
 	const rightConnectorRef = useRef<HTMLDivElement>(null);
 	const Icon = NODE_ICONS[node.type];
 	const baseIconBackground = NODE_BG_COLORS[node.type];
@@ -203,9 +205,11 @@ export function NodeRenderer({
 	const CONNECTOR_SIZE = 12; // Reducido de 16px a 12px para nodos más compactos
 	const GAP = 12;
 
-	// Calcular ancho dinámico basado en contenido real
-	const titleWidth = node.title.length * 9;
-	const descWidth = node.description ? node.description.length * 7.5 : 0;
+	// Calcular ancho dinámico basado en contenido real (use displayed text)
+	const displayTitle = getFieldLabel(node.title, node.titleEs);
+	const displayDesc = getFieldLabel(node.description, node.descriptionEs);
+	const titleWidth = displayTitle.length * 9;
+	const descWidth = displayDesc ? displayDesc.length * 7.5 : 0;
 
 	// Calcular ancho real de badges de flags basado en el texto
 	let flagsMaxWidth = 0;
@@ -281,37 +285,37 @@ export function NodeRenderer({
 	// Usar altura real medida o estimada
 	const realHeight = actualNodeHeight || NODE_HEIGHT;
 
-	// Conectores de salida en la parte inferior (vertical layout)
-	// Las posiciones deben ser el centro del círculo conector
-	const bottomConnectorPos = hasTwoOutputs
+	// Conectores de salida en el costado derecho (layout horizontal)
+	// Las posiciones representan el centro del círculo conector
+	const singleOutputCenterY = node.position.y + realHeight / 2;
+	const multiOutputPositiveRatio = hasChallengeOutputs ? 0.35 : 0.33;
+	const multiOutputNegativeRatio = hasChallengeOutputs ? 0.65 : 0.67;
+
+	const rightConnectorPos = hasTwoOutputs
 		? null
 		: {
-				x: node.position.x + NODE_WIDTH / 2,
-				y: node.position.y + realHeight + CONNECTOR_SIZE / 2, // Centro del círculo
+				x: node.position.x + NODE_WIDTH + CONNECTOR_SIZE / 2,
+				y: singleOutputCenterY,
 			};
 
-	const multiOutputLeftRatio = hasChallengeOutputs ? 0.35 : 0.33;
-	const multiOutputRightRatio = hasChallengeOutputs ? 0.65 : 0.67;
-
-	const bottomLeftConnectorPos = hasTwoOutputs
+	const rightTopConnectorPos = hasTwoOutputs
 		? {
-				x: node.position.x + NODE_WIDTH * multiOutputLeftRatio,
-				y: node.position.y + realHeight + CONNECTOR_SIZE / 2, // Centro del círculo
+				x: node.position.x + NODE_WIDTH + CONNECTOR_SIZE / 2,
+				y: node.position.y + realHeight * multiOutputPositiveRatio,
 			}
 		: null;
 
-	const bottomRightConnectorPos = hasTwoOutputs
+	const rightBottomConnectorPos = hasTwoOutputs
 		? {
-				x: node.position.x + NODE_WIDTH * multiOutputRightRatio,
-				y: node.position.y + realHeight + CONNECTOR_SIZE / 2, // Centro del círculo
+				x: node.position.x + NODE_WIDTH + CONNECTOR_SIZE / 2,
+				y: node.position.y + realHeight * multiOutputNegativeRatio,
 			}
 		: null;
 
-	// Conectores de entrada en la parte superior (vertical layout)
-	// La posición debe ser el centro del círculo conector
-	const topConnectorPos = {
-		x: node.position.x + NODE_WIDTH / 2,
-		y: node.position.y - CONNECTOR_SIZE / 2, // Centro del círculo
+	// Conectores de entrada en el costado izquierdo (layout horizontal)
+	const leftConnectorPos = {
+		x: node.position.x - CONNECTOR_SIZE / 2,
+		y: singleOutputCenterY,
 	};
 
 	const handleConnectorClick = (
@@ -339,18 +343,26 @@ export function NodeRenderer({
 					// Solo actualizar si hay un cambio significativo (más de 1px de diferencia)
 					if (Math.abs(height - actualNodeHeight) > 1) {
 						setActualNodeHeight(height);
+						onHeightMeasured?.(node.id, height);
 					}
 				}
 			});
 		}
 	}, [
+		node.id,
 		node.title,
+		node.titleEs,
 		node.description,
+		node.descriptionEs,
 		node.roles,
 		node.config,
 		flags,
 		actualNodeHeight,
+		onHeightMeasured,
 	]);
+
+	const showConnectors =
+		selected || isNodeHovered || connecting || isAnyConnectionInProgress;
 
 	return (
 		<div
@@ -363,10 +375,12 @@ export function NodeRenderer({
 				pointerEvents: "auto",
 			}}
 			onMouseDown={onMouseDown}
+			onMouseEnter={() => setIsNodeHovered(true)}
+			onMouseLeave={() => setIsNodeHovered(false)}
 		>
 			<div
 				className={cn(
-					"workflow-node relative cursor-move select-none rounded-lg border bg-card shadow-md transition-all",
+					"workflow-node relative cursor-pointer select-none rounded-lg border bg-card shadow-md transition-all",
 					selected && "selected ring-2 ring-ring ring-offset-1",
 					hasErrors && "border-destructive",
 					connecting && "ring-2 ring-primary",
@@ -393,19 +407,22 @@ export function NodeRenderer({
 						data-testid={hasStaleTimeout ? "stale-indicator" : "safe-indicator"}
 						title={
 							hasStaleTimeout
-								? `Timeout Stale: ${node.staleTimeout?.value} ${
-										node.staleTimeout?.unit === "hours"
-											? "horas"
-											: node.staleTimeout?.unit === "days"
-												? "días"
-												: node.staleTimeout?.unit
-									}`
-								: "Safe checkpoint"
+								? t("canvas.nodeStaleCheckpointTitle")
+										.replace("{value}", String(node.staleTimeout?.value ?? ""))
+										.replace(
+											"{unit}",
+											node.staleTimeout?.unit === "hours"
+												? t("canvas.staleUnitHours")
+												: node.staleTimeout?.unit === "days"
+													? t("canvas.staleUnitDays")
+													: (node.staleTimeout?.unit ?? ""),
+										)
+								: t("canvas.nodeSafeCheckpointTitle")
 						}
 						aria-label={
 							hasStaleTimeout
-								? "Nodo con timeout stale configurado"
-								: "Checkpoint seguro"
+								? t("canvas.nodeStaleAriaLabel")
+								: t("canvas.nodeSafeAriaLabel")
 						}
 					>
 						{hasStaleTimeout ? (
@@ -452,11 +469,11 @@ export function NodeRenderer({
 						<div className="flex items-start justify-between gap-2">
 							<div className="min-w-0 flex-1">
 								<div className="text-base font-semibold leading-tight text-foreground">
-									{node.title}
+									{getFieldLabel(node.title, node.titleEs)}
 								</div>
-								{node.description && (
+								{(node.description || node.descriptionEs) && (
 									<div className="mt-1 text-sm leading-relaxed text-muted-foreground line-clamp-2">
-										{node.description}
+										{getFieldLabel(node.description, node.descriptionEs)}
 									</div>
 								)}
 							</div>
@@ -472,7 +489,7 @@ export function NodeRenderer({
 										key={role}
 										className="rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
 									>
-										{role}
+										{t(`propertiesPanel.roleNames.${role}`)}
 									</span>
 								))}
 								{node.roles.length > 2 && (
@@ -488,7 +505,9 @@ export function NodeRenderer({
 							<div className="mt-2">
 								<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
 									<Shield className="h-3 w-3" />
-									{CHALLENGE_TYPE_LABELS[challengeConfig.challengeType]}
+									{challengeConfig.challengeType === "acceptance"
+										? t("canvas.challengeTypeAcceptance")
+										: t("canvas.challengeTypeSignature")}
 								</span>
 							</div>
 						)}
@@ -500,7 +519,10 @@ export function NodeRenderer({
 								</span>
 								{challengeRetries.roles.length > 0 && (
 									<span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-										{challengeRetries.roles.slice(0, 2).join(", ")}
+										{challengeRetries.roles
+											.slice(0, 2)
+											.map((role) => t(`propertiesPanel.roleNames.${role}`))
+											.join(", ")}
 										{challengeRetries.roles.length > 2 &&
 											` +${challengeRetries.roles.length - 2}`}
 									</span>
@@ -513,8 +535,13 @@ export function NodeRenderer({
 							<div className="mt-2">
 								<span className="rounded-full bg-orange-500/20 px-2 py-1 text-xs font-semibold text-orange-700 dark:text-orange-400">
 									{maxRetries > 0
-										? `Reintentos: ${retryCount}/${maxRetries}`
-										: `Reintentos: ${retryCount} (∞)`}
+										? t("canvas.nodeRetriesLabel")
+												.replace("{count}", String(retryCount))
+												.replace("{max}", String(maxRetries))
+										: t("canvas.nodeRetriesUnlimitedLabel").replace(
+												"{count}",
+												String(retryCount),
+											)}
 								</span>
 							</div>
 						)}
@@ -568,10 +595,12 @@ export function NodeRenderer({
 										"return-to-checkpoint": "⏮️",
 									};
 									const labels = {
-										stop: "Detener",
-										continue: "Continuar",
-										retry: "Reintentar",
-										"return-to-checkpoint": "Checkpoint",
+										stop: t("canvas.nodeApiFailureStop"),
+										continue: t("canvas.nodeApiFailureContinue"),
+										retry: t("canvas.nodeApiFailureRetry"),
+										"return-to-checkpoint": t(
+											"canvas.nodeApiFailureCheckpoint",
+										),
 									};
 									return (
 										<div className="mt-2 flex items-center gap-1">
@@ -599,120 +628,140 @@ export function NodeRenderer({
 							<>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputLeftRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-left"
+											hoveredConnector === "right-top"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida positiva (Sí)"
+									title={t("canvas.nodeConnectorPositiveDecision")}
 									onClick={(e) =>
-										handleConnectorClick(bottomLeftConnectorPos!, e, "top")
+										handleConnectorClick(rightTopConnectorPos!, e, "top")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-left")}
+									onMouseEnter={() => setHoveredConnector("right-top")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-positive"
 								/>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputRightRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-right"
+											hoveredConnector === "right-bottom"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida negativa (No / Rechazado)"
+									title={t("canvas.nodeConnectorNegativeDecision")}
 									onClick={(e) =>
-										handleConnectorClick(bottomRightConnectorPos!, e, "bottom")
+										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-right")}
+									onMouseEnter={() => setHoveredConnector("right-bottom")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-negative"
 								/>
 							</>
 						) : hasChallengeOutputs ? (
 							<>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputLeftRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-left"
+											hoveredConnector === "right-top"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida positiva (Aceptado)"
+									title={t("canvas.nodeConnectorPositiveChallenge")}
 									onClick={(e) =>
-										handleConnectorClick(bottomLeftConnectorPos!, e, "top")
+										handleConnectorClick(rightTopConnectorPos!, e, "top")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-left")}
+									onMouseEnter={() => setHoveredConnector("right-top")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-positive"
 								/>
 								<div
 									className={cn(
-										"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-transform",
+										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
 										connecting &&
 											"scale-125 animate-pulse border-primary bg-primary",
+										showConnectors
+											? "pointer-events-auto opacity-100"
+											: "pointer-events-none scale-75 opacity-0",
 									)}
 									style={{
-										left: `${NODE_WIDTH * multiOutputRightRatio - CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+										right: `${-CONNECTOR_SIZE / 2}px`,
+										top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
 										transform:
-											hoveredConnector === "bottom-right"
+											hoveredConnector === "right-bottom"
 												? "scale(1.25)"
 												: "scale(1)",
 										transformOrigin: "center center",
 									}}
-									title="Salida negativa (Rechazado)"
+									title={t("canvas.nodeConnectorNegativeChallenge")}
 									onClick={(e) =>
-										handleConnectorClick(bottomRightConnectorPos!, e, "bottom")
+										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
 									}
 									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("bottom-right")}
+									onMouseEnter={() => setHoveredConnector("right-bottom")}
 									onMouseLeave={() => setHoveredConnector(null)}
+									data-testid="output-connector-negative"
 								/>
 							</>
 						) : (
 							<div
 								ref={rightConnectorRef}
 								className={cn(
-									"workflow-connector pointer-events-auto absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-transform",
+									"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
 									connecting &&
 										"scale-125 animate-pulse border-primary bg-primary",
+									showConnectors
+										? "pointer-events-auto opacity-100"
+										: "pointer-events-none scale-75 opacity-0",
 								)}
 								style={{
-									left: `${NODE_WIDTH / 2 - CONNECTOR_SIZE / 2}px`,
-									top: `${realHeight - CONNECTOR_SIZE / 2}px`,
+									right: `${-CONNECTOR_SIZE / 2}px`,
+									top: `${realHeight / 2 - CONNECTOR_SIZE / 2}px`,
 									transform:
-										hoveredConnector === "bottom" ? "scale(1.25)" : "scale(1)",
+										hoveredConnector === "right" ? "scale(1.25)" : "scale(1)",
 									transformOrigin: "center center",
 								}}
-								title="Conectar a otro nodo"
-								onClick={(e) => handleConnectorClick(bottomConnectorPos!, e)}
+								title={t("canvas.nodeConnectorOutput")}
+								onClick={(e) => handleConnectorClick(rightConnectorPos!, e)}
 								onMouseDown={(e) => e.stopPropagation()}
-								onMouseEnter={() => setHoveredConnector("bottom")}
+								onMouseEnter={() => setHoveredConnector("right")}
 								onMouseLeave={() => setHoveredConnector(null)}
+								data-testid="output-connector"
 							/>
 						)}
 					</>
@@ -722,21 +771,25 @@ export function NodeRenderer({
 				{!isStartNode && (
 					<div
 						className={cn(
-							"workflow-connector pointer-events-auto absolute z-30 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-transform",
+							"workflow-connector absolute z-30 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
 							connecting && "scale-125 animate-pulse border-primary bg-primary",
+							showConnectors
+								? "pointer-events-auto opacity-100"
+								: "pointer-events-none scale-75 opacity-0",
 						)}
 						style={{
-							left: `${NODE_WIDTH / 2 - CONNECTOR_SIZE / 2}px`,
-							top: `${-CONNECTOR_SIZE / 2}px`,
+							left: `${-CONNECTOR_SIZE / 2}px`,
+							top: `${realHeight / 2 - CONNECTOR_SIZE / 2}px`,
 							transform:
-								hoveredConnector === "top" ? "scale(1.25)" : "scale(1)",
+								hoveredConnector === "left" ? "scale(1.25)" : "scale(1)",
 							transformOrigin: "center center",
 						}}
-						title="Punto de entrada"
-						onClick={(e) => handleConnectorClick(topConnectorPos, e)}
+						title={t("canvas.nodeConnectorInput")}
+						onClick={(e) => handleConnectorClick(leftConnectorPos, e, "middle")}
 						onMouseDown={(e) => e.stopPropagation()}
-						onMouseEnter={() => setHoveredConnector("top")}
+						onMouseEnter={() => setHoveredConnector("left")}
 						onMouseLeave={() => setHoveredConnector(null)}
+						data-testid="input-connector"
 					/>
 				)}
 			</div>

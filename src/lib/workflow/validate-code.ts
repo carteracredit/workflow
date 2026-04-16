@@ -1,0 +1,286 @@
+/**
+ * Utilities for validating user-supplied TypeScript code in workflow nodes
+ * (Transform, Decision) before it gets embedded into the generated Cloudflare
+ * Worker. Uses Prettier's standalone TypeScript parser – the same one used by
+ * format-code.ts – so no extra dependencies are needed.
+ *
+ * On top of Prettier's syntax check we run a set of semantic rules that match
+ * what ESBuild (used internally by Wrangler) rejects at build time even though
+ * the TypeScript compiler/Prettier considers the code syntactically valid.
+ */
+
+export interface CodeValidationResult {
+	valid: boolean;
+	error?: string;
+}
+
+/**
+ * Validates TypeScript code written for a Transform node.
+ *
+ * The code is wrapped in the same async-function context it will occupy once
+ * deployed:
+ *
+ *   await step.do("...", async () => {
+ *     <USER CODE>
+ *   });
+ *
+ * so that syntax errors like bare JSON objects (`{"key":"value"}`) are caught
+ * at edit time instead of failing the Cloudflare wrangler build.
+ */
+export async function validateTransformCode(
+	code: string,
+): Promise<CodeValidationResult> {
+	if (!code || code.trim().length === 0) {
+		return {
+			valid: false,
+			error: "El código no puede estar vacío",
+		};
+	}
+
+	// Run semantic checks first (fast, synchronous)
+	const semantic = runSemanticChecks(code);
+	if (!semantic.valid) return semantic;
+
+	const wrapped = `async function __validate() {\n${code}\n}`;
+	return parseTypeScript(wrapped);
+}
+
+/**
+ * Validates a JavaScript/TypeScript expression used as a Decision condition.
+ *
+ * The expression is wrapped in an `if` statement so that the parser can check
+ * it as a complete syntactic unit:
+ *
+ *   if (<CONDITION>) {}
+ *
+ * Variable references inserted by the variable picker use the template syntax
+ * `${nodeId.property}` (e.g. `${node-123.count}`). These are not valid inside
+ * a plain JS expression, so we substitute them with a valid placeholder
+ * identifier before parsing to avoid false-positive syntax errors.
+ *
+ * Beyond syntax, a semantic check flags unquoted identifiers used in equality
+ * comparisons (e.g. `${node.product} == HVAC`) that would cause a
+ * `ReferenceError` at runtime because `HVAC` is treated as a variable name
+ * rather than a string literal.
+ */
+export async function validateConditionExpression(
+	condition: string,
+): Promise<CodeValidationResult> {
+	if (!condition || condition.trim().length === 0) {
+		return {
+			valid: false,
+			error: "La condición no puede estar vacía",
+		};
+	}
+
+	// Run semantic checks before the async parser (fast, synchronous)
+	const semantic = runConditionSemanticChecks(condition);
+	if (!semantic.valid) return semantic;
+
+	const normalized = substituteVariableRefs(condition);
+	const wrapped = `if (${normalized}) {}`;
+	return parseTypeScript(wrapped);
+}
+
+/**
+ * Replaces `${some.variable.path}` placeholders (inserted by the variable
+ * picker) with a syntactically-valid identifier so the TypeScript parser can
+ * check the surrounding expression without false-positive errors.
+ */
+export function substituteVariableRefs(expr: string): string {
+	return expr.replace(/\$\{[^}]+\}/g, "__ref__");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Semantic checks – patterns that Prettier accepts but ESBuild/Wrangler rejects
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SemanticRule {
+	/** Regex applied to individual lines (trimmed) */
+	pattern: RegExp;
+	/** Human-readable error in Spanish */
+	message: string;
+}
+
+/**
+ * Rules that match patterns ESBuild rejects at build time.
+ * Applied line by line so we can include the offending line number.
+ */
+const SEMANTIC_RULES: SemanticRule[] = [
+	{
+		// `const x`, `const x;`, `const x: Type`, `const x: Type;`
+		// ESBuild error: "The constant 'X' must be initialized"
+		// Matches any `const` declaration without `=` (with or without trailing `;`).
+		// Prettier auto-adds `;` during formatting, so the user may omit it.
+		pattern: /^const\s+[^=;]+;?$/,
+		message:
+			"Las constantes deben tener un valor asignado (ej. `const x = 0;` en lugar de `const x;`)",
+	},
+];
+
+/**
+ * Runs synchronous semantic checks against the raw user code.
+ * Returns on the first error found.
+ */
+function runSemanticChecks(code: string): CodeValidationResult {
+	const lines = code.split("\n");
+
+	for (let i = 0; i < lines.length; i++) {
+		const trimmed = lines[i].trim();
+
+		// Skip blank lines and comments
+		if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("*")) {
+			continue;
+		}
+
+		for (const rule of SEMANTIC_RULES) {
+			if (rule.pattern.test(trimmed)) {
+				const lineNum = i + 1;
+				return {
+					valid: false,
+					error: `Línea ${lineNum}: ${rule.message}`,
+				};
+			}
+		}
+	}
+
+	return { valid: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Condition semantic checks – catches runtime errors Prettier cannot detect
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * JS identifiers that are safe to use bare (unquoted) in comparisons.
+ * Everything else that looks like `== UPPERCASE_WORD` is flagged as a
+ * possible unquoted string literal.
+ */
+const JS_SAFE_IDENTIFIERS = new Set([
+	"true",
+	"false",
+	"null",
+	"undefined",
+	"NaN",
+	"Infinity",
+]);
+
+/**
+ * Detects unquoted string-like identifiers in equality comparisons that would
+ * cause a `ReferenceError` at runtime (e.g. `product == HVAC` instead of
+ * `product == "HVAC"`).
+ *
+ * After substituting `${...}` references with `__ref__`, the check scans for
+ * patterns like `== WORD` or `!= WORD` where `WORD` starts with an uppercase
+ * letter and is not a known JS keyword/constant.
+ */
+function runConditionSemanticChecks(condition: string): CodeValidationResult {
+	const normalized = substituteVariableRefs(condition);
+
+	// Match bare identifiers on either side of an equality/inequality operator.
+	// Patterns covered:
+	//   lhs == WORD   lhs === WORD   lhs != WORD   lhs !== WORD
+	//   WORD == rhs   WORD === rhs   WORD != rhs   WORD !== rhs
+	const patterns: RegExp[] = [
+		// right-hand side:  == WORD  or  === WORD  or  != WORD  or  !== WORD
+		/(?:={2,3}|!={1,2})\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s|$)/g,
+		// left-hand side:   WORD ==  or  WORD ===  or  WORD !=  or  WORD !==
+		/(?:^|[\s(])([A-Za-z_$][A-Za-z0-9_$]*)\s+(?:={2,3}|!={1,2})/g,
+	];
+
+	for (const regex of patterns) {
+		let match: RegExpExecArray | null;
+		while ((match = regex.exec(normalized)) !== null) {
+			const identifier = match[1];
+
+			// Skip known-safe identifiers and the placeholder we inserted
+			if (JS_SAFE_IDENTIFIERS.has(identifier) || identifier === "__ref__") {
+				continue;
+			}
+
+			// Only flag identifiers that look like values (all-caps, PascalCase,
+			// or SCREAMING_SNAKE) – plain lowercase names are plausible variables.
+			if (/^[A-Z]/.test(identifier)) {
+				return {
+					valid: false,
+					error: `"${identifier}" parece un texto sin comillas. Usa "${identifier}" o '${identifier}' si es un valor de texto, no una variable.`,
+				};
+			}
+		}
+	}
+
+	return { valid: true };
+}
+
+/**
+ * Internal helper: tries to format the given TypeScript snippet with Prettier.
+ * Prettier throws a SyntaxError when the input is not valid TypeScript, which
+ * is exactly the signal we need.
+ */
+async function parseTypeScript(source: string): Promise<CodeValidationResult> {
+	try {
+		const [prettier, { default: pluginTypeScript }, { default: pluginEstree }] =
+			await Promise.all([
+				import("prettier/standalone"),
+				import("prettier/plugins/typescript"),
+				import("prettier/plugins/estree"),
+			]);
+
+		await prettier.format(source, {
+			parser: "typescript",
+			useTabs: true,
+			singleQuote: false,
+			semi: true,
+			trailingComma: "all",
+			printWidth: 80,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			plugins: [pluginEstree as any, pluginTypeScript as any],
+		});
+
+		return { valid: true };
+	} catch (err) {
+		const message =
+			err instanceof Error ? err.message : "Error de sintaxis desconocido";
+		return {
+			valid: false,
+			error: sanitizeParserError(message),
+		};
+	}
+}
+
+/**
+ * Strips internal Prettier/Babel noise from error messages and returns a
+ * clean, user-friendly string in Spanish.
+ */
+function sanitizeParserError(raw: string): string {
+	// Prettier wraps parse errors with "xxx (N:M)\n..." – extract the core part
+	const match = raw.match(/^(.+?)\s*\(\d+:\d+\)/);
+	const core = match ? match[1].trim() : raw.split("\n")[0].trim();
+
+	// Common TypeScript/Babel parser messages → Spanish equivalents
+	const known: Array<[RegExp, string]> = [
+		[/unexpected token/i, "Token inesperado en el código"],
+		[
+			/expected\s+"?;?"?\s+but found/i,
+			"Se esperaba ';' pero se encontró otro token",
+		],
+		[/unterminated string/i, "Cadena de texto sin cerrar"],
+		[
+			/unexpected end of input/i,
+			"Fin de código inesperado (falta cerrar algo)",
+		],
+		[/missing semicolon/i, "Falta punto y coma"],
+		[
+			/identifier directly after number/i,
+			"Identificador inválido después de un número",
+		],
+	];
+
+	for (const [pattern, spanish] of known) {
+		if (pattern.test(core)) {
+			return spanish;
+		}
+	}
+
+	return core || "Error de sintaxis en el código TypeScript";
+}

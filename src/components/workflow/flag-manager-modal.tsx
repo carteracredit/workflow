@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { Flag, FlagOption } from "@/lib/workflow/types";
 import {
 	Dialog,
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, Edit2, X, Check } from "lucide-react";
+import { Plus, Trash2, Edit2, X, Check, Loader2 } from "lucide-react";
 import {
 	validateFlag,
 	validateFlagsUnique,
@@ -23,14 +23,20 @@ import {
 import { ColorPicker } from "./color-picker";
 import { cn } from "@/lib/utils";
 import type { TailwindColor500 } from "@/lib/flag-manager";
+import { createFlag, updateFlag, deleteFlag } from "@/lib/workflow-api/flags";
+import { extractApiErrorMessage } from "@/lib/workflow-api/http";
+import { toast } from "sonner";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface FlagManagerModalProps {
+	workflowId: string;
 	flags: Flag[];
 	onClose: () => void;
 	onUpdateFlags: (flags: Flag[]) => void;
 }
 
 export function FlagManagerModal({
+	workflowId,
 	flags,
 	onClose,
 	onUpdateFlags,
@@ -38,6 +44,9 @@ export function FlagManagerModal({
 	const [editingFlag, setEditingFlag] = useState<Flag | null>(null);
 	const [isCreating, setIsCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [isSaving, setIsSaving] = useState(false);
+	const [deletingId, setDeletingId] = useState<string | null>(null);
+	const { t } = useLanguage();
 
 	const handleCreateFlag = () => {
 		setEditingFlag(createDefaultFlag());
@@ -54,44 +63,105 @@ export function FlagManagerModal({
 		setError(null);
 	};
 
-	const handleDeleteFlag = (flagId: string) => {
-		if (window.confirm("¿Estás seguro de que deseas eliminar este flag?")) {
-			onUpdateFlags(flags.filter((f) => f.id !== flagId));
-		}
-	};
+	const handleDeleteFlag = useCallback(
+		async (flagId: string) => {
+			const flag = flags.find((f) => f.id === flagId);
+			if (!flag) return;
 
-	const handleSaveFlag = () => {
+			// Check if nodes reference this flag
+			const confirmMsg = t("flagManager.confirmDelete").replace(
+				"{name}",
+				flag.name,
+			);
+			if (!window.confirm(confirmMsg)) return;
+
+			setDeletingId(flagId);
+			try {
+				await deleteFlag(workflowId, flagId);
+				onUpdateFlags(flags.filter((f) => f.id !== flagId));
+				toast.success(t("flagManager.toastDeleted"));
+			} catch (err) {
+				const msg = extractApiErrorMessage(err);
+				toast.error(t("flagManager.toastDeleteError"), { description: msg });
+			} finally {
+				setDeletingId(null);
+			}
+		},
+		[workflowId, flags, onUpdateFlags],
+	);
+
+	const handleSaveFlag = useCallback(async () => {
 		if (!editingFlag) return;
 
 		const validation = validateFlag(editingFlag);
 		if (!validation.valid) {
-			setError(validation.error || "Error de validación");
+			setError(validation.error || t("flagManager.validationAtLeastOneOption"));
 			return;
 		}
 
-		// Validar que no haya duplicados
 		const otherFlags = isCreating
 			? flags
 			: flags.filter((f) => f.id !== editingFlag.id);
 		const allFlags = [...otherFlags, editingFlag];
 		const uniqueValidation = validateFlagsUnique(allFlags);
 		if (!uniqueValidation.valid) {
-			setError(uniqueValidation.error || "Ya existe un flag con ese nombre");
+			setError(
+				uniqueValidation.error || t("flagManager.validationDuplicateName"),
+			);
 			return;
 		}
 
-		if (isCreating) {
-			onUpdateFlags([...flags, editingFlag]);
-		} else {
-			onUpdateFlags(
-				flags.map((f) => (f.id === editingFlag.id ? editingFlag : f)),
-			);
-		}
-
-		setEditingFlag(null);
-		setIsCreating(false);
+		setIsSaving(true);
 		setError(null);
-	};
+
+		try {
+			if (isCreating) {
+				const created = await createFlag(workflowId, {
+					id: editingFlag.id,
+					name: editingFlag.name,
+					options: editingFlag.options,
+				});
+				// Sync backend response (preserves sort_order, created_at, etc.)
+				const newFlag: Flag = {
+					id: created.id,
+					name: created.name,
+					options: created.options.map((opt) => ({
+						id: opt.id,
+						label: opt.label,
+						color: opt.color,
+					})),
+				};
+				onUpdateFlags([...flags, newFlag]);
+				toast.success(t("flagManager.toastCreated"));
+			} else {
+				const updated = await updateFlag(workflowId, editingFlag.id, {
+					name: editingFlag.name,
+					options: editingFlag.options,
+				});
+				const updatedFlag: Flag = {
+					id: updated.id,
+					name: updated.name,
+					options: updated.options.map((opt) => ({
+						id: opt.id,
+						label: opt.label,
+						color: opt.color,
+					})),
+				};
+				onUpdateFlags(
+					flags.map((f) => (f.id === editingFlag.id ? updatedFlag : f)),
+				);
+				toast.success(t("flagManager.toastUpdated"));
+			}
+
+			setEditingFlag(null);
+			setIsCreating(false);
+		} catch (err) {
+			const msg = extractApiErrorMessage(err);
+			setError(msg);
+		} finally {
+			setIsSaving(false);
+		}
+	}, [editingFlag, isCreating, flags, workflowId, onUpdateFlags, t]);
 
 	const handleCancelEdit = () => {
 		setEditingFlag(null);
@@ -110,7 +180,7 @@ export function FlagManagerModal({
 	const handleRemoveOption = (optionId: string) => {
 		if (!editingFlag) return;
 		if (editingFlag.options.length <= 1) {
-			setError("El flag debe tener al menos una opción");
+			setError(t("flagManager.validationAtLeastOneOption"));
 			return;
 		}
 		setEditingFlag({
@@ -141,28 +211,28 @@ export function FlagManagerModal({
 				)}
 			>
 				<DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
-					<DialogTitle>Gestionar Flags</DialogTitle>
+					<DialogTitle>{t("flagManager.title")}</DialogTitle>
 				</DialogHeader>
 
 				{!editingFlag ? (
 					<div className="flex flex-col flex-1 min-h-0">
 						<div className="px-6 py-4 border-b flex justify-between items-center flex-shrink-0">
 							<p className="text-sm text-muted-foreground">
-								Define flags con opciones y colores distintivos
+								{t("flagManager.subtitle")}
 							</p>
 							<Button onClick={handleCreateFlag} size="sm">
 								<Plus className="h-4 w-4 mr-2" />
-								Crear Flag
+								{t("flagManager.createFlag")}
 							</Button>
 						</div>
 
 						{flags.length === 0 ? (
 							<div className="px-6 py-8 flex flex-col items-center justify-center text-center flex-1">
 								<p className="font-medium mb-1 text-foreground">
-									No hay flags definidos
+									{t("flagManager.noFlagsTitle")}
 								</p>
 								<p className="text-sm text-muted-foreground mb-4">
-									Crea tu primer flag para comenzar
+									{t("flagManager.noFlagsDesc")}
 								</p>
 							</div>
 						) : (
@@ -180,8 +250,15 @@ export function FlagManagerModal({
 															{flag.name}
 														</h3>
 														<p className="text-xs text-muted-foreground mt-0.5">
-															{flag.options.length} opción
-															{flag.options.length !== 1 ? "es" : ""}
+															{flag.options.length === 1
+																? t("flagManager.optionCount_one").replace(
+																		"{n}",
+																		"1",
+																	)
+																: t("flagManager.optionCount_other").replace(
+																		"{n}",
+																		String(flag.options.length),
+																	)}
 														</p>
 													</div>
 													<div className="flex gap-1">
@@ -190,6 +267,7 @@ export function FlagManagerModal({
 															size="sm"
 															onClick={() => handleEditFlag(flag)}
 															className="h-8 w-8 p-0"
+															disabled={deletingId === flag.id}
 														>
 															<Edit2 className="h-4 w-4" />
 														</Button>
@@ -198,8 +276,13 @@ export function FlagManagerModal({
 															size="sm"
 															onClick={() => handleDeleteFlag(flag.id)}
 															className="h-8 w-8 p-0"
+															disabled={deletingId === flag.id}
 														>
-															<Trash2 className="h-4 w-4" />
+															{deletingId === flag.id ? (
+																<Loader2 className="h-4 w-4 animate-spin" />
+															) : (
+																<Trash2 className="h-4 w-4" />
+															)}
 														</Button>
 													</div>
 												</div>
@@ -226,7 +309,7 @@ export function FlagManagerModal({
 
 						<div className="px-6 py-4 border-t flex justify-end flex-shrink-0">
 							<Button variant="outline" onClick={onClose}>
-								Cerrar
+								{t("flagManager.close")}
 							</Button>
 						</div>
 					</div>
@@ -235,7 +318,7 @@ export function FlagManagerModal({
 						<div className="px-6 py-4 border-b space-y-4 flex-shrink-0">
 							<div className="space-y-2">
 								<Label htmlFor="flag-name" className="text-sm font-medium">
-									Nombre del Flag
+									{t("flagManager.flagNameLabel")}
 								</Label>
 								<Input
 									id="flag-name"
@@ -243,16 +326,24 @@ export function FlagManagerModal({
 									onChange={(e) =>
 										setEditingFlag({ ...editingFlag, name: e.target.value })
 									}
-									placeholder="Ej: Prioridad, Estado, Categoría..."
+									placeholder={t("flagManager.flagNamePlaceholder")}
 									className="w-full"
+									disabled={isSaving}
 								/>
 							</div>
 
 							<div className="flex justify-between items-center">
-								<Label className="text-sm font-medium">Opciones</Label>
-								<Button variant="outline" size="sm" onClick={handleAddOption}>
+								<Label className="text-sm font-medium">
+									{t("flagManager.optionsLabel")}
+								</Label>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={handleAddOption}
+									disabled={isSaving}
+								>
 									<Plus className="h-4 w-4 mr-2" />
-									Agregar Opción
+									{t("flagManager.addOption")}
 								</Button>
 							</div>
 						</div>
@@ -280,8 +371,11 @@ export function FlagManagerModal({
 																label: e.target.value,
 															})
 														}
-														placeholder={`Opción ${index + 1}`}
+														placeholder={t(
+															"flagManager.optionPlaceholder",
+														).replace("{n}", String(index + 1))}
 														className="w-full"
+														disabled={isSaving}
 													/>
 												</div>
 												{editingFlag.options.length > 1 && (
@@ -290,6 +384,7 @@ export function FlagManagerModal({
 														size="sm"
 														onClick={() => handleRemoveOption(option.id)}
 														className="h-9 w-9 p-0 flex-shrink-0"
+														disabled={isSaving}
 													>
 														<X className="h-4 w-4" />
 													</Button>
@@ -308,12 +403,22 @@ export function FlagManagerModal({
 						)}
 
 						<div className="px-6 py-4 border-t flex justify-end gap-2 flex-shrink-0">
-							<Button variant="outline" onClick={handleCancelEdit}>
-								Cancelar
+							<Button
+								variant="outline"
+								onClick={handleCancelEdit}
+								disabled={isSaving}
+							>
+								{t("flagManager.cancel")}
 							</Button>
-							<Button onClick={handleSaveFlag}>
-								<Check className="h-4 w-4 mr-2" />
-								{isCreating ? "Crear" : "Guardar"}
+							<Button onClick={handleSaveFlag} disabled={isSaving}>
+								{isSaving ? (
+									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+								) : (
+									<Check className="h-4 w-4 mr-2" />
+								)}
+								{isCreating
+									? t("flagManager.create")
+									: t("flagManager.saveChanges")}
 							</Button>
 						</div>
 					</>

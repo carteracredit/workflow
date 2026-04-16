@@ -1,7 +1,7 @@
 "use client";
 
-import { WorkflowEditor } from "@/components/WorkflowEditor";
+import { WorkflowList } from "@/components/WorkflowList";
 
 export default function Home() {
-	return <WorkflowEditor />;
+	return <WorkflowList />;
 }

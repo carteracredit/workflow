@@ -1,15 +1,38 @@
 import type { Preview } from "@storybook/react";
-import { useEffect } from "react";
+import { ReactNode, useEffect } from "react";
+import { useTheme } from "next-themes";
 
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { LanguageProvider } from "@/components/LanguageProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "../src/app/globals.css";
+
+type ThemeOption = "light" | "dark" | "system";
+
+const ThemeSync = ({
+	theme,
+	children,
+}: {
+	theme: ThemeOption;
+	children: ReactNode;
+}) => {
+	const { setTheme } = useTheme();
+
+	useEffect(() => {
+		setTheme(theme);
+	}, [theme, setTheme]);
+
+	return <>{children}</>;
+};
 
 export const globalTypes = {
 	theme: {
 		description: "Global theme for components (light/dark)",
-		defaultValue: "light",
+		defaultValue: "system",
 		toolbar: {
 			icon: "mirror",
 			items: [
+				{ value: "system", title: "System" },
 				{ value: "light", title: "Light" },
 				{ value: "dark", title: "Dark" },
 			],
@@ -31,20 +54,30 @@ const preview: Preview = {
 			default: "app",
 			values: [{ name: "app", value: "transparent" }],
 		},
+		// All components in this app use the Next.js App Router (next/navigation).
+		// This ensures @storybook/nextjs calls createNavigation() instead of
+		// createRouter(), so useRouter() mocks are available in every story.
+		nextjs: {
+			appDirectory: true,
+		},
 	},
 	decorators: [
 		(Story, context) => {
-			const theme = context.globals.theme as string | undefined;
-
-			useEffect(() => {
-				const root = document.documentElement;
-				root.classList.toggle("dark", theme === "dark");
-			}, [theme]);
+			const theme =
+				(context.globals.theme as ThemeOption | undefined) ?? "system";
 
 			return (
-				<div className="min-h-screen bg-background text-foreground p-6">
-					<Story />
-				</div>
+				<LanguageProvider defaultLanguage="es">
+					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+						<ThemeSync theme={theme}>
+							<TooltipProvider delayDuration={300}>
+								<div className="min-h-screen bg-background text-foreground p-6">
+									<Story />
+								</div>
+							</TooltipProvider>
+						</ThemeSync>
+					</ThemeProvider>
+				</LanguageProvider>
 			);
 		},
 	],

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { WorkflowNode, WorkflowEdge } from "@/lib/workflow/types";
+import type { WorkflowNode, WorkflowEdge, Flag } from "@/lib/workflow/types";
 import {
 	Dialog,
 	DialogContent,
@@ -11,12 +11,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Download, Upload } from "lucide-react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface JSONModalProps {
 	mode: "export" | "import";
-	workflow: { nodes: WorkflowNode[]; edges: WorkflowEdge[] };
+	workflow: { nodes: WorkflowNode[]; edges: WorkflowEdge[]; flags: Flag[] };
 	onClose: () => void;
-	onImport: (data: { nodes: WorkflowNode[]; edges: WorkflowEdge[] }) => void;
+	onImport: (data: {
+		nodes: WorkflowNode[];
+		edges: WorkflowEdge[];
+		flags: Flag[];
+	}) => void;
 }
 
 export function JSONModal({
@@ -38,23 +43,29 @@ export function JSONModal({
 			: "",
 	);
 	const [error, setError] = useState<string | null>(null);
+	const { t } = useLanguage();
 
 	const handleImport = () => {
 		try {
 			const data = JSON.parse(jsonText);
 
 			if (!data.nodes || !Array.isArray(data.nodes)) {
-				throw new Error('Formato inválido: falta el array "nodes"');
+				throw new Error(t("jsonModal.errorInvalidNodes"));
 			}
 
 			if (!data.edges || !Array.isArray(data.edges)) {
-				throw new Error('Formato inválido: falta el array "edges"');
+				throw new Error(t("jsonModal.errorInvalidEdges"));
 			}
 
-			onImport({ nodes: data.nodes, edges: data.edges });
+			// flags is optional for backwards compatibility with older exports
+			const flags: Flag[] = Array.isArray(data.flags) ? data.flags : [];
+
+			onImport({ nodes: data.nodes, edges: data.edges, flags });
 			setError(null);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Error al parsear JSON");
+			setError(
+				err instanceof Error ? err.message : t("jsonModal.errorParseJson"),
+			);
 		}
 	};
 
@@ -76,12 +87,12 @@ export function JSONModal({
 						{mode === "export" ? (
 							<span className="flex items-center gap-2">
 								<Download className="h-5 w-5" />
-								Exportar JSON
+								{t("jsonModal.exportTitle")}
 							</span>
 						) : (
 							<span className="flex items-center gap-2">
 								<Upload className="h-5 w-5" />
-								Importar JSON
+								{t("jsonModal.importTitle")}
 							</span>
 						)}
 					</DialogTitle>
@@ -96,7 +107,7 @@ export function JSONModal({
 								className="font-mono text-xs h-full min-h-[200px] resize-none border-0 focus-visible:ring-0"
 								readOnly={mode === "export"}
 								placeholder={
-									mode === "import" ? "Pega el JSON del flujo aquí..." : ""
+									mode === "import" ? t("jsonModal.importPlaceholder") : ""
 								}
 							/>
 						</div>
@@ -110,17 +121,17 @@ export function JSONModal({
 
 					<div className="flex justify-end gap-2 flex-shrink-0">
 						<Button variant="outline" onClick={onClose}>
-							Cancelar
+							{t("jsonModal.cancel")}
 						</Button>
 						{mode === "export" ? (
 							<Button onClick={handleDownload}>
 								<Download className="mr-2 h-4 w-4" />
-								Descargar
+								{t("jsonModal.download")}
 							</Button>
 						) : (
 							<Button onClick={handleImport}>
 								<Upload className="mr-2 h-4 w-4" />
-								Importar
+								{t("jsonModal.import")}
 							</Button>
 						)}
 					</div>

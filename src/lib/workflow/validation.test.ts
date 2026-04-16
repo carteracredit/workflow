@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateWorkflow } from "./validation";
+import { validateWorkflow, validateWorkflowWithSyntax } from "./validation";
 import {
 	createDefaultChallengeConfig,
 	type WorkflowNode,
@@ -327,7 +327,7 @@ describe("validateWorkflow", () => {
 					type: "Form",
 					title: "Form",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: { formId: "form-1" },
 					position: { x: 100, y: 0 },
 					groupId: null,
@@ -395,7 +395,7 @@ describe("validateWorkflow", () => {
 					type: "Form",
 					title: "Form",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: {},
 					position: { x: 100, y: 0 },
 					groupId: null,
@@ -589,7 +589,111 @@ describe("validateWorkflow", () => {
 	});
 
 	describe("Message node validation", () => {
-		it("should error when Message node has no template", () => {
+		it("should error when Message node has no channel defined", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["client"],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "message-1" && e.message.includes("canal de entrega"),
+				),
+			).toBe(true);
+		});
+
+		it("should error when email Message node has no templateName", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["client"],
+					config: { channel: "email" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "message-1" &&
+						e.message.includes("template de Mandrill"),
+				),
+			).toBe(true);
+		});
+
+		it("should error when sms Message node has no body", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["client"],
+					config: { channel: "sms" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "message-1" &&
+						e.message.includes("cuerpo del mensaje SMS"),
+				),
+			).toBe(true);
+		});
+
+		it("should error when Message node has no roles (destinatarios)", () => {
 			const nodes: WorkflowNode[] = [
 				{
 					id: "start-1",
@@ -607,7 +711,7 @@ describe("validateWorkflow", () => {
 					title: "Message",
 					description: "",
 					roles: [],
-					config: {},
+					config: { channel: "email", templateName: "my-template" },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -618,8 +722,89 @@ describe("validateWorkflow", () => {
 			expect(
 				errors.some(
 					(e) =>
-						e.nodeId === "message-1" &&
-						e.message.includes("template de mensaje"),
+						e.nodeId === "message-1" && e.message.includes("rol destinatario"),
+				),
+			).toBe(true);
+		});
+
+		it("should pass when email Message node has all required fields", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["client"],
+					config: {
+						channel: "email",
+						templateName: "my-template",
+						mergeVars: [],
+					},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const messageErrors = errors.filter((e) => e.nodeId === "message-1");
+			// Only connectivity/structural errors (no End node), no Message-specific errors
+			expect(
+				messageErrors.every(
+					(e) =>
+						!e.message.includes("canal") &&
+						!e.message.includes("template") &&
+						!e.message.includes("rol"),
+				),
+			).toBe(true);
+		});
+
+		it("should pass when sms Message node has all required fields", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "message-1",
+					type: "Message",
+					title: "Message",
+					description: "",
+					roles: ["seller"],
+					config: {
+						channel: "sms",
+						body: "Tu solicitud fue procesada",
+					},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const messageErrors = errors.filter((e) => e.nodeId === "message-1");
+			expect(
+				messageErrors.every(
+					(e) =>
+						!e.message.includes("canal") &&
+						!e.message.includes("SMS") &&
+						!e.message.includes("rol"),
 				),
 			).toBe(true);
 		});
@@ -643,7 +828,7 @@ describe("validateWorkflow", () => {
 					type: "Challenge",
 					title: "Challenge",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: {},
 					position: { x: 100, y: 0 },
 					groupId: null,
@@ -678,7 +863,7 @@ describe("validateWorkflow", () => {
 					type: "Challenge",
 					title: "Challenge",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: {
 						...createDefaultChallengeConfig("acceptance"),
 						challengeTimeout: { value: 0, unit: "minutes" },
@@ -716,7 +901,7 @@ describe("validateWorkflow", () => {
 					type: "Challenge",
 					title: "Challenge",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: {
 						challengeType: "acceptance",
 						challengeTimeout: { value: 5, unit: "minutes" },
@@ -843,7 +1028,7 @@ describe("validateWorkflow", () => {
 					type: "Form",
 					title: "Form",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: { formId: "form-1" },
 					position: { x: 100, y: 0 },
 					groupId: null,
@@ -873,5 +1058,420 @@ describe("validateWorkflow", () => {
 				),
 			).toBe(true);
 		});
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateWorkflowWithSyntax tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+const makeNode = (
+	overrides: Partial<WorkflowNode> & {
+		id: string;
+		type: WorkflowNode["type"];
+	},
+): WorkflowNode => ({
+	title: overrides.type,
+	description: "",
+	roles: [],
+	config: {},
+	position: { x: 0, y: 0 },
+	groupId: null,
+	staleTimeout: null,
+	...overrides,
+});
+
+describe("validateWorkflowWithSyntax", () => {
+	it("should pass for a structurally valid workflow with valid Transform code", async () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "t",
+				type: "Transform",
+				title: "Calcular",
+				config: { code: "return { ok: true };" },
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "t", label: null },
+			{ id: "e2", from: "t", to: "end", label: null },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		expect(errors.filter((e) => e.severity === "error")).toHaveLength(0);
+	});
+
+	it("should add an error for Transform node with invalid code", async () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "t",
+				type: "Transform",
+				title: "Transformación 1",
+				config: { code: '"example":"example"' },
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "t", label: null },
+			{ id: "e2", from: "t", to: "end", label: null },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "t" &&
+					e.severity === "error" &&
+					e.message.includes("Transformación 1"),
+			),
+		).toBe(true);
+	});
+
+	it("should add a warning for Decision node with invalid condition", async () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "d",
+				type: "Decision",
+				title: "Decisión",
+				config: { condition: "amount >" },
+			}),
+			makeNode({ id: "end-yes", type: "End", title: "Aprobado" }),
+			makeNode({ id: "end-no", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "d", label: null },
+			{ id: "e2", from: "d", to: "end-yes", label: null, fromPort: "top" },
+			{ id: "e3", from: "d", to: "end-no", label: null, fromPort: "bottom" },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "d" &&
+					e.severity === "warning" &&
+					e.message.includes("Decisión"),
+			),
+		).toBe(true);
+	});
+
+	it("should include structural errors alongside syntax errors", async () => {
+		// No End node (structural error) + invalid Transform code (syntax error)
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "t",
+				type: "Transform",
+				title: "Bad",
+				config: { code: '{"bad": "json"}' },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "t", label: null },
+		];
+
+		const errors = await validateWorkflowWithSyntax(nodes, edges);
+		// Should have at least one structural error (no End) and one syntax error
+		expect(errors.some((e) => e.message.includes("finalización"))).toBe(true);
+		expect(errors.some((e) => e.nodeId === "t")).toBe(true);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateWorkflow – orphan flag references (Etapa 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateWorkflow – FlagChange empty config", () => {
+	it("should warn when FlagChange has no flag changes configured", () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "fc",
+				type: "FlagChange",
+				title: "Cambiar Estado",
+				config: {},
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "fc", label: null },
+			{ id: "e2", from: "fc", to: "end", label: null },
+		];
+
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "warning" &&
+					e.message.includes("al menos un cambio de flag"),
+			),
+		).toBe(true);
+	});
+
+	it("should warn when FlagChange has empty flagChanges array", () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "fc",
+				type: "FlagChange",
+				title: "Cambiar Estado",
+				config: { flagChanges: [] },
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "fc", label: null },
+			{ id: "e2", from: "fc", to: "end", label: null },
+		];
+
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "warning" &&
+					e.message.includes("al menos un cambio de flag"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn when FlagChange has configured flag changes", () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "fc",
+				type: "FlagChange",
+				title: "Cambiar Estado",
+				config: {
+					flagChanges: [{ flagId: "flag-a", optionId: "opt-1" }],
+				},
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "fc", label: null },
+			{ id: "e2", from: "fc", to: "end", label: null },
+		];
+
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" && e.message.includes("al menos un cambio de flag"),
+			),
+		).toBe(false);
+	});
+});
+
+describe("validateWorkflow – FlagChange orphan references", () => {
+	const flagA = {
+		id: "flag-a",
+		name: "Estado",
+		options: [
+			{ id: "opt-1", label: "Pendiente", color: "yellow-500" },
+			{ id: "opt-2", label: "Aprobado", color: "green-500" },
+		],
+	};
+
+	const baseNodes = (
+		flagChanges: Array<{ flagId: string; optionId: string }>,
+	) => [
+		makeNode({ id: "start", type: "Start", title: "Inicio" }),
+		makeNode({
+			id: "fc",
+			type: "FlagChange",
+			title: "Cambiar Estado",
+			config: { flagChanges },
+		}),
+		makeNode({ id: "end", type: "End", title: "Fin" }),
+	];
+
+	const baseEdges: WorkflowEdge[] = [
+		{ id: "e1", from: "start", to: "fc", label: null },
+		{ id: "e2", from: "fc", to: "end", label: null },
+	];
+
+	it("should pass when all flag references are valid", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-a", optionId: "opt-1" }]),
+			baseEdges,
+			[flagA],
+		);
+		const flagErrors = errors.filter((e) => e.nodeId === "fc");
+		expect(
+			flagErrors.filter((e) => e.message.includes("inexistente")),
+		).toHaveLength(0);
+	});
+
+	it("should report error when flagId does not exist in flags array", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-nonexistent", optionId: "opt-1" }]),
+			baseEdges,
+			[flagA],
+		);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "error" &&
+					e.message.includes("flag inexistente"),
+			),
+		).toBe(true);
+	});
+
+	it("should report error when optionId does not exist in the flag", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-a", optionId: "opt-nonexistent" }]),
+			baseEdges,
+			[flagA],
+		);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "error" &&
+					e.message.includes("opción inexistente"),
+			),
+		).toBe(true);
+	});
+
+	it("should not run flag validation when flags array is empty (backwards compat)", () => {
+		const errors = validateWorkflow(
+			baseNodes([{ flagId: "flag-a", optionId: "opt-1" }]),
+			baseEdges,
+			// no flags passed = backwards compatible behaviour
+		);
+		const flagErrors = errors.filter(
+			(e) => e.nodeId === "fc" && e.message.includes("inexistente"),
+		);
+		expect(flagErrors).toHaveLength(0);
+	});
+});
+
+describe("node title validation", () => {
+	const makeMinimalWorkflow = (title: string) => {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "form",
+				type: "Form",
+				title,
+				description: "",
+				roles: ["org_manager"],
+				config: { formId: "form-id-1" },
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 200, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form", label: null },
+			{ id: "e2", from: "form", to: "end", label: null },
+		];
+		return { nodes, edges };
+	};
+
+	it("should warn when a node title starts with a digit", () => {
+		const { nodes, edges } = makeMinimalWorkflow("1er Formulario");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.severity === "warning" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(true);
+	});
+
+	it("should warn when a node title starts with a special character", () => {
+		const { nodes, edges } = makeMinimalWorkflow("@Formulario");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.severity === "warning" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn when a node title starts with a letter", () => {
+		const { nodes, edges } = makeMinimalWorkflow("Formulario de datos");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(false);
+	});
+
+	it("should not warn when a node title starts with an underscore", () => {
+		const { nodes, edges } = makeMinimalWorkflow("_internal");
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "form" &&
+					e.message.includes("número o carácter especial"),
+			),
+		).toBe(false);
+	});
+
+	it("should not apply title validation to Start, End, or Reject nodes", () => {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "1Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "2Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some((e) => e.message.includes("número o carácter especial")),
+		).toBe(false);
 	});
 });

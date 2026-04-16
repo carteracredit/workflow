@@ -24,7 +24,7 @@ describe("validateWorkflow - Branch Coverage", () => {
 				type: "Challenge",
 				title: "Challenge",
 				description: "",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					...createDefaultChallengeConfig("acceptance", {
 						challengeTimeout: { value: 5, unit: "minutes" },
@@ -85,7 +85,7 @@ describe("validateWorkflow - Branch Coverage", () => {
 				type: "Challenge",
 				title: "Challenge",
 				description: "",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					...createDefaultChallengeConfig("acceptance", {
 						challengeTimeout: { value: 5, unit: "minutes" },
@@ -260,7 +260,7 @@ describe("validateWorkflow - Branch Coverage", () => {
 				type: "Challenge",
 				title: "Challenge",
 				description: "",
-				roles: ["Solicitante"],
+				roles: ["client"],
 				config: {
 					...createDefaultChallengeConfig("acceptance", {
 						challengeTimeout: { value: 5, unit: "minutes" },

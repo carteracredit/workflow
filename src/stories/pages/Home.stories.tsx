@@ -6,6 +6,11 @@ const meta: Meta<typeof Home> = {
 	component: Home,
 	parameters: {
 		layout: "fullscreen",
+		nextjs: {
+			navigation: {
+				pathname: "/",
+			},
+		},
 	},
 };
 

@@ -4,9 +4,15 @@ import type {
 	ValidationError,
 	APIFailureHandling,
 	ChallengeNodeConfig,
+	Flag,
+	MessageNodeConfig,
 } from "./types";
 import { MAX_CHALLENGE_RETRIES } from "./types";
 import { findNearestPreviousCheckpoint } from "./graph-utils";
+import {
+	validateTransformCode,
+	validateConditionExpression,
+} from "./validate-code";
 
 type ChallengeResult = "accepted" | "rejected" | "failed";
 
@@ -38,6 +44,7 @@ const CHALLENGE_RESULT_CONFIG_KEYS = [
 export function validateWorkflow(
 	nodes: WorkflowNode[],
 	edges: WorkflowEdge[],
+	flags: Flag[] = [],
 ): ValidationError[] {
 	const errors: ValidationError[] = [];
 	const { outgoingMap, incomingMap } = buildAdjacencyMaps(edges);
@@ -207,6 +214,20 @@ export function validateWorkflow(
 			});
 		}
 
+		if (node.type === "FlagChange") {
+			const flagChanges =
+				(node.config.flagChanges as
+					| Array<{ flagId: string; optionId: string }>
+					| undefined) || [];
+			if (flagChanges.length === 0) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener al menos un cambio de flag configurado`,
+					severity: "warning",
+				});
+			}
+		}
+
 		if (node.type === "API") {
 			// Validar URL
 			if (!node.config.url) {
@@ -311,12 +332,43 @@ export function validateWorkflow(
 			}
 		}
 
-		if (node.type === "Message" && !node.config.template) {
-			errors.push({
-				nodeId: node.id,
-				message: `"${node.title}" debe tener un template de mensaje`,
-				severity: "error",
-			});
+		if (node.type === "Message") {
+			const config = node.config as MessageNodeConfig | undefined;
+			const channel = config?.channel ?? "email";
+
+			if (!config?.channel) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener un canal de entrega definido`,
+					severity: "error",
+				});
+			}
+
+			if (node.roles.length === 0) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener al menos un rol destinatario`,
+					severity: "error",
+				});
+			}
+
+			if (channel === "email") {
+				if (!config?.templateName) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener un nombre de template de Mandrill`,
+						severity: "error",
+					});
+				}
+			} else if (channel === "sms") {
+				if (!config?.body) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener el cuerpo del mensaje SMS`,
+						severity: "error",
+					});
+				}
+			}
 		}
 
 		if (node.type === "Challenge") {
@@ -441,6 +493,60 @@ export function validateWorkflow(
 			});
 		}
 	});
+
+	// Validación 8: El título de un nodo no debe empezar con número o carácter especial
+	nodes.forEach((node) => {
+		if (
+			node.type === "Start" ||
+			node.type === "End" ||
+			node.type === "Reject"
+		) {
+			return;
+		}
+		const trimmedTitle = node.title.trim();
+		if (trimmedTitle.length > 0 && /^[^a-zA-Z_]/.test(trimmedTitle)) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" no debe empezar con un número o carácter especial`,
+				severity: "warning",
+			});
+		}
+	});
+
+	// Validación 9: FlagChange nodes no pueden referenciar flags u opciones inexistentes
+	if (flags.length > 0) {
+		const flagMap = new Map(flags.map((f) => [f.id, f]));
+
+		nodes
+			.filter((n) => n.type === "FlagChange")
+			.forEach((node) => {
+				const flagChanges =
+					(node.config.flagChanges as
+						| Array<{ flagId: string; optionId: string }>
+						| undefined) || [];
+
+				flagChanges.forEach(({ flagId, optionId }) => {
+					const flag = flagMap.get(flagId);
+					if (!flag) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}": referencia a un flag inexistente (${flagId})`,
+							severity: "error",
+						});
+						return;
+					}
+
+					const optionExists = flag.options.some((opt) => opt.id === optionId);
+					if (!optionExists) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}": referencia a una opción inexistente del flag "${flag.name}" (${optionId})`,
+							severity: "error",
+						});
+					}
+				});
+			});
+	}
 
 	return errors;
 }
@@ -597,4 +703,54 @@ function getConfiguredChallengeResults(
 	}
 
 	return DEFAULT_CHALLENGE_RESULTS;
+}
+
+/**
+ * Extended validation that includes async TypeScript syntax checks for
+ * Transform (error) and Decision (warning) nodes, in addition to all the
+ * structural checks performed by validateWorkflow().
+ *
+ * Use this in the editor's "Validate" action to give early feedback before
+ * publishing.  The publish pipeline also runs validateNodeCodeSyntax()
+ * independently inside generateWorkflowCodeWithProgress().
+ */
+export async function validateWorkflowWithSyntax(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+	flags: Flag[] = [],
+): Promise<ValidationError[]> {
+	const errors = validateWorkflow(nodes, edges, flags);
+
+	const syntaxChecks = nodes
+		.filter(
+			(n) =>
+				(n.type === "Transform" && (n.config.code as string)?.trim()) ||
+				(n.type === "Decision" && (n.config.condition as string)?.trim()),
+		)
+		.map(async (node) => {
+			if (node.type === "Transform") {
+				const result = await validateTransformCode(node.config.code as string);
+				if (!result.valid) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": código TypeScript inválido — ${result.error}`,
+						severity: "error",
+					});
+				}
+			} else if (node.type === "Decision") {
+				const result = await validateConditionExpression(
+					node.config.condition as string,
+				);
+				if (!result.valid) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": condición inválida — ${result.error}`,
+						severity: "warning",
+					});
+				}
+			}
+		});
+
+	await Promise.all(syntaxChecks);
+	return errors;
 }

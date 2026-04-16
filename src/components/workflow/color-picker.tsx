@@ -12,6 +12,7 @@ import {
 	type TailwindColor500,
 } from "@/lib/flag-manager";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface ColorPickerProps {
 	color: TailwindColor500;
@@ -25,6 +26,7 @@ export function ColorPicker({
 	className,
 }: ColorPickerProps) {
 	const [open, setOpen] = useState(false);
+	const { t } = useLanguage();
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -37,13 +39,13 @@ export function ColorPicker({
 					)}
 					style={{ backgroundColor: getColorValue(color) }}
 					title={color}
-					aria-label={`Color seleccionado: ${color}`}
+					aria-label={t("colorPicker.selectedColor").replace("{color}", color)}
 				/>
 			</PopoverTrigger>
 			<PopoverContent className="w-auto p-3" align="start">
 				<div className="space-y-2">
 					<p className="text-xs font-medium text-muted-foreground">
-						Seleccionar color
+						{t("colorPicker.selectColor")}
 					</p>
 					<div className="grid grid-cols-11 gap-2">
 						{TAILWIND_COLORS_500.map((colorOption) => (

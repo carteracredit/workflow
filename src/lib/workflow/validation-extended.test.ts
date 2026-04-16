@@ -221,7 +221,7 @@ describe("validateWorkflow - Extended", () => {
 					type: "Challenge",
 					title: "Challenge",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: {
 						...createDefaultChallengeConfig("acceptance", {
 							challengeTimeout: { value: 5, unit: "minutes" },
@@ -229,7 +229,7 @@ describe("validateWorkflow - Extended", () => {
 						deliveryMethod: "sms",
 						retries: {
 							maxRetries: 10, // Exceeds MAX_CHALLENGE_RETRIES (5)
-							roles: ["Admin"],
+							roles: ["org_manager"],
 						},
 					},
 					position: { x: 100, y: 0 },
@@ -265,7 +265,7 @@ describe("validateWorkflow - Extended", () => {
 					type: "Challenge",
 					title: "Challenge",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: {
 						...createDefaultChallengeConfig("acceptance", {
 							challengeTimeout: { value: 5, unit: "minutes" },
@@ -309,7 +309,7 @@ describe("validateWorkflow - Extended", () => {
 					type: "Challenge",
 					title: "Challenge",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: {
 						...createDefaultChallengeConfig("acceptance", {
 							challengeTimeout: { value: 5, unit: "minutes" },
@@ -417,7 +417,7 @@ describe("validateWorkflow - Extended", () => {
 					type: "Form",
 					title: "Form",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: { formId: "form-1" },
 					position: { x: 100, y: 0 },
 					groupId: null,
@@ -468,7 +468,7 @@ describe("validateWorkflow - Extended", () => {
 					type: "Form",
 					title: "Form",
 					description: "",
-					roles: ["Solicitante"],
+					roles: ["client"],
 					config: { formId: "form-1" },
 					position: { x: 100, y: 0 },
 					groupId: null,
