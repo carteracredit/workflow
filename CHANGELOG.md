@@ -1,3 +1,11 @@
+# [1.1.0-rc.23](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.22...v1.1.0-rc.23) (2026-04-16)
+
+
+### Features
+
+* add condition validation feature in PropertiesPanel ([ca1aa3e](https://github.com/carteracredit/workflow/commit/ca1aa3e5aeec1c7188d5332d0d268a3a3824108a))
+* add support for retry logic in Transform and FlagChange nodes ([30f36fd](https://github.com/carteracredit/workflow/commit/30f36fddd9c435aebd28bf99a17618e1a1de40c9))
+
 # [1.1.0-rc.22](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.21...v1.1.0-rc.22) (2026-04-15)
 
 
