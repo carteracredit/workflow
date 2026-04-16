@@ -270,6 +270,14 @@ export function PropertiesPanel({
 		error?: string;
 	} | null>(null);
 
+	// Estado para validacion de condicion del nodo Decision
+	const [conditionValidating, setConditionValidating] =
+		useState<boolean>(false);
+	const [conditionValidationResult, setConditionValidationResult] = useState<{
+		valid: boolean;
+		error?: string;
+	} | null>(null);
+
 	// Estado para formularios disponibles (nodo Form)
 	const [availableForms, setAvailableForms] = useState<WorkflowForm[]>([]);
 	const [formsLoading, setFormsLoading] = useState(false);
@@ -311,6 +319,11 @@ export function PropertiesPanel({
 		setTransformValidationResult(null);
 	}, [selectedNode?.id, selectedNode?.config?.code]);
 
+	// Limpiar resultado de validacion de condicion cuando cambia el nodo o la condicion
+	useEffect(() => {
+		setConditionValidationResult(null);
+	}, [selectedNode?.id, selectedNode?.config?.condition]);
+
 	const handleValidateTransformCode = useCallback(async () => {
 		const code = (selectedNode?.config?.code as string) || "";
 		setTransformValidating(true);
@@ -319,6 +332,15 @@ export function PropertiesPanel({
 		setTransformValidating(false);
 		setTransformValidationResult(result);
 	}, [selectedNode?.config?.code]);
+
+	const handleValidateCondition = useCallback(async () => {
+		const condition = (selectedNode?.config?.condition as string) || "";
+		setConditionValidating(true);
+		setConditionValidationResult(null);
+		const result = await validateConditionExpression(condition);
+		setConditionValidating(false);
+		setConditionValidationResult(result);
+	}, [selectedNode?.config?.condition]);
 
 	// Estado para modal de mock del nodo API
 	const [showApiMock, setShowApiMock] = useState<boolean>(false);
@@ -1601,6 +1623,67 @@ export function PropertiesPanel({
 										</div>
 									))}
 							</div>
+							<Button
+								size="sm"
+								variant="secondary"
+								className="w-full"
+								onClick={handleValidateCondition}
+								disabled={
+									conditionValidating ||
+									!(selectedNode.config.condition as string)?.trim()
+								}
+							>
+								{conditionValidating ? (
+									<span className="flex items-center gap-2">
+										<svg
+											className="h-3 w-3 animate-spin"
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+										>
+											<circle
+												className="opacity-25"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												strokeWidth="4"
+											/>
+											<path
+												className="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+											/>
+										</svg>
+										{t("propertiesPanel.validatingCondition")}
+									</span>
+								) : (
+									t("propertiesPanel.validateConditionBtn")
+								)}
+							</Button>
+							{conditionValidationResult !== null && (
+								<div
+									className={cn(
+										"rounded-md p-3 text-xs",
+										conditionValidationResult.valid
+											? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+											: "bg-destructive/10 text-destructive",
+									)}
+								>
+									{conditionValidationResult.valid ? (
+										<span className="font-medium">
+											{t("propertiesPanel.conditionValid")}
+										</span>
+									) : (
+										<>
+											<p className="font-medium">
+												{t("propertiesPanel.conditionSyntaxError")}
+											</p>
+											<p className="mt-1">{conditionValidationResult.error}</p>
+										</>
+									)}
+								</div>
+							)}
 						</div>
 					)}
 

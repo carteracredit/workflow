@@ -151,6 +151,131 @@ describe("validateConditionExpression", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Condition semantic checks – unquoted string literals in comparisons
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateConditionExpression – unquoted string literal detection", () => {
+	it("should reject an unquoted uppercase identifier on RHS (the reported bug: == HVAC)", async () => {
+		const result = await validateConditionExpression(
+			"${node-1776272936406.product} == HVAC",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/HVAC/);
+		expect(result.error).toMatch(/comillas/i);
+	});
+
+	it("should reject unquoted PascalCase identifier on RHS (=== Luxury)", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.category} === Luxury",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/Luxury/);
+	});
+
+	it("should reject unquoted SCREAMING_SNAKE identifier (== CREDIT_APPROVAL)", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.type} == CREDIT_APPROVAL",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/CREDIT_APPROVAL/);
+	});
+
+	it("should reject unquoted uppercase identifier on LHS (HVAC ==)", async () => {
+		const result = await validateConditionExpression(
+			"HVAC == ${node-abc.product}",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/HVAC/);
+	});
+
+	it("should accept a properly quoted string on RHS (== 'HVAC')", async () => {
+		const result = await validateConditionExpression(
+			"${node-1776272936406.product} == 'HVAC'",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it('should accept a properly double-quoted string on RHS (== "HVAC")', async () => {
+		const result = await validateConditionExpression(
+			'${node-abc.product} === "HVAC"',
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should NOT flag JS keyword 'true' as an unquoted string", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.active} === true",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should NOT flag JS keyword 'false' as an unquoted string", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.enabled} !== false",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should NOT flag 'null' as an unquoted string", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.value} === null",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should NOT flag 'undefined' as an unquoted string", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.value} !== undefined",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should NOT flag 'NaN' as an unquoted string", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.count} === NaN",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should NOT flag 'Infinity' as an unquoted string", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.limit} !== Infinity",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should NOT flag a lowercase variable name as an unquoted string", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.score} > minScore",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept a numeric comparison without flagging", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.amount} >= 1000",
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should reject using != with an unquoted value", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.status} != Rejected",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/Rejected/);
+	});
+
+	it("should reject using !== with an unquoted value", async () => {
+		const result = await validateConditionExpression(
+			"${node-abc.status} !== Approved",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.error).toMatch(/Approved/);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ESBuild semantic checks (patterns Prettier accepts but Cloudflare rejects)
 // ─────────────────────────────────────────────────────────────────────────────
 
