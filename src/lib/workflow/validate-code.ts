@@ -57,6 +57,11 @@ export async function validateTransformCode(
  * `${nodeId.property}` (e.g. `${node-123.count}`). These are not valid inside
  * a plain JS expression, so we substitute them with a valid placeholder
  * identifier before parsing to avoid false-positive syntax errors.
+ *
+ * Beyond syntax, a semantic check flags unquoted identifiers used in equality
+ * comparisons (e.g. `${node.product} == HVAC`) that would cause a
+ * `ReferenceError` at runtime because `HVAC` is treated as a variable name
+ * rather than a string literal.
  */
 export async function validateConditionExpression(
 	condition: string,
@@ -67,6 +72,10 @@ export async function validateConditionExpression(
 			error: "La condición no puede estar vacía",
 		};
 	}
+
+	// Run semantic checks before the async parser (fast, synchronous)
+	const semantic = runConditionSemanticChecks(condition);
+	if (!semantic.valid) return semantic;
 
 	const normalized = substituteVariableRefs(condition);
 	const wrapped = `if (${normalized}) {}`;
@@ -130,6 +139,71 @@ function runSemanticChecks(code: string): CodeValidationResult {
 				return {
 					valid: false,
 					error: `Línea ${lineNum}: ${rule.message}`,
+				};
+			}
+		}
+	}
+
+	return { valid: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Condition semantic checks – catches runtime errors Prettier cannot detect
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * JS identifiers that are safe to use bare (unquoted) in comparisons.
+ * Everything else that looks like `== UPPERCASE_WORD` is flagged as a
+ * possible unquoted string literal.
+ */
+const JS_SAFE_IDENTIFIERS = new Set([
+	"true",
+	"false",
+	"null",
+	"undefined",
+	"NaN",
+	"Infinity",
+]);
+
+/**
+ * Detects unquoted string-like identifiers in equality comparisons that would
+ * cause a `ReferenceError` at runtime (e.g. `product == HVAC` instead of
+ * `product == "HVAC"`).
+ *
+ * After substituting `${...}` references with `__ref__`, the check scans for
+ * patterns like `== WORD` or `!= WORD` where `WORD` starts with an uppercase
+ * letter and is not a known JS keyword/constant.
+ */
+function runConditionSemanticChecks(condition: string): CodeValidationResult {
+	const normalized = substituteVariableRefs(condition);
+
+	// Match bare identifiers on either side of an equality/inequality operator.
+	// Patterns covered:
+	//   lhs == WORD   lhs === WORD   lhs != WORD   lhs !== WORD
+	//   WORD == rhs   WORD === rhs   WORD != rhs   WORD !== rhs
+	const patterns: RegExp[] = [
+		// right-hand side:  == WORD  or  === WORD  or  != WORD  or  !== WORD
+		/(?:={2,3}|!={1,2})\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s|$)/g,
+		// left-hand side:   WORD ==  or  WORD ===  or  WORD !=  or  WORD !==
+		/(?:^|[\s(])([A-Za-z_$][A-Za-z0-9_$]*)\s+(?:={2,3}|!={1,2})/g,
+	];
+
+	for (const regex of patterns) {
+		let match: RegExpExecArray | null;
+		while ((match = regex.exec(normalized)) !== null) {
+			const identifier = match[1];
+
+			// Skip known-safe identifiers and the placeholder we inserted
+			if (JS_SAFE_IDENTIFIERS.has(identifier) || identifier === "__ref__") {
+				continue;
+			}
+
+			// Only flag identifiers that look like values (all-caps, PascalCase,
+			// or SCREAMING_SNAKE) – plain lowercase names are plausible variables.
+			if (/^[A-Z]/.test(identifier)) {
+				return {
+					valid: false,
+					error: `"${identifier}" parece un texto sin comillas. Usa "${identifier}" o '${identifier}' si es un valor de texto, no una variable.`,
 				};
 			}
 		}

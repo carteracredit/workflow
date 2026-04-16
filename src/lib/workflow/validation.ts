@@ -214,6 +214,20 @@ export function validateWorkflow(
 			});
 		}
 
+		if (node.type === "FlagChange") {
+			const flagChanges =
+				(node.config.flagChanges as
+					| Array<{ flagId: string; optionId: string }>
+					| undefined) || [];
+			if (flagChanges.length === 0) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener al menos un cambio de flag configurado`,
+					severity: "warning",
+				});
+			}
+		}
+
 		if (node.type === "API") {
 			// Validar URL
 			if (!node.config.url) {

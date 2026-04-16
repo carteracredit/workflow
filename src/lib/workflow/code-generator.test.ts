@@ -3657,6 +3657,124 @@ describe("generateWorkflowCode – Fase 2 API body: none (GET)", () => {
 	});
 });
 
+describe("Transform node inside retry zone", () => {
+	// Start -> Checkpoint -> Transform -> Challenge --(accepted)--> End
+	//                                               --(rejected)--> Reject (allowRetry: 2, -> Checkpoint)
+	const buildNodes = (): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({ id: "cp", type: "Checkpoint", title: "Guardar" }),
+		createNode({
+			id: "transform",
+			type: "Transform",
+			title: "Calcular Total",
+			config: { code: "return { total: 42 };" },
+		}),
+		createNode({
+			id: "challenge",
+			type: "Challenge",
+			title: "Revision",
+			config: { challengeType: "acceptance" },
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+		createNode({
+			id: "rej",
+			type: "Reject",
+			title: "Rechazado",
+			config: { allowRetry: true, maxRetries: 2 },
+		}),
+	];
+
+	const buildEdges = (): WorkflowEdge[] => [
+		createEdge("start", "cp"),
+		createEdge("cp", "transform"),
+		createEdge("transform", "challenge"),
+		createEdge("challenge", "end", { fromPort: "top" }),
+		createEdge("challenge", "rej", { fromPort: "bottom" }),
+		createEdge("rej", "cp"),
+	];
+
+	it("uses retry-suffixed step names for Transform inside retry zone", () => {
+		const { code } = generateWorkflowCode(buildNodes(), buildEdges());
+		const transformStart = code.indexOf("// Transform: Calcular Total");
+		expect(transformStart).toBeGreaterThan(-1);
+		const transformCode = code.slice(transformStart, transformStart + 500);
+		expect(transformCode).toMatch(/step\.do\(/);
+		expect(transformCode).toMatch(/-r\$\{/);
+	});
+
+	it("passes retryVarName to progress calls for Transform", () => {
+		const { code } = generateWorkflowCode(buildNodes(), buildEdges());
+		const transformStart = code.indexOf("// Transform: Calcular Total");
+		const nextNodeStart = code.indexOf("// Challenge:", transformStart);
+		const transformSection = code.slice(transformStart, nextNodeStart);
+		expect(transformSection).toMatch(/retryCount:/);
+	});
+});
+
+describe("FlagChange node inside retry zone", () => {
+	// Start -> Checkpoint -> FlagChange -> Challenge --(accepted)--> End
+	//                                                --(rejected)--> Reject (allowRetry: 2, -> Checkpoint)
+	const buildNodes = (): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({ id: "cp", type: "Checkpoint", title: "Guardar" }),
+		createNode({
+			id: "flag",
+			type: "FlagChange",
+			title: "Cambiar Estado",
+			config: {
+				flagChanges: [{ flagId: "status", optionId: "approved" }],
+			},
+		}),
+		createNode({
+			id: "challenge",
+			type: "Challenge",
+			title: "Revision",
+			config: { challengeType: "acceptance" },
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+		createNode({
+			id: "rej",
+			type: "Reject",
+			title: "Rechazado",
+			config: { allowRetry: true, maxRetries: 2 },
+		}),
+	];
+
+	const buildEdges = (): WorkflowEdge[] => [
+		createEdge("start", "cp"),
+		createEdge("cp", "flag"),
+		createEdge("flag", "challenge"),
+		createEdge("challenge", "end", { fromPort: "top" }),
+		createEdge("challenge", "rej", { fromPort: "bottom" }),
+		createEdge("rej", "cp"),
+	];
+
+	it("uses retry-suffixed step names for FlagChange inside retry zone", () => {
+		const { code } = generateWorkflowCode(buildNodes(), buildEdges());
+		const flagStart = code.indexOf("// Flag Change: Cambiar Estado");
+		expect(flagStart).toBeGreaterThan(-1);
+		const flagCode = code.slice(flagStart, flagStart + 500);
+		expect(flagCode).toMatch(/step\.do\(/);
+		expect(flagCode).toMatch(/-r\$\{/);
+	});
+
+	it("passes retryVarName to progress calls for FlagChange", () => {
+		const { code } = generateWorkflowCode(buildNodes(), buildEdges());
+		const flagStart = code.indexOf("// Flag Change: Cambiar Estado");
+		const nextNodeStart = code.indexOf("// Challenge:", flagStart);
+		const flagSection = code.slice(flagStart, nextNodeStart);
+		expect(flagSection).toMatch(/retryCount:/);
+	});
+
+	it("passes retryVarName to case object calls for FlagChange", () => {
+		const { code } = generateWorkflowCode(buildNodes(), buildEdges());
+		const flagStart = code.indexOf("// Flag Change: Cambiar Estado");
+		const nextNodeStart = code.indexOf("// Challenge:", flagStart);
+		const flagSection = code.slice(flagStart, nextNodeStart);
+		expect(flagSection).toMatch(/_case-flag.*-r\$\{/);
+	});
+});
+
 describe("generateWorkflowCode – Fase 2 API response path", () => {
 	it("extracts nested path from response", () => {
 		const result = genApi({

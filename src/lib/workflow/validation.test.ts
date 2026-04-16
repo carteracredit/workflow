@@ -1184,6 +1184,89 @@ describe("validateWorkflowWithSyntax", () => {
 // validateWorkflow – orphan flag references (Etapa 2)
 // ─────────────────────────────────────────────────────────────────────────────
 
+describe("validateWorkflow – FlagChange empty config", () => {
+	it("should warn when FlagChange has no flag changes configured", () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "fc",
+				type: "FlagChange",
+				title: "Cambiar Estado",
+				config: {},
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "fc", label: null },
+			{ id: "e2", from: "fc", to: "end", label: null },
+		];
+
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "warning" &&
+					e.message.includes("al menos un cambio de flag"),
+			),
+		).toBe(true);
+	});
+
+	it("should warn when FlagChange has empty flagChanges array", () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "fc",
+				type: "FlagChange",
+				title: "Cambiar Estado",
+				config: { flagChanges: [] },
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "fc", label: null },
+			{ id: "e2", from: "fc", to: "end", label: null },
+		];
+
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" &&
+					e.severity === "warning" &&
+					e.message.includes("al menos un cambio de flag"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn when FlagChange has configured flag changes", () => {
+		const nodes: WorkflowNode[] = [
+			makeNode({ id: "start", type: "Start", title: "Inicio" }),
+			makeNode({
+				id: "fc",
+				type: "FlagChange",
+				title: "Cambiar Estado",
+				config: {
+					flagChanges: [{ flagId: "flag-a", optionId: "opt-1" }],
+				},
+			}),
+			makeNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "fc", label: null },
+			{ id: "e2", from: "fc", to: "end", label: null },
+		];
+
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "fc" && e.message.includes("al menos un cambio de flag"),
+			),
+		).toBe(false);
+	});
+});
+
 describe("validateWorkflow – FlagChange orphan references", () => {
 	const flagA = {
 		id: "flag-a",
