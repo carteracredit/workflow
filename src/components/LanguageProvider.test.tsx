@@ -12,6 +12,14 @@ vi.mock("@/lib/cookies", () => ({
 	COOKIE_NAMES: { LANGUAGE: "cartera-lang" },
 }));
 
+// Mock settings API so tests don't hit the network
+vi.mock("@/lib/settings", () => ({
+	getResolvedSettings: vi.fn(() =>
+		Promise.reject(new Error("no api in tests")),
+	),
+	updateUserSettings: vi.fn(() => Promise.resolve({})),
+}));
+
 // Mock translations
 vi.mock("@/lib/translations", () => ({
 	translations: {

@@ -7,6 +7,15 @@ vi.mock("next-themes", () => ({
 	ThemeProvider: ({ children }: { children: React.ReactNode }) => (
 		<div data-testid="next-themes-provider">{children}</div>
 	),
+	useTheme: () => ({ theme: "system", setTheme: vi.fn() }),
+}));
+
+// Mock settings API so tests don't hit the network
+vi.mock("@/lib/settings", () => ({
+	getResolvedSettings: vi.fn(() =>
+		Promise.reject(new Error("no api in tests")),
+	),
+	updateUserSettings: vi.fn(() => Promise.resolve({})),
 }));
 
 describe("ThemeProvider", () => {

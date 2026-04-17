@@ -2,17 +2,23 @@
 
 import {
 	createContext,
+	type ReactNode,
+	useCallback,
 	useContext,
 	useEffect,
 	useState,
-	type ReactNode,
 } from "react";
+import { COOKIE_NAMES, getCookie, setCookie } from "@/lib/cookies";
 import {
+	getResolvedSettings,
+	type LanguageCode,
+	updateUserSettings,
+} from "@/lib/settings";
+import {
+	detectBrowserLanguage,
 	type Language,
 	translations,
-	detectBrowserLanguage,
 } from "@/lib/translations";
-import { getCookie, setCookie, COOKIE_NAMES } from "@/lib/cookies";
 
 interface LanguageContextType {
 	language: Language;
@@ -43,14 +49,15 @@ export function LanguageProvider({
 		defaultLanguage ?? "es",
 	);
 	const [mounted, setMounted] = useState(false);
+	const [settingsSynced, setSettingsSynced] = useState(false);
 
 	useEffect(() => {
 		setMounted(true);
-		// If defaultLanguage is set, skip detection (useful for testing)
 		if (defaultLanguage) {
 			return;
 		}
-		// Check cookie first, then browser language
+
+		// Step 1: cookie first so there is no flash of wrong language.
 		const stored = getCookie(COOKIE_NAMES.LANGUAGE) as Language | undefined;
 		if (stored && ["es", "en"].includes(stored)) {
 			setLanguageState(stored);
@@ -59,15 +66,41 @@ export function LanguageProvider({
 			setLanguageState(detected);
 			setCookie(COOKIE_NAMES.LANGUAGE, detected);
 		}
+
+		// Step 2: verify against auth-svc so cross-app value wins.
+		getResolvedSettings()
+			.then((settings) => {
+				const apiLanguage = settings.language as Language;
+				if (apiLanguage === "en" || apiLanguage === "es") {
+					setLanguageState(apiLanguage);
+					setCookie(COOKIE_NAMES.LANGUAGE, apiLanguage);
+				}
+				setSettingsSynced(true);
+			})
+			.catch((error) => {
+				console.debug("Settings API unavailable:", error);
+				setSettingsSynced(true);
+			});
 	}, [defaultLanguage]);
 
-	const setLanguage = (lang: Language) => {
-		setLanguageState(lang);
-		setCookie(COOKIE_NAMES.LANGUAGE, lang);
-	};
+	const setLanguage = useCallback(
+		(lang: Language) => {
+			setLanguageState(lang);
+			setCookie(COOKIE_NAMES.LANGUAGE, lang);
+
+			if (settingsSynced) {
+				updateUserSettings({ language: lang as LanguageCode }).catch(
+					(error) => {
+						console.debug("Failed to update language in API:", error);
+					},
+				);
+			}
+		},
+		[settingsSynced],
+	);
 
 	/**
-	 * Translation function supporting nested keys with dot notation
+	 * Translation function supporting nested keys with dot notation.
 	 */
 	const t = (key: string): string => {
 		const keys = key.split(".");
@@ -78,13 +111,13 @@ export function LanguageProvider({
 			if (value && typeof value === "object" && k in value) {
 				value = value[k];
 			} else {
-				// Fallback to English if key not found
+				// Fallback to English if key not found in the active language
 				value = translations.en;
 				for (const fallbackKey of keys) {
 					if (value && typeof value === "object" && fallbackKey in value) {
 						value = value[fallbackKey];
 					} else {
-						return key; // Return key if not found in fallback either
+						return key;
 					}
 				}
 				break;
@@ -94,9 +127,6 @@ export function LanguageProvider({
 		return typeof value === "string" ? value : key;
 	};
 
-	/**
-	 * Get field label based on current language
-	 */
 	const getFieldLabel = (label: string, labelEs?: string): string => {
 		if (language === "es" && labelEs) {
 			return labelEs;
@@ -104,9 +134,6 @@ export function LanguageProvider({
 		return label;
 	};
 
-	/**
-	 * Get field placeholder based on current language
-	 */
 	const getFieldPlaceholder = (
 		placeholder?: string,
 		placeholderEs?: string,
@@ -117,7 +144,6 @@ export function LanguageProvider({
 		return placeholder;
 	};
 
-	// Return default context during SSR
 	if (!mounted) {
 		const ssrLanguage = defaultLanguage ?? "es";
 		return (
