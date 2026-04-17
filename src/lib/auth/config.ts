@@ -1,15 +1,16 @@
 /**
  * Gets the auth service URL from environment variables.
  *
- * For Cloudflare Workers deployment, configure NEXT_PUBLIC_AUTH_SERVICE_URL
- * in your environment. This variable is available on both client and server.
- *
- * Falls back to the dev environment URL for local development and Storybook.
+ * Prefers `NEXT_PUBLIC_AUTH_SVC_URL` (the convention used by every other
+ * Cartera Credit frontend) and falls back to the legacy
+ * `NEXT_PUBLIC_AUTH_SERVICE_URL` for backward compatibility, then to the
+ * dev environment URL for local development and Storybook.
  *
  * @returns The base URL for the auth service (e.g., https://auth-svc.example.workers.dev)
  */
 export const getAuthServiceUrl = (): string => {
 	return (
+		process.env.NEXT_PUBLIC_AUTH_SVC_URL ||
 		process.env.NEXT_PUBLIC_AUTH_SERVICE_URL ||
 		"https://auth-svc.carteracredit.workers.dev"
 	);

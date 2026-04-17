@@ -13,9 +13,25 @@
 * update event type format in workflow code generation ([102911f](https://github.com/carteracredit/workflow/commit/102911f3c1ffeea455c1f6657171b025ac88f408))
 * update string formatting in code generation tests and implementation ([82ffe58](https://github.com/carteracredit/workflow/commit/82ffe5804313196a8acd9930cc79cf10333ad3cd))
 
+# [1.1.0-rc.24](https://github.com/carteracredit/workflow/compare/v1.1.0-rc.23...v1.1.0-rc.24) (2026-04-17)
+
+
+### Bug Fixes
+
+* **ci:** remove hardcoded pnpm v9 from release workflow to match packageManager field ([b771dc5](https://github.com/carteracredit/workflow/commit/b771dc508ab9196b3eeb72033a3df49c93c9145d))
+* enhance error handling and update workflow status management in WorkflowList ([0c9dc94](https://github.com/carteracredit/workflow/commit/0c9dc94d43eff8b9c226b27b0758a27cc534a49c))
+* ensure proper closure of step.do callback in generated workflow code ([db19070](https://github.com/carteracredit/workflow/commit/db19070ad3aa59412f6a867b26fd604f4193894e))
+* prevent definition from being sent during workflow creation ([3af7828](https://github.com/carteracredit/workflow/commit/3af78285807fe64ed8a859ab754f0c9d8367aa06))
+* refine semantic validation for const declarations in TypeScript ([4b4e113](https://github.com/carteracredit/workflow/commit/4b4e113701fe3b3b08b5869a6a6b2c4bf0705781))
+* remove unnecessary trimming of input values in PropertiesPanel ([f602e06](https://github.com/carteracredit/workflow/commit/f602e06135cecb7c6db0138d0213336e9e3c609b))
+* standardize code generation references and improve test assertions ([849f083](https://github.com/carteracredit/workflow/commit/849f0839a7125342fe0e2c405463f318e2dbe914))
+* update event type format in workflow code generation ([102911f](https://github.com/carteracredit/workflow/commit/102911f3c1ffeea455c1f6657171b025ac88f408))
+* update string formatting in code generation tests and implementation ([82ffe58](https://github.com/carteracredit/workflow/commit/82ffe5804313196a8acd9930cc79cf10333ad3cd))
+
 
 ### Features
 
+* integrate settings API for theme and language synchronization ([5189d72](https://github.com/carteracredit/workflow/commit/5189d72875cb8ccab2662d9ce0a1c75d72dc4214))
 * add app icon SVG and update top bar to use the icon ([933db00](https://github.com/carteracredit/workflow/commit/933db00f34555ca2a381beb349c3dfa952ad2157))
 * add authentication middleware and session management ([6151b80](https://github.com/carteracredit/workflow/commit/6151b8082eefa32af04f05c3278a2bbdcdd49527))
 * add bilingual support for start node metadata in WorkflowEditor ([9eb1c07](https://github.com/carteracredit/workflow/commit/9eb1c07fd31bde3a7f85ab00f4d507d9121e0243))

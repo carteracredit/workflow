@@ -131,7 +131,10 @@ export function deleteCookie(name: string): void {
 }
 
 // Cookie names for shared preferences
+// IMPORTANT: These names must match across all Cartera Credit frontends
+// (auth, admin, workflow, cases, contractor) so theme/language settings
+// are shared cross-subdomain.
 export const COOKIE_NAMES = {
-	THEME: "cartera-theme",
-	LANGUAGE: "cartera-lang",
+	THEME: "carteracredit-theme",
+	LANGUAGE: "carteracredit-lang",
 } as const;
