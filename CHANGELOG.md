@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/carteracredit/workflow/compare/v1.2.0...v1.3.0) (2026-04-18)
+
+
+### Features
+
+* enhance deployment environment handling in publish modal ([cb4ec55](https://github.com/carteracredit/workflow/commit/cb4ec5550a2fc52d1a5cbf1bfe2418bf451f1d1a))
+
 # [1.2.0](https://github.com/carteracredit/workflow/compare/v1.1.0...v1.2.0) (2026-04-17)
 
 
