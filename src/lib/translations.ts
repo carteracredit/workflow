@@ -530,6 +530,11 @@ export const translations = {
 				org_manager: "Manager",
 			},
 			startSchemaLabel: "Workflow Input Schema",
+			caseVariablesLabel: "Case data",
+			caseVariablesHint:
+				"Fixed fields always provided by cases-svc when the workflow starts. These are read-only but can be referenced in any downstream node.",
+			customFieldsLabel: "Custom fields",
+			secretsSourceLabel: "Secrets & variables",
 			conditionLabel: "Condition",
 			conditionPlaceholder: "E.g.: creditScore > 700",
 			availableVarsLabel: "Available variables",
@@ -1472,6 +1477,11 @@ export const translations = {
 				org_manager: "Gerente",
 			},
 			startSchemaLabel: "Esquema de Entrada del Workflow",
+			caseVariablesLabel: "Datos del caso",
+			caseVariablesHint:
+				"Campos fijos que siempre provee cases-svc al iniciar el workflow. Son de solo lectura pero pueden referenciarse en cualquier nodo posterior.",
+			customFieldsLabel: "Campos personalizados",
+			secretsSourceLabel: "Secretos y variables",
 			conditionLabel: "Condición",
 			conditionPlaceholder: "Ej: creditScore > 700",
 			availableVarsLabel: "Variables disponibles",

@@ -45,6 +45,7 @@ import {
 	getCheckpointNode,
 	findUpstreamNodes,
 	buildVariableSourceNodes,
+	type VariableSourceNode,
 } from "@/lib/workflow/graph-utils";
 import { getColorValue } from "@/lib/flag-manager";
 import { cn } from "@/lib/utils";
@@ -61,6 +62,7 @@ import {
 	validateConditionExpression,
 } from "@/lib/workflow/validate-code";
 import { OutputSchemaEditor } from "@/components/workflow/output-schema-editor";
+import { CaseVariablesDisplay } from "@/components/workflow/case-variables-display";
 import {
 	VariableTemplateInput,
 	VariablePicker,
@@ -165,6 +167,12 @@ interface PropertiesPanelProps {
 	width?: number;
 	onWidthChange?: (width: number) => void;
 	onManageVariables?: () => void;
+	/**
+	 * Extra variable sources (e.g. workflow-level secrets/variables) that are
+	 * not produced by graph traversal but should still appear in the picker
+	 * for every node. Rendered after upstream node sources.
+	 */
+	extraVariableSources?: VariableSourceNode[];
 }
 
 const NODES_WITH_ROLES = ["Form", "Challenge", "Message"];
@@ -233,6 +241,7 @@ export function PropertiesPanel({
 	width,
 	onWidthChange,
 	onManageVariables,
+	extraVariableSources,
 }: PropertiesPanelProps) {
 	const { t, getFieldLabel } = useLanguage();
 	// For backward compatibility and single selection UI, use first selected item
@@ -250,8 +259,17 @@ export function PropertiesPanel({
 	const upstreamVariableNodes = useMemo(() => {
 		if (!selectedNode) return [];
 		const upstream = findUpstreamNodes(selectedNode.id, nodes, edges);
-		return buildVariableSourceNodes(upstream);
-	}, [selectedNode, nodes, edges]);
+		// Pass `allNodes` so the Start source (case-level data) is always
+		// listed, even when the selected node is not yet connected to Start.
+		const graphSources = buildVariableSourceNodes(upstream, {
+			allNodes: nodes,
+		});
+		// Append workflow-level sources (e.g. Secrets) after the graph-derived
+		// ones so node outputs show first and the global catalog comes last.
+		return extraVariableSources && extraVariableSources.length > 0
+			? [...graphSources, ...extraVariableSources]
+			: graphSources;
+	}, [selectedNode, nodes, edges, extraVariableSources]);
 
 	// Ref to track textarea cursor for variable insertion (Decision/Transform)
 	const conditionTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1408,15 +1426,20 @@ export function PropertiesPanel({
 						</div>
 					)}
 
-					{/* Start node: input schema */}
+					{/* Start node: case-level fixed inputs + user-defined custom fields */}
 					{selectedNode.type === "Start" && (
-						<OutputSchemaEditor
-							value={
-								selectedNode.config.outputSchema as OutputSchema | undefined
-							}
-							onChange={handleUpdateOutputSchema}
-							label={t("propertiesPanel.startSchemaLabel")}
-						/>
+						<div className="space-y-3">
+							<CaseVariablesDisplay
+								label={t("propertiesPanel.caseVariablesLabel")}
+							/>
+							<OutputSchemaEditor
+								value={
+									selectedNode.config.outputSchema as OutputSchema | undefined
+								}
+								onChange={handleUpdateOutputSchema}
+								label={t("propertiesPanel.customFieldsLabel")}
+							/>
+						</div>
 					)}
 
 					{/* Type-specific configuration */}

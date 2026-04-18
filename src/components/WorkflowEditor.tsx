@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TopBar } from "./workflow/top-bar";
@@ -44,8 +44,14 @@ import {
 	updateWorkflow as updateWorkflowApi,
 } from "@/lib/workflow-api/workflows";
 import { listFlags } from "@/lib/workflow-api/flags";
+import { listVariables } from "@/lib/workflow-api/variables";
+import type { WorkflowVariable } from "@/lib/workflow-api/variables";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import type { Workflow, WorkflowFlag } from "@/lib/workflow-api/types";
+import {
+	buildSecretsSource,
+	type VariableSourceNode,
+} from "@/lib/workflow/graph-utils";
 import { Monitor } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -564,6 +570,40 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [showCode, setShowCode] = useState(false);
 	const [showFlagManager, setShowFlagManager] = useState(false);
 	const [showVariables, setShowVariables] = useState(false);
+	// Workflow-level variables/secrets exposed as a VariablePicker source so
+	// any node can reference them via `${secret.NAME}` tokens. Loaded lazily
+	// once we have an API id; refreshed whenever the user closes the
+	// Variables manager dialog so newly created entries become available
+	// without reloading the editor.
+	const [workflowVariables, setWorkflowVariables] = useState<
+		WorkflowVariable[]
+	>([]);
+
+	const reloadWorkflowVariables = useCallback(async () => {
+		if (!workflowApiId) {
+			setWorkflowVariables([]);
+			return;
+		}
+		try {
+			const vars = await listVariables(workflowApiId);
+			setWorkflowVariables(vars);
+		} catch (err) {
+			// Non-fatal: the picker simply won't show the secrets source.
+			console.error("[WorkflowEditor] Failed to load workflow variables:", err);
+			setWorkflowVariables([]);
+		}
+	}, [workflowApiId]);
+
+	useEffect(() => {
+		void reloadWorkflowVariables();
+	}, [reloadWorkflowVariables]);
+
+	const extraVariableSources = useMemo<VariableSourceNode[]>(() => {
+		const source = buildSecretsSource(workflowVariables, {
+			name: t("propertiesPanel.secretsSourceLabel"),
+		});
+		return source ? [source] : [];
+	}, [workflowVariables, t]);
 	const [showWorkflowProperties, setShowWorkflowProperties] = useState(false);
 	const [showPublish, setShowPublish] = useState(false);
 	const [panelWidth, setPanelWidth] = useState(320);
@@ -1419,6 +1459,14 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 										: panelWidth
 								}
 								onWidthChange={isTablet ? undefined : setPanelWidth}
+								extraVariableSources={extraVariableSources}
+								onManageVariables={() => {
+									if (!workflowApiId) {
+										toast.warning(t("workflowEditor.toastSaveBeforeFlags"));
+										return;
+									}
+									setShowVariables(true);
+								}}
 							/>
 						</div>
 					</div>
@@ -1473,7 +1521,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			{showVariables && workflowApiId && (
 				<VariablesPanel
 					workflowId={workflowApiId}
-					onClose={() => setShowVariables(false)}
+					onClose={() => {
+						setShowVariables(false);
+						// Refresh the picker source so any variables/secrets the user
+						// just created/deleted appear (or disappear) immediately.
+						void reloadWorkflowVariables();
+					}}
 				/>
 			)}
 
