@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/carteracredit/workflow/compare/v1.1.0...v1.2.0) (2026-04-17)
+
+
+### Features
+
+* integrate settings API for theme and language synchronization ([5189d72](https://github.com/carteracredit/workflow/commit/5189d72875cb8ccab2662d9ce0a1c75d72dc4214))
+
 # [1.2.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.2.0-rc.1...v1.2.0-rc.2) (2026-04-18)
 
 
