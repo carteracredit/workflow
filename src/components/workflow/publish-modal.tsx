@@ -33,6 +33,24 @@ import {
 import { formatGeneratedCode } from "@/lib/workflow/format-code";
 import { publishWorkflow } from "@/lib/workflow-api/workflows";
 import type { PublishWorkflowDeployedResponse } from "@/lib/workflow-api/types";
+
+/**
+ * Target environment for the publish call. Resolved once at module load from
+ * `NEXT_PUBLIC_ENVIROMENT` (existing deployment variable — intentionally
+ * preserving the historical misspelling) with a fallback to the correctly
+ * spelled `NEXT_PUBLIC_ENVIRONMENT`. Any value other than "production" is
+ * treated as "development" so preview/local builds never accidentally deploy
+ * to the prod-bindings repo.
+ */
+function resolvePublishEnvironment(): "development" | "production" {
+	const raw =
+		process.env.NEXT_PUBLIC_ENVIROMENT ??
+		process.env.NEXT_PUBLIC_ENVIRONMENT ??
+		"";
+	return raw.trim().toLowerCase() === "production"
+		? "production"
+		: "development";
+}
 import { extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { toast } from "sonner";
 import { useLanguage } from "@/components/LanguageProvider";
@@ -297,7 +315,7 @@ export function PublishModal({
 		try {
 			const result = await publishWorkflow(currentWorkflowId, {
 				code: generatedCode,
-				environment: "development",
+				environment: resolvePublishEnvironment(),
 				definition: definitionSnapshot,
 			});
 
