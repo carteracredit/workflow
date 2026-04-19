@@ -1,3 +1,10 @@
+# [1.3.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.1...v1.3.0-rc.2) (2026-04-19)
+
+
+### Features
+
+* enhance WorkflowEditor with case-level variables and secrets management ([ec003fb](https://github.com/carteracredit/workflow/commit/ec003fb41b4dd4802f1f7454486ec4d6fd16c963))
+
 # [1.3.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.2.0...v1.3.0-rc.1) (2026-04-18)
 
 
