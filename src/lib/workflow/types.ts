@@ -8,6 +8,7 @@ export type NodeType =
 	| "API"
 	| "Message"
 	| "Challenge"
+	| "Promotion"
 	| "Checkpoint"
 	| "Join" // Added Join node type for merging multiple flows
 	| "FlagChange"; // Nodo para cambiar flags del workflow
@@ -142,6 +143,26 @@ export function createDefaultChallengeConfig(
 	};
 }
 
+/**
+ * Default commission (in currency units) used in the PMT formula when the
+ * Promotion node does not override it. Kept as a module-level constant so
+ * `cases-svc` and `cases` can reuse the same default when they recompute PMT.
+ */
+export const DEFAULT_PROMOTION_COMMISSION = 55;
+
+export interface PromotionNodeConfig extends Record<string, unknown> {
+	/**
+	 * Fixed commission added to the financed principal when computing the
+	 * monthly payment (PMT) for the selected promotion. Editable per-node so
+	 * business users can adjust it without redeploying code.
+	 */
+	commission: number;
+}
+
+export function createDefaultPromotionConfig(): PromotionNodeConfig {
+	return { commission: DEFAULT_PROMOTION_COMMISSION };
+}
+
 export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"Form",
 	"Decision",
@@ -149,6 +170,7 @@ export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"API",
 	"Message",
 	"Challenge",
+	"Promotion",
 ];
 
 export interface StaleTimeoutConfig {
@@ -175,6 +197,12 @@ export function isChallengeNode(
 	node: WorkflowNode,
 ): node is WorkflowNode & { type: "Challenge"; config: ChallengeNodeConfig } {
 	return node.type === "Challenge";
+}
+
+export function isPromotionNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "Promotion"; config: PromotionNodeConfig } {
+	return node.type === "Promotion";
 }
 
 export type MessageChannel = "email" | "sms";
