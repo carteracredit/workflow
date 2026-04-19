@@ -5,6 +5,8 @@ import type {
 	OutputSchemaProperty,
 	SchemaPropertyType,
 } from "./types";
+import { cloneCaseVariables } from "./case-variables";
+import { cloneChallengeOutputSchema } from "./challenge-output";
 
 /**
  * Encuentra el checkpoint anterior más próximo a un nodo dado.
@@ -244,21 +246,88 @@ function schemaPropertyToVariable(
 }
 
 /**
- * Converts an array of upstream WorkflowNodes (those that have an outputSchema
- * in their config) into VariableSourceNode[] suitable for the variable picker.
+ * Merges two `OutputSchemaProperty` arrays by `name`, letting `override`
+ * replace entries that share the same top-level name. Used so the Start node
+ * always exposes the fixed `CASE_VARIABLES` plus any user-defined custom
+ * fields, without letting user fields accidentally shadow the system ones
+ * (system wins).
+ */
+function mergePropertiesByName(
+	base: OutputSchemaProperty[],
+	extra: OutputSchemaProperty[],
+): OutputSchemaProperty[] {
+	const existing = new Set(base.map((p) => p.name));
+	return [...base, ...extra.filter((p) => !existing.has(p.name))];
+}
+
+/**
+ * Converts an array of upstream WorkflowNodes into VariableSourceNode[] for
+ * the variable picker.
+ *
+ * Contract:
+ *  - Non-Start nodes: contribute a source only if they declare a non-empty
+ *    `config.outputSchema`.
+ *  - Start node: ALWAYS contributes a source, merging the fixed case-level
+ *    variables (`CASE_VARIABLES`) with any user-defined custom fields in its
+ *    `outputSchema.properties`. System fields win on name collisions.
+ *  - When `options.allNodes` is provided and contains a Start not already in
+ *    `upstreamNodes` (e.g. the selected node is disconnected), the Start is
+ *    still emitted as a source so case-level variables are never hidden.
  */
 export function buildVariableSourceNodes(
 	upstreamNodes: WorkflowNode[],
+	options?: { allNodes?: WorkflowNode[] },
 ): VariableSourceNode[] {
 	const result: VariableSourceNode[] = [];
+	const seenStart = new Set<string>();
+
+	const emitStartSource = (startNode: WorkflowNode) => {
+		if (seenStart.has(startNode.id)) return;
+		seenStart.add(startNode.id);
+
+		const schema = startNode.config.outputSchema as OutputSchema | undefined;
+		const customProps = schema?.properties ?? [];
+		const merged = mergePropertiesByName(cloneCaseVariables(), customProps);
+
+		const variables: VariableLeafNode[] = merged.map((prop) =>
+			schemaPropertyToVariable(prop, startNode.id),
+		);
+
+		result.push({
+			id: startNode.id,
+			name: startNode.title || "Start",
+			variables,
+		});
+	};
 
 	for (const node of upstreamNodes) {
-		const schema = node.config.outputSchema as OutputSchema | undefined;
-		if (!schema || !schema.properties || schema.properties.length === 0) {
+		if (node.type === "Start") {
+			emitStartSource(node);
 			continue;
 		}
 
-		const variables: VariableLeafNode[] = schema.properties.map((prop) =>
+		const schema = node.config.outputSchema as OutputSchema | undefined;
+		const customProps = schema?.properties ?? [];
+
+		// Challenge nodes always expose the fixed challenge output fields
+		// (accepted, timedOut, respondedBy, respondedAt). User-declared custom
+		// properties are merged on top, but fixed fields win on collisions so
+		// downstream references are always resolvable at runtime.
+		let properties: OutputSchemaProperty[];
+		if (node.type === "Challenge") {
+			properties = mergePropertiesByName(
+				cloneChallengeOutputSchema(),
+				customProps,
+			);
+		} else {
+			properties = customProps;
+		}
+
+		if (properties.length === 0) {
+			continue;
+		}
+
+		const variables: VariableLeafNode[] = properties.map((prop) =>
 			schemaPropertyToVariable(prop, node.id),
 		);
 
@@ -269,7 +338,68 @@ export function buildVariableSourceNodes(
 		});
 	}
 
+	// Guarantee the Start source is present even when upstream traversal did not
+	// reach it (e.g. the selected node is disconnected from the Start yet).
+	if (seenStart.size === 0 && options?.allNodes) {
+		const start = options.allNodes.find((n) => n.type === "Start");
+		if (start) emitStartSource(start);
+	}
+
 	return result;
+}
+
+/**
+ * Stable id used for the virtual "Secrets / workflow variables" source so
+ * code generators and UI consumers can detect it with a single check.
+ */
+export const SECRETS_SOURCE_ID = "__secrets__";
+
+/** Minimal shape of a workflow-svc variable needed by the picker. */
+export interface WorkflowSecretLike {
+	name: string;
+	is_secret?: boolean;
+	environment?: string;
+	description?: string | null;
+}
+
+/**
+ * Builds a virtual `VariableSourceNode` that exposes workflow-level variables
+ * and secrets to the picker. Selected entries produce tokens of the form
+ * `${secret.NAME}` (via the standard `${${variable.path}}` templating),
+ * which the code generator later maps to `this.env.NAME`.
+ *
+ * Returns `null` when there are no variables to expose so callers can cheaply
+ * skip the source.
+ */
+export function buildSecretsSource(
+	vars: WorkflowSecretLike[],
+	options?: { name?: string },
+): VariableSourceNode | null {
+	if (!vars || vars.length === 0) return null;
+
+	const variables: VariableLeafNode[] = vars
+		.slice()
+		.sort((a, b) => a.name.localeCompare(b.name))
+		.map((v) => {
+			const descParts: string[] = [];
+			if (v.is_secret) descParts.push("secret");
+			if (v.environment && v.environment !== "all") {
+				descParts.push(v.environment);
+			}
+			if (v.description) descParts.push(v.description);
+			return {
+				name: v.name,
+				type: "string" as VariableNodeType,
+				path: `secret.${v.name}`,
+				description: descParts.length > 0 ? descParts.join(" · ") : undefined,
+			};
+		});
+
+	return {
+		id: SECRETS_SOURCE_ID,
+		name: options?.name ?? "Secrets",
+		variables,
+	};
 }
 
 /**

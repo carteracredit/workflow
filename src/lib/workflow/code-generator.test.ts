@@ -884,9 +884,7 @@ describe("generateWorkflowCode with Challenge branching", () => {
 		expect(result.code).toContain("let approval: unknown = null;");
 		expect(result.code).toContain("approval = await step.waitForEvent");
 		expect(result.code).not.toContain("const approval");
-		expect(result.code).toContain(
-			"if ((approval as { payload: { accepted: boolean } }).payload.accepted)",
-		);
+		expect(result.code).toContain("if (challenge.accepted) {");
 		expect(result.code).toContain("return { success: true");
 		expect(result.code).toContain("} else {");
 		expect(result.code).toContain("return { success: false");
@@ -1655,9 +1653,7 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(result.code).toContain('step.do("mensaje-rechazo"');
 
 		// Join and End must appear AFTER the if/else, not inside a branch
-		const ifIdx = result.code.indexOf(
-			"if ((aprobacion as { payload: { accepted: boolean } }).payload.accepted)",
-		);
+		const ifIdx = result.code.indexOf("if (challenge.accepted) {");
 		const joinIdx = result.code.indexOf('step.do("union"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
@@ -3527,6 +3523,17 @@ describe("generateWorkflowCode – Fase 2 API auth: bearer", () => {
 		expect(result.code).toContain("this.env.TOKEN_TEST");
 		expect(result.code).not.toContain('"TOKEN_TEST"');
 	});
+
+	it("maps a pure ${secret.NAME} picker token to this.env.NAME", () => {
+		const result = genApi({
+			authConfig: { type: "bearer", bearerToken: "${secret.NLS_TOKEN}" },
+		});
+		expect(result.code).toContain("this.env.NLS_TOKEN");
+		// No template-literal wrapping around the secret when it's a pure token.
+		expect(result.code).not.toContain("`${this.env.NLS_TOKEN}`");
+		// And we never leak the literal picker syntax into the output.
+		expect(result.code).not.toContain("secret.NLS_TOKEN");
+	});
 });
 
 describe("generateWorkflowCode – Fase 2 API auth: api-key", () => {
@@ -3610,6 +3617,24 @@ describe("generateWorkflowCode – Fase 2 API custom headers", () => {
 		const result = genApi({ customHeaders: [] });
 		expect(result.code).not.toContain("X-Custom-Header");
 	});
+
+	it("supports ${secret.NAME} tokens in pure and mixed header values", () => {
+		const result = genApi({
+			customHeaders: [
+				{ key: "X-Api-Key", value: "${secret.API_KEY}" },
+				{ key: "X-Combined", value: "prefix-${secret.TENANT_ID}-suffix" },
+			],
+		});
+		// Pure secret → bare this.env.X assignment (no backtick wrapper).
+		expect(result.code).toContain('headers["X-Api-Key"] = this.env.API_KEY;');
+		// Mixed literal + secret → template literal with this.env.X inside.
+		expect(result.code).toContain(
+			'headers["X-Combined"] = `prefix-${this.env.TENANT_ID}-suffix`;',
+		);
+		// Never leak the picker syntax.
+		expect(result.code).not.toContain("secret.API_KEY");
+		expect(result.code).not.toContain("secret.TENANT_ID");
+	});
 });
 
 describe("generateWorkflowCode – Fase 2 API body: raw-json", () => {
@@ -3624,6 +3649,69 @@ describe("generateWorkflowCode – Fase 2 API body: raw-json", () => {
 		expect(result.code).toContain('"loanId"');
 		expect(result.code).toContain('"amount"');
 		expect(result.code).toContain("body:");
+	});
+
+	it("expands ${secret.X} and ${node.prop} tokens inside raw JSON body", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "raw-json",
+				rawJson:
+					'{"apiKey": "${secret.STRIPE_KEY}", "customerId": "${node-123.id}"}',
+			},
+		});
+		// Secret expanded to this.env.X
+		expect(result.code).toContain("${this.env.STRIPE_KEY}");
+		// Node ids dehyphenated
+		expect(result.code).toContain("${node_123.id}");
+		// Picker syntax is never leaked verbatim into the output.
+		expect(result.code).not.toContain("secret.STRIPE_KEY");
+	});
+});
+
+describe("generateWorkflowCode – ${secret.X} in Decision and Transform", () => {
+	it("expands ${secret.X} inside Decision conditions", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Check flag",
+				config: { condition: "${secret.FEATURE_FLAG} === 'on'" },
+			}),
+			createNode({ id: "end-top", type: "End", title: "Fin A" }),
+			createNode({ id: "end-bot", type: "End", title: "Fin B" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "decision"),
+			createEdge("decision", "end-top", { fromPort: "top" }),
+			createEdge("decision", "end-bot", { fromPort: "bottom" }),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("if (this.env.FEATURE_FLAG === 'on')");
+		expect(result.code).not.toContain("${secret.FEATURE_FLAG}");
+	});
+
+	it("expands ${secret.X} inside Transform code bodies", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Build payload",
+				config: {
+					code: "return { apiKey: ${secret.STRIPE_KEY} };",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "transform"),
+			createEdge("transform", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("apiKey: this.env.STRIPE_KEY");
+		expect(result.code).not.toContain("${secret.STRIPE_KEY}");
 	});
 });
 
@@ -3815,5 +3903,114 @@ describe("generateWorkflowCode – Fase 2 API combined: auth + headers + body + 
 		expect(result.code).toContain("this.env.CLIENT_ID");
 		expect(result.code).toContain('"id"');
 		expect(result.code).toContain('"result"');
+	});
+});
+
+describe("generateWorkflowCode – Challenge exposed outputs (accepted/timedOut/respondedBy/respondedAt)", () => {
+	const buildBasicNodes = (): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "challenge-abc",
+			type: "Challenge",
+			title: "Aprobación",
+			config: {
+				challengeType: "acceptance",
+				challengeTimeout: { value: 30, unit: "minutes" },
+			},
+		}),
+		createNode({ id: "end-ok", type: "End", title: "Ok" }),
+		createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
+	];
+	const buildBasicEdges = (): WorkflowEdge[] => [
+		createEdge("start", "challenge-abc"),
+		createEdge("challenge-abc", "end-ok", { fromPort: "top" }),
+		createEdge("challenge-abc", "end-ko", { fromPort: "bottom" }),
+	];
+
+	it("hoists a typed output variable named after the nodeId", () => {
+		const { code } = generateWorkflowCode(buildBasicNodes(), buildBasicEdges());
+		expect(code).toContain(
+			"let challenge_abc: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null }",
+		);
+	});
+
+	it("normalizes waitForEvent into { accepted, timedOut, respondedBy, respondedAt }", () => {
+		const { code } = generateWorkflowCode(buildBasicNodes(), buildBasicEdges());
+		expect(code).toContain("challenge_abc = (aprobacion === null)");
+		expect(code).toContain("timedOut: true");
+		expect(code).toContain("timedOut: false");
+		expect(code).toContain("respondedAt: new Date().toISOString()");
+	});
+
+	it("branches on the exposed output variable (outputVar.accepted)", () => {
+		const { code } = generateWorkflowCode(buildBasicNodes(), buildBasicEdges());
+		expect(code).toContain("if (challenge_abc.accepted) {");
+		expect(code).not.toContain(
+			"if ((aprobacion as { payload: { accepted: boolean } }).payload.accepted)",
+		);
+	});
+
+	it("downstream nodes can reference ${challenge-abc.accepted} via expanded path", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge-abc",
+				type: "Challenge",
+				title: "Aprobación",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({
+				id: "decision-1",
+				type: "Decision",
+				title: "Decide",
+				config: {
+					conditions: [
+						{
+							id: "c1",
+							expression: "${challenge-abc.accepted}",
+							target: "end-ok",
+						},
+					],
+					defaultTarget: "end-ko",
+				},
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge-abc"),
+			createEdge("challenge-abc", "decision-1", { fromPort: "top" }),
+			createEdge("challenge-abc", "end-ko", { fromPort: "bottom" }),
+			createEdge("decision-1", "end-ok"),
+			createEdge("decision-1", "end-ko"),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("challenge_abc.accepted");
+	});
+
+	it("uses outputVar.accepted in the inline retry break condition", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge-retry",
+				type: "Challenge",
+				title: "Reintento",
+				config: {
+					challengeType: "acceptance",
+					retries: { maxRetries: 2, roles: [] },
+				},
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Ko" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge-retry"),
+			createEdge("challenge-retry", "end-ok", { fromPort: "top" }),
+			createEdge("challenge-retry", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("if (challenge_retry.accepted) break;");
 	});
 });

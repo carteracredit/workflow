@@ -260,6 +260,12 @@ export interface OutputSchemaProperty {
 	enumValues?: string[]; // only when type === "enum"
 	items?: OutputSchemaProperty; // only when type === "array"
 	properties?: OutputSchemaProperty[]; // only when type === "object"
+	/**
+	 * When `true`, the property is system-provided (e.g. fixed case data that
+	 * always arrives with the workflow payload) and cannot be edited or removed
+	 * from the output schema editor. It is still selectable in VariablePickers.
+	 */
+	readOnly?: boolean;
 }
 
 export interface OutputSchema {

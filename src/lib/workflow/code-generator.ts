@@ -111,20 +111,44 @@ function nodeIdToVarName(nodeId: string): string {
 }
 
 /**
- * Expands variable-picker references of the form `${nodeId.property}` into
- * valid JavaScript property-access expressions.
+ * Expands a single variable-picker path into a runtime JavaScript expression.
+ *
+ *  - `secret.NAME`          → `this.env.NAME` (workflow-level variable/secret;
+ *                             preserves UPPER_SNAKE case and does not dehyphenate).
+ *  - `<anyOther.path>`      → same string with hyphens replaced by underscores,
+ *                             so node IDs like `node-123` become valid JS
+ *                             identifiers (`node_123.foo`).
+ *
+ * Centralizing this mapping keeps the `${secret.X}` → `this.env.X` contract in
+ * one place, regardless of whether the reference lives inside an auth field,
+ * a URL, a header value, a request body, a Decision condition, or a Transform
+ * code block.
+ */
+function expandVariablePath(path: string): string {
+	const trimmed = path.trim();
+	if (/^secret\./.test(trimmed)) {
+		return `this.env.${trimmed.slice("secret.".length)}`;
+	}
+	return trimmed.replace(/-/g, "_");
+}
+
+/**
+ * Expands variable-picker references of the form `${nodeId.property}` or
+ * `${secret.NAME}` into valid JavaScript expressions (bare, NOT wrapped in a
+ * template literal).
  *
  * The picker stores references using template-literal syntax which is NOT valid
  * in a plain JS expression (e.g. inside an `if` condition or a code block).
  * This helper converts them so that, for example,
- * `${node-123.count} > 0` becomes `node_123.count > 0`.
+ * `${node-123.count} > 0` becomes `node_123.count > 0` and
+ * `${secret.NLS_TOKEN}` becomes `this.env.NLS_TOKEN`.
  *
  * Use this for Decision conditions and Transform code bodies (bare expressions).
  * For quoted string values use `emitInterpolatedString` instead.
  */
 function expandVariableRefs(expr: string): string {
 	return expr.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
-		path.replace(/-/g, "_"),
+		expandVariablePath(path),
 	);
 }
 
@@ -155,10 +179,10 @@ function emitInterpolatedString(str: string): string {
 	if (!containsVariableRefs(str)) {
 		return `"${escapeString(str)}"`;
 	}
-	// Dehyphenate node IDs inside ${...} so they are valid JS identifiers,
-	// then wrap the whole thing in backticks.
+	// Rewrite each ${...} token to a valid JS expression (node-id dehyphen or
+	// `this.env.X` for `secret.X`), then wrap the whole thing in backticks.
 	const expanded = str.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
-		return `\${${path.replace(/-/g, "_")}}`;
+		return `\${${expandVariablePath(path)}}`;
 	});
 	// Escape any backticks inside the literal part (outside ${...}).
 	const escaped = expanded.replace(/`/g, "\\`");
@@ -167,22 +191,42 @@ function emitInterpolatedString(str: string): string {
 
 /**
  * Emits a value for use in generated TypeScript source code.
- * Supports three modes:
- *   - "env:VAR_NAME"         → this.env.VAR_NAME  (explicit env reference)
- *   - "TOKEN_TEST" (all-caps) → this.env.TOKEN_TEST (legacy / auto-detected env var)
- *   - any other text          → "literal string"    (used as-is)
  *
- * The auto-detection keeps backward compatibility with workflows saved before
- * the "env:" prefix convention was introduced.
+ * Supported inputs, in priority order:
+ *   - "env:VAR_NAME"          → this.env.VAR_NAME  (explicit env reference,
+ *                                                   original convention).
+ *   - "${secret.NAME}"        → this.env.NAME      (new variable-picker token,
+ *                                                   single pure secret reference).
+ *   - "TOKEN_TEST" (all-caps) → this.env.TOKEN_TEST (legacy auto-detected env
+ *                                                    var; kept for
+ *                                                    backwards compatibility
+ *                                                    with workflows saved
+ *                                                    before "env:" was added).
+ *   - any text containing other `${...}` tokens
+ *                             → backtick template string with each token
+ *                               expanded via `expandVariablePath`.
+ *   - any other text          → "literal string"   (used as-is).
+ *
+ * The three env/secret shortcuts each produce a bare `this.env.X` expression so
+ * the caller can embed the result either as a standalone value or inside a
+ * template literal like `` `Bearer ${…}` ``.
  */
 const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+const PURE_SECRET_RE = /^\s*\$\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\s*$/;
 
 function emitAuthValue(raw: string): string {
 	if (raw.startsWith("env:")) {
 		return emitEnvRef(raw.slice(4).trim());
 	}
+	const pureSecret = raw.match(PURE_SECRET_RE);
+	if (pureSecret) {
+		return emitEnvRef(pureSecret[1]);
+	}
 	if (ENV_VAR_NAME_RE.test(raw)) {
 		return emitEnvRef(raw);
+	}
+	if (containsVariableRefs(raw)) {
+		return emitInterpolatedString(raw);
 	}
 	return JSON.stringify(raw);
 }
@@ -605,11 +649,21 @@ function generateAPIStep(
 		} else if (isOAuth2) {
 			code += `${indent}\theaders["Authorization"] = \`Bearer \${_oauth2Token_${nodeIdToVarName(node.id)}.access_token}\`;\n`;
 		}
-		// Custom headers
+		// Custom headers. Supports, in order:
+		//   - "env:VAR"             → this.env.VAR        (legacy prefix)
+		//   - "${secret.VAR}"       → this.env.VAR        (new picker token)
+		//   - any text with `${…}`  → interpolated template literal
+		//   - plain literal         → "quoted string"
 		for (const h of customHeaders) {
-			const val = h.value.startsWith("env:")
-				? emitEnvRef(h.value.slice(4).trim())
-				: emitInterpolatedString(h.value);
+			let val: string;
+			if (h.value.startsWith("env:")) {
+				val = emitEnvRef(h.value.slice(4).trim());
+			} else {
+				const pureSecret = h.value.match(PURE_SECRET_RE);
+				val = pureSecret
+					? emitEnvRef(pureSecret[1])
+					: emitInterpolatedString(h.value);
+			}
 			code += `${indent}\theaders[${JSON.stringify(h.key)}] = ${val};\n`;
 		}
 	}
@@ -626,10 +680,12 @@ function generateAPIStep(
 	if (hasBody) {
 		const mode = bodyConfig?.mode ?? "none";
 		if (mode === "raw-json" && bodyConfig?.rawJson) {
-			// Always use backticks: preserves inner JSON quotes and allows ${nodeId.prop} refs
+			// Always use backticks: preserves inner JSON quotes and allows
+			// ${nodeId.prop} and ${secret.VAR} refs (both mapped via
+			// expandVariablePath so secrets resolve to this.env.VAR).
 			const dehyphenated = bodyConfig.rawJson.replace(
 				/\$\{([^}]+)\}/g,
-				(_, path: string) => `\${${path.replace(/-/g, "_")}}`,
+				(_, path: string) => `\${${expandVariablePath(path)}}`,
 			);
 			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
 			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
@@ -992,6 +1048,7 @@ function generateChallengeStep(
 ): string {
 	const stepName = createStepName(node);
 	const varName = createVariableName(node.title, "challengeResult");
+	const outputVar = nodeIdToVarName(node.id);
 	const config = node.config as ChallengeNodeConfig | undefined;
 	const challengeType = config?.challengeType || "acceptance";
 	const timeout = config?.challengeTimeout;
@@ -1051,6 +1108,7 @@ function generateChallengeStep(
 			retryVarName,
 			chVar,
 		);
+		code += emitChallengeOutputAssignment(innerIndent, varName, outputVar);
 		code += generateProgressCall(
 			node,
 			innerIndent,
@@ -1060,7 +1118,7 @@ function generateChallengeStep(
 			chVar,
 		);
 		// If the challenge was accepted, exit the inline retry loop
-		code += `${innerIndent}if ((${varName} as { payload: { accepted: boolean } }).payload.accepted) break;\n`;
+		code += `${innerIndent}if (${outputVar}.accepted) break;\n`;
 		code += `${indent}}\n`;
 	} else {
 		// No inline retry — single waitForEvent
@@ -1083,6 +1141,7 @@ function generateChallengeStep(
 		code += `${indent}\t},\n`;
 		code += `${indent});\n`;
 		code += generateCaseObjectCall(node, indent, varName, retryVarName);
+		code += emitChallengeOutputAssignment(indent, varName, outputVar);
 		code += generateProgressCall(
 			node,
 			indent,
@@ -1092,6 +1151,35 @@ function generateChallengeStep(
 		);
 	}
 
+	return code;
+}
+
+/**
+ * Emits the assignment that normalizes the raw `waitForEvent` result into the
+ * fixed Challenge output shape exposed via the VariablePicker
+ * (CHALLENGE_OUTPUT_SCHEMA):
+ *
+ *   { accepted, timedOut, respondedBy, respondedAt }
+ *
+ * `waitForEvent` returns `null` on timeout and an object `{ payload: ... }`
+ * otherwise, so we map the two cases explicitly here.
+ */
+function emitChallengeOutputAssignment(
+	indent: string,
+	rawVar: string,
+	outputVar: string,
+): string {
+	let code = "";
+	code += `${indent}${outputVar} = (${rawVar} === null)\n`;
+	code += `${indent}\t? { accepted: false, timedOut: true, respondedBy: null, respondedAt: null }\n`;
+	code += `${indent}\t: {\n`;
+	code += `${indent}\t\taccepted: !!(${rawVar} as { payload: { accepted?: boolean } }).payload?.accepted,\n`;
+	code += `${indent}\t\ttimedOut: false,\n`;
+	code += `${indent}\t\trespondedBy:\n`;
+	code += `${indent}\t\t\t(${rawVar} as { payload: { respondedBy?: string | null } }).payload\n`;
+	code += `${indent}\t\t\t\t?.respondedBy ?? null,\n`;
+	code += `${indent}\t\trespondedAt: new Date().toISOString(),\n`;
+	code += `${indent}\t};\n`;
 	return code;
 }
 
@@ -1492,7 +1580,7 @@ function traverseBranch(
 		}
 		// Handle Challenge nodes (branching based on acceptance)
 		else if (node.type === "Challenge" && forwardOutgoing.length === 2) {
-			const varName = createVariableName(node.title, "challengeResult");
+			const outputVar = nodeIdToVarName(node.id);
 			const topEdge = forwardOutgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "top",
 			);
@@ -1517,7 +1605,7 @@ function traverseBranch(
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			code += `${indent}if ((${varName} as { payload: { accepted: boolean } }).payload.accepted) {\n`;
+			code += `${indent}if (${outputVar}.accepted) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(
@@ -1719,7 +1807,13 @@ export function generateWorkflowCode(
 	if (challengeNodes.length > 0) {
 		for (const node of challengeNodes) {
 			const varName = createVariableName(node.title, "challengeResult");
+			const outputVar = nodeIdToVarName(node.id);
 			code += `\t\tlet ${varName}: unknown = null;\n`;
+			// Exposed output object referenced from downstream nodes via
+			// `${nodeId.accepted}`, `${nodeId.timedOut}`, `${nodeId.respondedBy}`,
+			// and `${nodeId.respondedAt}`. Hoisted so branches and the
+			// convergence path can reference it safely.
+			code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
 		}
 		code += `\n`;
 	}

@@ -4,7 +4,9 @@ import {
 	findAllNearestPreviousCheckpoints,
 	getCheckpointNode,
 	findUpstreamNodes,
+	buildSecretsSource,
 	buildVariableSourceNodes,
+	SECRETS_SOURCE_ID,
 } from "./graph-utils";
 import type { WorkflowNode, WorkflowEdge } from "./types";
 
@@ -633,6 +635,225 @@ describe("graph-utils", () => {
 				(c) => c.name === "street",
 			);
 			expect(streetChild?.path).toBe("form-2.homeAddress.street");
+		});
+
+		it("always emits the Start source with CASE_VARIABLES even when it has no custom outputSchema", () => {
+			const start: WorkflowNode = {
+				id: "start-1",
+				type: "Start",
+				title: "Start",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([start]);
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe("start-1");
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toEqual(
+				expect.arrayContaining([
+					"caseId",
+					"caseNumber",
+					"requestedAmount",
+					"clientUserId",
+					"clientName",
+					"clientEmail",
+					"clientPhone",
+					"clientAddress",
+					"roleContacts",
+				]),
+			);
+
+			const clientAddress = result[0].variables.find(
+				(v) => v.name === "clientAddress",
+			);
+			expect(clientAddress?.type).toBe("object");
+			expect(clientAddress?.children?.map((c) => c.name)).toEqual(
+				expect.arrayContaining([
+					"streetNumber",
+					"streetName",
+					"apt",
+					"city",
+					"state",
+					"zipCode",
+				]),
+			);
+		});
+
+		it("merges Start custom outputSchema on top of CASE_VARIABLES without letting custom fields shadow system ones", () => {
+			const start: WorkflowNode = {
+				id: "start-1",
+				type: "Start",
+				title: "Start",
+				description: "",
+				roles: [],
+				config: {
+					outputSchema: {
+						name: "StartOutput",
+						properties: [
+							{ id: "custom-1", name: "campaignId", type: "string" },
+							// Tries to shadow a system field; must be ignored.
+							{ id: "custom-2", name: "caseId", type: "string" },
+						],
+					},
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([start]);
+			expect(result).toHaveLength(1);
+
+			const campaign = result[0].variables.find((v) => v.name === "campaignId");
+			expect(campaign).toBeDefined();
+			expect(campaign?.path).toBe("start-1.campaignId");
+
+			const caseIdEntries = result[0].variables.filter(
+				(v) => v.name === "caseId",
+			);
+			expect(caseIdEntries).toHaveLength(1);
+			expect(caseIdEntries[0].description).toBe("Case UUID (Case.id)");
+		});
+
+		it("emits the Start source via allNodes even when it is not reachable upstream", () => {
+			const start: WorkflowNode = {
+				id: "start-1",
+				type: "Start",
+				title: "Start",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+			const disconnected: WorkflowNode = {
+				id: "api-1",
+				type: "API",
+				title: "Dangling API",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([disconnected], {
+				allNodes: [start, disconnected],
+			});
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe("start-1");
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toContain("caseId");
+		});
+
+		it("Challenge nodes always expose CHALLENGE_OUTPUT_SCHEMA fields", () => {
+			const challenge: WorkflowNode = {
+				id: "challenge-1",
+				type: "Challenge",
+				title: "Aprobación",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([challenge]);
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe("challenge-1");
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toEqual([
+				"accepted",
+				"timedOut",
+				"respondedBy",
+				"respondedAt",
+			]);
+
+			const accepted = result[0].variables.find((v) => v.name === "accepted");
+			expect(accepted?.path).toBe("challenge-1.accepted");
+			expect(accepted?.type).toBe("boolean");
+		});
+
+		it("Challenge merges user-declared custom properties on top of fixed outputs without duplicating", () => {
+			const challenge: WorkflowNode = {
+				id: "challenge-2",
+				type: "Challenge",
+				title: "Firma",
+				description: "",
+				roles: [],
+				config: {
+					outputSchema: {
+						properties: [
+							{ id: "c-1", name: "accepted", type: "string" },
+							{ id: "c-2", name: "signatureId", type: "string" },
+						],
+					},
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([challenge]);
+			expect(result).toHaveLength(1);
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toContain("signatureId");
+
+			const acceptedEntries = result[0].variables.filter(
+				(v) => v.name === "accepted",
+			);
+			expect(acceptedEntries).toHaveLength(1);
+			expect(acceptedEntries[0].type).toBe("boolean");
+		});
+	});
+
+	describe("buildSecretsSource", () => {
+		it("returns null when there are no variables", () => {
+			expect(buildSecretsSource([])).toBeNull();
+		});
+
+		it("returns a single source with stable id and `secret.NAME` paths, alphabetized", () => {
+			const source = buildSecretsSource([
+				{ name: "STRIPE_KEY", is_secret: true, environment: "production" },
+				{ name: "API_BASE_URL", environment: "all" },
+				{
+					name: "NLS_PASSWORD",
+					is_secret: true,
+					description: "NLS basic auth",
+				},
+			]);
+
+			expect(source).not.toBeNull();
+			expect(source?.id).toBe(SECRETS_SOURCE_ID);
+			expect(source?.variables.map((v) => v.name)).toEqual([
+				"API_BASE_URL",
+				"NLS_PASSWORD",
+				"STRIPE_KEY",
+			]);
+			expect(source?.variables.map((v) => v.path)).toEqual([
+				"secret.API_BASE_URL",
+				"secret.NLS_PASSWORD",
+				"secret.STRIPE_KEY",
+			]);
+			for (const v of source?.variables ?? []) {
+				expect(v.type).toBe("string");
+			}
+
+			const stripe = source?.variables.find((v) => v.name === "STRIPE_KEY");
+			expect(stripe?.description).toContain("secret");
+			expect(stripe?.description).toContain("production");
+		});
+
+		it("honors a custom source name", () => {
+			const source = buildSecretsSource([{ name: "A" }], {
+				name: "Mis secretos",
+			});
+			expect(source?.name).toBe("Mis secretos");
 		});
 	});
 
