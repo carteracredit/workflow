@@ -9,6 +9,7 @@ import type {
 	APIFailureHandling,
 	ChallengeNodeConfig,
 	ChallengeType,
+	PromotionNodeConfig,
 } from "@/lib/workflow/types";
 import {
 	Play,
@@ -26,6 +27,7 @@ import {
 	Clock3,
 	ShieldCheck,
 	Shield,
+	BadgePercent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
@@ -58,6 +60,7 @@ const NODE_ICONS = {
 	API: Globe,
 	Message: Mail,
 	Challenge: Shield,
+	Promotion: BadgePercent,
 	Checkpoint: FlagIcon,
 	Join: Merge,
 	FlagChange: Tag,
@@ -73,6 +76,7 @@ export const NODE_BG_COLORS = {
 	API: "var(--node-bg-api)",
 	Message: "var(--node-bg-message)",
 	Challenge: "var(--node-bg-challenge)",
+	Promotion: "var(--node-bg-promotion)",
 	Checkpoint: "var(--node-bg-checkpoint)",
 	Join: "var(--node-bg-join)",
 	FlagChange: "var(--node-bg-status)",
@@ -88,6 +92,7 @@ export const NODE_ICON_COLORS = {
 	API: "var(--node-icon-api)",
 	Message: "var(--node-icon-message)",
 	Challenge: "var(--node-icon-challenge)",
+	Promotion: "var(--node-icon-promotion)",
 	Checkpoint: "var(--node-icon-checkpoint)",
 	Join: "var(--node-icon-join)",
 	FlagChange: "var(--node-icon-status)",
@@ -124,6 +129,10 @@ export function NodeRenderer({
 		? (node.config as ChallengeNodeConfig | undefined)
 		: undefined;
 	const challengeRetries = challengeConfig?.retries;
+	const isPromotionNode = node.type === "Promotion";
+	const promotionConfig = isPromotionNode
+		? (node.config as PromotionNodeConfig | undefined)
+		: undefined;
 	const iconBackgroundColor = isSafeCheckpoint
 		? "var(--node-safe-icon-bg)"
 		: baseIconBackground;
@@ -260,7 +269,8 @@ export function NodeRenderer({
 		flagChangesCount > 0 ||
 		(node.type === "API" && node.config.failureHandling) ||
 		isSafeCheckpoint ||
-		(isChallengeNode && challengeConfig);
+		(isChallengeNode && challengeConfig) ||
+		(isPromotionNode && promotionConfig);
 
 	let estimatedHeight = MIN_NODE_HEIGHT;
 	if (hasDescription) estimatedHeight += 22;
@@ -527,6 +537,16 @@ export function NodeRenderer({
 											` +${challengeRetries.roles.length - 2}`}
 									</span>
 								)}
+							</div>
+						)}
+
+						{isPromotionNode && promotionConfig && (
+							<div className="mt-2">
+								<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+									<BadgePercent className="h-3 w-3" />
+									{t("canvas.promotionCommissionLabel")}:{" "}
+									{promotionConfig.commission}
+								</span>
 							</div>
 						)}
 

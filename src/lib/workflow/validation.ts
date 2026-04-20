@@ -63,8 +63,8 @@ export function validateWorkflow(
 		});
 	}
 
-	// Validación 2: Solo Form y Challenge requieren al menos un rol
-	const NODES_WITH_REQUIRED_ROLES = ["Form", "Challenge"];
+	// Validación 2: Form, Challenge y Promotion requieren al menos un rol
+	const NODES_WITH_REQUIRED_ROLES = ["Form", "Challenge", "Promotion"];
 	nodes.forEach((node) => {
 		if (
 			NODES_WITH_REQUIRED_ROLES.includes(node.type) &&
@@ -440,6 +440,22 @@ export function validateWorkflow(
 			}
 
 			validateChallengeResultConnections(node, config, edges, errors);
+		}
+
+		if (node.type === "Promotion") {
+			const config = node.config as { commission?: unknown } | undefined;
+			if (
+				config === undefined ||
+				typeof config.commission !== "number" ||
+				!Number.isFinite(config.commission) ||
+				config.commission < 0
+			) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": La comisión debe ser un número mayor o igual a 0`,
+					severity: "error",
+				});
+			}
 		}
 	});
 

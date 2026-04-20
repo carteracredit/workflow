@@ -3,7 +3,10 @@
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
-import { createDefaultChallengeConfig } from "@/lib/workflow/types";
+import {
+	createDefaultChallengeConfig,
+	createDefaultPromotionConfig,
+} from "@/lib/workflow/types";
 import {
 	XCircle,
 	FileText,
@@ -17,6 +20,7 @@ import {
 	Circle,
 	Play,
 	Shield,
+	BadgePercent,
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -114,6 +118,13 @@ const NODE_CATEGORIES = [
 				bgColor: "var(--node-bg-message)",
 				iconColorVar: "--node-icon-message",
 			},
+			{
+				type: "Promotion" as NodeType,
+				labelKey: "palette.nodePromotion",
+				icon: <BadgePercent className="h-4 w-4" />,
+				bgColor: "var(--node-bg-promotion)",
+				iconColorVar: "--node-icon-promotion",
+			},
 		],
 	},
 	{
@@ -141,6 +152,9 @@ const NODE_CATEGORIES = [
 const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	if (type === "Challenge") {
 		return createDefaultChallengeConfig();
+	}
+	if (type === "Promotion") {
+		return createDefaultPromotionConfig();
 	}
 	if (type === "Message") {
 		return { channel: "email", mergeVars: [] };

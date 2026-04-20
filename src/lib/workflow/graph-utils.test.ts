@@ -810,6 +810,77 @@ describe("graph-utils", () => {
 			expect(acceptedEntries).toHaveLength(1);
 			expect(acceptedEntries[0].type).toBe("boolean");
 		});
+
+		it("Promotion nodes always expose PROMOTION_OUTPUT_SCHEMA fields", () => {
+			const promotion: WorkflowNode = {
+				id: "promotion-1",
+				type: "Promotion",
+				title: "Seleccionar promoción",
+				description: "",
+				roles: [],
+				config: { commission: 55 },
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([promotion]);
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe("promotion-1");
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toEqual([
+				"promotionId",
+				"promotionName",
+				"selectedTerm",
+				"finalAmount",
+				"monthlyPayment",
+				"interestRate",
+				"downPayment",
+				"contractorFee",
+				"commission",
+				"selectedBy",
+				"selectedAt",
+			]);
+
+			const monthly = result[0].variables.find(
+				(v) => v.name === "monthlyPayment",
+			);
+			expect(monthly?.path).toBe("promotion-1.monthlyPayment");
+			expect(monthly?.type).toBe("number");
+		});
+
+		it("Promotion merges user-declared custom properties without duplicating fixed outputs", () => {
+			const promotion: WorkflowNode = {
+				id: "promotion-2",
+				type: "Promotion",
+				title: "Custom promo",
+				description: "",
+				roles: [],
+				config: {
+					commission: 75,
+					outputSchema: {
+						properties: [
+							{ id: "p-1", name: "monthlyPayment", type: "string" },
+							{ id: "p-2", name: "legacyFlag", type: "boolean" },
+						],
+					},
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([promotion]);
+			expect(result).toHaveLength(1);
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toContain("legacyFlag");
+
+			const monthlyEntries = result[0].variables.filter(
+				(v) => v.name === "monthlyPayment",
+			);
+			expect(monthlyEntries).toHaveLength(1);
+			expect(monthlyEntries[0].type).toBe("number");
+		});
 	});
 
 	describe("buildSecretsSource", () => {

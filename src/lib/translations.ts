@@ -347,6 +347,7 @@ export const translations = {
 			nodeStart: "Start",
 			nodeDecision: "Decision",
 			nodeChallenge: "Challenge",
+			nodePromotion: "Promotion",
 			nodeCheckpoint: "Checkpoint",
 			nodeJoin: "Join",
 			nodeFlagChange: "Flag Change",
@@ -401,6 +402,7 @@ export const translations = {
 			nodeApiFailureCheckpoint: "Checkpoint",
 			challengeTypeAcceptance: "Acceptance",
 			challengeTypeSignature: "Signature",
+			promotionCommissionLabel: "Commission",
 			staleUnitHours: "hours",
 			staleUnitDays: "days",
 		},
@@ -721,6 +723,12 @@ export const translations = {
 			challengeFailureTitle: "Behavior on failure:",
 			challengeFailureDesc:
 				"If the challenge fails (timeout or rejection), the flow automatically returns to the nearest previous checkpoint.",
+			promotionCommissionLabel: "Commission (COMMISSION)",
+			promotionCommissionDesc:
+				"Fixed amount added to the principal in the PMT formula when computing the monthly payment. Default 55.",
+			promotionOutputsTitle: "Outputs exposed by this node",
+			promotionOutputsDesc:
+				"The selected promotion snapshot (promotionId, selectedTerm, monthlyPayment, etc.) is automatically exposed to downstream nodes through the variable picker.",
 			checkpointSafeLabel: "Safe checkpoint",
 			checkpointSafeDesc:
 				'Mark this checkpoint as "safe" to use it as a protected stage.',
@@ -1293,6 +1301,7 @@ export const translations = {
 			nodeStart: "Inicio",
 			nodeDecision: "Decisión",
 			nodeChallenge: "Challenge",
+			nodePromotion: "Promoción",
 			nodeCheckpoint: "Checkpoint",
 			nodeJoin: "Unión",
 			nodeFlagChange: "Flag Change",
@@ -1348,6 +1357,7 @@ export const translations = {
 			nodeApiFailureCheckpoint: "Checkpoint",
 			challengeTypeAcceptance: "Aceptación",
 			challengeTypeSignature: "Firma",
+			promotionCommissionLabel: "Comisión",
 			staleUnitHours: "horas",
 			staleUnitDays: "días",
 		},
@@ -1668,6 +1678,12 @@ export const translations = {
 			challengeFailureTitle: "Comportamiento en caso de fallo:",
 			challengeFailureDesc:
 				"Si el challenge falla (timeout o rechazo), el flujo retorna automáticamente al checkpoint previo más próximo.",
+			promotionCommissionLabel: "Comisión (COMMISSION)",
+			promotionCommissionDesc:
+				"Monto fijo que se suma al capital en la fórmula PMT al calcular el pago mensual. Valor por defecto 55.",
+			promotionOutputsTitle: "Salidas expuestas por este nodo",
+			promotionOutputsDesc:
+				"El snapshot de la promoción seleccionada (promotionId, selectedTerm, monthlyPayment, etc.) queda disponible automáticamente para los nodos siguientes a través del selector de variables.",
 			checkpointSafeLabel: "Checkpoint seguro",
 			checkpointSafeDesc:
 				'Marca este checkpoint como "safe" para usarlo como etapa protegida.',

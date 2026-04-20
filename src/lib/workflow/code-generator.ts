@@ -3,6 +3,7 @@ import type {
 	WorkflowEdge,
 	WorkflowMetadata,
 	ChallengeNodeConfig,
+	PromotionNodeConfig,
 	APIFailureHandling,
 	APIAuthConfig,
 	APIHeaderEntry,
@@ -11,6 +12,7 @@ import type {
 	MessageNodeConfig,
 	OutputSchema,
 } from "./types";
+import { DEFAULT_PROMOTION_COMMISSION } from "./types";
 import { slugify } from "../slugify";
 import {
 	validateTransformCode,
@@ -1184,6 +1186,100 @@ function emitChallengeOutputAssignment(
 }
 
 /**
+ * Generate code for a Promotion node.
+ *
+ * Promotion nodes wait (without timeout) for a `promotion_selection` event
+ * emitted by `cases-svc` once the user confirms their selection in the UI.
+ * The event payload carries the full snapshot (promotionId, selectedTerm,
+ * monthlyPayment, etc.) which we normalize into the fixed output shape so
+ * downstream nodes can reference it via `${nodeId.monthlyPayment}` etc.
+ */
+function generatePromotionStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	const varName = createVariableName(node.title, "promotionResult");
+	const outputVar = nodeIdToVarName(node.id);
+	const config = node.config as PromotionNodeConfig | undefined;
+	const commission =
+		typeof config?.commission === "number"
+			? config.commission
+			: DEFAULT_PROMOTION_COMMISSION;
+	const eventType = "promotion_selection";
+
+	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
+
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	let code = `${indent}// Promotion: ${node.title} (commission: ${commission} | roles: ${roles})\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		eventType,
+		retryVarName,
+	);
+	code += `${indent}${varName} = await step.waitForEvent<PromotionSelectionPayload>(\n`;
+	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}\t{\n`;
+	code += `${indent}\t\ttype: "${eventType}",\n`;
+	// No timeout on purpose: the workflow waits indefinitely until cases-svc
+	// forwards the user's selection. Wrap with a Checkpoint upstream if the
+	// business wants to guard against this.
+	code += `${indent}\t\ttimeout: "365 days",\n`;
+	code += `${indent}\t},\n`;
+	code += `${indent});\n`;
+	code += generateCaseObjectCall(node, indent, varName, retryVarName);
+	code += emitPromotionOutputAssignment(indent, varName, outputVar);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
+ * Emits the assignment that normalizes the raw `waitForEvent` result into the
+ * fixed Promotion output shape exposed via the VariablePicker
+ * (PROMOTION_OUTPUT_SCHEMA).
+ *
+ * `waitForEvent` on Promotion is expected to resolve with a non-null object
+ * (we use a very long timeout); if by accident it returns `null` we fall back
+ * to safe zeros so downstream nodes do not crash.
+ */
+function emitPromotionOutputAssignment(
+	indent: string,
+	rawVar: string,
+	outputVar: string,
+): string {
+	let code = "";
+	code += `${indent}${outputVar} = (${rawVar} === null)\n`;
+	code += `${indent}\t? { promotionId: "", promotionName: "", selectedTerm: 0, finalAmount: 0, monthlyPayment: 0, interestRate: 0, downPayment: 0, contractorFee: 0, commission: 0, selectedBy: "", selectedAt: "" }\n`;
+	code += `${indent}\t: {\n`;
+	code += `${indent}\t\tpromotionId: String((${rawVar} as { payload: { promotionId?: string } }).payload?.promotionId ?? ""),\n`;
+	code += `${indent}\t\tpromotionName: String((${rawVar} as { payload: { promotionName?: string } }).payload?.promotionName ?? ""),\n`;
+	code += `${indent}\t\tselectedTerm: Number((${rawVar} as { payload: { selectedTerm?: number } }).payload?.selectedTerm ?? 0),\n`;
+	code += `${indent}\t\tfinalAmount: Number((${rawVar} as { payload: { finalAmount?: number } }).payload?.finalAmount ?? 0),\n`;
+	code += `${indent}\t\tmonthlyPayment: Number((${rawVar} as { payload: { monthlyPayment?: number } }).payload?.monthlyPayment ?? 0),\n`;
+	code += `${indent}\t\tinterestRate: Number((${rawVar} as { payload: { interestRate?: number } }).payload?.interestRate ?? 0),\n`;
+	code += `${indent}\t\tdownPayment: Number((${rawVar} as { payload: { downPayment?: number } }).payload?.downPayment ?? 0),\n`;
+	code += `${indent}\t\tcontractorFee: Number((${rawVar} as { payload: { contractorFee?: number } }).payload?.contractorFee ?? 0),\n`;
+	code += `${indent}\t\tcommission: Number((${rawVar} as { payload: { commission?: number } }).payload?.commission ?? 0),\n`;
+	code += `${indent}\t\tselectedBy: String((${rawVar} as { payload: { selectedBy?: string } }).payload?.selectedBy ?? ""),\n`;
+	code += `${indent}\t\tselectedAt: String((${rawVar} as { payload: { selectedAt?: string } }).payload?.selectedAt ?? new Date().toISOString()),\n`;
+	code += `${indent}\t};\n`;
+	return code;
+}
+
+/**
  * Generate code for a FlagChange node
  */
 function generateFlagChangeStep(
@@ -1372,6 +1468,8 @@ function generateNodeCode(
 			return generateCheckpointStep(node, indent, retryVar);
 		case "Challenge":
 			return generateChallengeStep(node, indent, retryVar);
+		case "Promotion":
+			return generatePromotionStep(node, indent, retryVar);
 		case "Decision":
 			// Decision generates an if/else, code is handled in traversal
 			return "";
@@ -1768,6 +1866,26 @@ export function generateWorkflowCode(
 	code += `\t[key: string]: unknown;\n`;
 	code += `}\n\n`;
 
+	// Promotion nodes share a well-defined event payload forwarded by
+	// `cases-svc` after validating the user's selection; declare its type
+	// once so the generated code is fully type-checked.
+	const hasPromotionNodes = nodes.some((n) => n.type === "Promotion");
+	if (hasPromotionNodes) {
+		code += `interface PromotionSelectionPayload {\n`;
+		code += `\tpromotionId: string;\n`;
+		code += `\tpromotionName: string;\n`;
+		code += `\tselectedTerm: number;\n`;
+		code += `\tfinalAmount: number;\n`;
+		code += `\tmonthlyPayment: number;\n`;
+		code += `\tinterestRate: number;\n`;
+		code += `\tdownPayment: number;\n`;
+		code += `\tcontractorFee: number;\n`;
+		code += `\tcommission: number;\n`;
+		code += `\tselectedBy: string;\n`;
+		code += `\tselectedAt: string;\n`;
+		code += `}\n\n`;
+	}
+
 	// Add metadata as comments
 	if (includeComments && metadata) {
 		code += `/**\n`;
@@ -1814,6 +1932,20 @@ export function generateWorkflowCode(
 			// and `${nodeId.respondedAt}`. Hoisted so branches and the
 			// convergence path can reference it safely.
 			code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
+		}
+		code += `\n`;
+	}
+
+	// Same pattern for Promotion nodes — hoist the normalized output object
+	// so downstream steps can dereference `${nodeId.promotionId}` safely even
+	// across retry/checkpoint loops.
+	const promotionNodes = nodes.filter((n) => n.type === "Promotion");
+	if (promotionNodes.length > 0) {
+		for (const node of promotionNodes) {
+			const varName = createVariableName(node.title, "promotionResult");
+			const outputVar = nodeIdToVarName(node.id);
+			code += `\t\tlet ${varName}: unknown = null;\n`;
+			code += `\t\tlet ${outputVar}: { promotionId: string; promotionName: string; selectedTerm: number; finalAmount: number; monthlyPayment: number; interestRate: number; downPayment: number; contractorFee: number; commission: number; selectedBy: string; selectedAt: string } = { promotionId: "", promotionName: "", selectedTerm: 0, finalAmount: 0, monthlyPayment: 0, interestRate: 0, downPayment: 0, contractorFee: 0, commission: 0, selectedBy: "", selectedAt: "" };\n`;
 		}
 		code += `\n`;
 	}

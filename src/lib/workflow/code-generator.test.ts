@@ -375,6 +375,37 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain('timeout: "48 hours"');
 	});
 
+	it("should generate Promotion (waitForEvent) step code", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "promo",
+				type: "Promotion",
+				title: "Seleccionar promo",
+				roles: ["seller"],
+				config: { commission: 75 },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "promo"),
+			createEdge("promo", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain(
+			"step.waitForEvent<PromotionSelectionPayload>(",
+		);
+		expect(result.code).toContain('type: "promotion_selection"');
+		expect(result.code).toContain('"seleccionar-promo"');
+		expect(result.code).toContain("interface PromotionSelectionPayload {");
+		expect(result.code).toContain("let seleccionarPromo: unknown = null;");
+		expect(result.code).toMatch(/commission: 75/);
+		expect(result.code).toContain("promo = (seleccionarPromo === null)");
+	});
+
 	it("should generate Decision branching code", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),

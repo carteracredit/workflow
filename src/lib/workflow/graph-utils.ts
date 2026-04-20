@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { cloneCaseVariables } from "./case-variables";
 import { cloneChallengeOutputSchema } from "./challenge-output";
+import { clonePromotionOutputSchema } from "./promotion-output";
 
 /**
  * Encuentra el checkpoint anterior más próximo a un nodo dado.
@@ -309,14 +310,20 @@ export function buildVariableSourceNodes(
 		const schema = node.config.outputSchema as OutputSchema | undefined;
 		const customProps = schema?.properties ?? [];
 
-		// Challenge nodes always expose the fixed challenge output fields
-		// (accepted, timedOut, respondedBy, respondedAt). User-declared custom
-		// properties are merged on top, but fixed fields win on collisions so
-		// downstream references are always resolvable at runtime.
+		// Challenge and Promotion nodes always expose a fixed output schema
+		// (accepted/timedOut/... for Challenge; promotionId/monthlyPayment/...
+		// for Promotion). User-declared custom properties are merged on top,
+		// but fixed fields win on collisions so downstream references are
+		// always resolvable at runtime.
 		let properties: OutputSchemaProperty[];
 		if (node.type === "Challenge") {
 			properties = mergePropertiesByName(
 				cloneChallengeOutputSchema(),
+				customProps,
+			);
+		} else if (node.type === "Promotion") {
+			properties = mergePropertiesByName(
+				clonePromotionOutputSchema(),
 				customProps,
 			);
 		} else {
