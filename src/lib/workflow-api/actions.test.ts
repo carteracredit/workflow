@@ -160,7 +160,10 @@ describe("workflow-api server actions", () => {
 
 	describe("getWorkflowsAction", () => {
 		it("returns workflows list on success", async () => {
-			vi.mocked(listWorkflows).mockResolvedValue([mockWorkflow]);
+			vi.mocked(listWorkflows).mockResolvedValue({
+				workflows: [mockWorkflow],
+				resultInfo: { page: 1, per_page: 20, count: 1, total_count: 1 },
+			});
 
 			const result = await getWorkflowsAction();
 
@@ -172,7 +175,10 @@ describe("workflow-api server actions", () => {
 		});
 
 		it("passes search parameter", async () => {
-			vi.mocked(listWorkflows).mockResolvedValue([]);
+			vi.mocked(listWorkflows).mockResolvedValue({
+				workflows: [],
+				resultInfo: { page: 1, per_page: 20, count: 0, total_count: 0 },
+			});
 
 			await getWorkflowsAction("credit");
 

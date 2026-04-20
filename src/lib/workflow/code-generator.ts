@@ -105,6 +105,25 @@ function escapeString(str: string): string {
 }
 
 /**
+ * Whether a template string contains `${...}` variable interpolation markers
+ * produced by `VariableTemplateInput`.
+ */
+function hasTemplateVars(str: string): boolean {
+	return /\$\{[^}]+\}/.test(str);
+}
+
+/**
+ * Convert a template string like `"Hello ${event.payload.x}"` into a JS
+ * template literal like `` `Hello ${event.payload.x}` ``.
+ * Backticks and backslashes inside literal text sections are escaped.
+ */
+function toJsTemplateLiteral(str: string): string {
+	// Escape backtick and backslash in the raw string, but preserve ${...} intact
+	const escaped = str.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+	return `\`${escaped}\``;
+}
+
+/**
  * Converts a node ID into a valid JavaScript identifier by replacing hyphens
  * with underscores. E.g. "node-1773093521695" → "node_1773093521695".
  */
@@ -955,18 +974,27 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 			code += `${indent}\t\ttemplateName: "", // TODO: set Mandrill template name\n`;
 		}
 		if (subject) {
-			code += `${indent}\t\tsubject: "${escapeString(subject)}",\n`;
+			const subjectCode = hasTemplateVars(subject)
+				? toJsTemplateLiteral(subject)
+				: `"${escapeString(subject)}"`;
+			code += `${indent}\t\tsubject: ${subjectCode},\n`;
 		}
 		if (mergeVars.length > 0) {
 			code += `${indent}\t\tmergeVars: {\n`;
 			for (const mv of mergeVars) {
 				const key = escapeString(mv.key.toUpperCase());
 				const value = mv.value.trim();
-				// If value looks like a JS expression (contains ".", "[", "("), emit it raw; otherwise as string literal
-				const isExpression = /[.[\](]/.test(value);
-				const valueCode = isExpression
-					? `${value} as string`
-					: `"${escapeString(value)}"`;
+				let valueCode: string;
+				if (hasTemplateVars(value)) {
+					// Template string with variable interpolation → JS template literal
+					valueCode = toJsTemplateLiteral(value);
+				} else if (/[.[\](]/.test(value)) {
+					// Plain JS expression (path access) → emit raw with type cast
+					valueCode = `${value} as string`;
+				} else {
+					// Plain string literal
+					valueCode = `"${escapeString(value)}"`;
+				}
 				code += `${indent}\t\t\t${key}: ${valueCode},\n`;
 			}
 			code += `${indent}\t\t},\n`;

@@ -4045,3 +4045,80 @@ describe("generateWorkflowCode – Challenge exposed outputs (accepted/timedOut/
 		expect(code).toContain("if (challenge_retry.accepted) break;");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Message node: template string interpolation
+// ---------------------------------------------------------------------------
+
+describe("Message node: template string interpolation in subject and mergeVars", () => {
+	const makeMessageNode = (config: Record<string, unknown>): WorkflowNode[] => [
+		createNode({ id: "start", type: "Start", title: "Inicio" }),
+		createNode({
+			id: "msg",
+			type: "Message",
+			title: "Email",
+			config: { channel: "email", templateName: "tpl", ...config },
+		}),
+		createNode({ id: "end", type: "End", title: "Fin" }),
+	];
+	const makeEdges = (): WorkflowEdge[] => [
+		createEdge("start", "msg"),
+		createEdge("msg", "end"),
+	];
+
+	it("emits literal string subject when no variables", () => {
+		const nodes = makeMessageNode({ subject: "Bienvenido" });
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain('subject: "Bienvenido"');
+	});
+
+	it("emits JS template literal when subject has ${...} variable", () => {
+		const nodes = makeMessageNode({
+			subject: "Hola ${event.payload.clientName}",
+		});
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain("subject: `Hola ${event.payload.clientName}`");
+	});
+
+	it("emits literal string for plain mergeVar value", () => {
+		const nodes = makeMessageNode({
+			mergeVars: [{ key: "VAL", value: "foo" }],
+		});
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain('VAL: "foo"');
+	});
+
+	it("emits raw expression with as string for dot-path mergeVar value", () => {
+		const nodes = makeMessageNode({
+			mergeVars: [{ key: "NOMBRE", value: "event.payload.clientName" }],
+		});
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain("NOMBRE: event.payload.clientName as string");
+	});
+
+	it("emits JS template literal for mergeVar value with ${...} interpolation", () => {
+		const nodes = makeMessageNode({
+			mergeVars: [
+				{ key: "MSG", value: "Estimado ${event.payload.clientFirstName}" },
+			],
+		});
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain("MSG: `Estimado ${event.payload.clientFirstName}`");
+	});
+
+	it("emits JS template literal for mixed text+variable mergeVar value", () => {
+		const nodes = makeMessageNode({
+			mergeVars: [
+				{
+					key: "BODY",
+					value:
+						"Su caso ${event.payload.caseNumber} fue aprobado en ${event.payload.jurisdictionName}",
+				},
+			],
+		});
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain(
+			"BODY: `Su caso ${event.payload.caseNumber} fue aprobado en ${event.payload.jurisdictionName}`",
+		);
+	});
+});

@@ -69,6 +69,8 @@ import { CaseVariablesDisplay } from "@/components/workflow/case-variables-displ
 import {
 	VariableTemplateInput,
 	VariablePicker,
+	parseTemplateStringToSegments,
+	segmentsToTemplateString,
 } from "@/components/workflow/variable-picker";
 import { FieldLabel } from "@/components/workflow/field-label";
 import type { TemplateSegment } from "@/components/workflow/variable-picker";
@@ -2949,13 +2951,15 @@ export function PropertiesPanel({
 										<Label htmlFor="message-subject">
 											{t("propertiesPanel.messageSubjectLabel")}
 										</Label>
-										<Input
-											id="message-subject"
-											value={messageConfig.subject ?? ""}
-											onChange={(e) =>
+										<VariableTemplateInput
+											nodes={upstreamVariableNodes}
+											value={parseTemplateStringToSegments(
+												messageConfig.subject,
+											)}
+											onChange={(segs) =>
 												setMessageConfig({
 													...messageConfig,
-													subject: e.target.value,
+													subject: segmentsToTemplateString(segs),
 												})
 											}
 											placeholder={t(
@@ -2988,58 +2992,68 @@ export function PropertiesPanel({
 										)}
 										<div className="space-y-2">
 											{(messageConfig.mergeVars ?? []).map((mv, index) => (
-												<div key={index} className="flex items-center gap-1.5">
-													<Input
-														value={mv.key}
-														onChange={(e) =>
-															handleMessageMergeVarUpdate(
-																index,
-																"key",
-																e.target.value,
-															)
-														}
-														placeholder="CLAVE"
-														className="h-7 flex-1 font-mono text-xs uppercase"
-													/>
-													<span className="text-muted-foreground text-xs">
-														=
-													</span>
-													<Input
-														value={mv.value}
-														onChange={(e) =>
-															handleMessageMergeVarUpdate(
-																index,
-																"value",
-																e.target.value,
-															)
-														}
-														placeholder="event.payload.campo"
-														className="h-7 flex-1 font-mono text-xs"
-													/>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon"
-														className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
-														onClick={() => handleMessageMergeVarRemove(index)}
-														aria-label={t(
-															"propertiesPanel.messageMergeVarRemoveAriaLabel",
-														)}
-													>
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															className="h-3.5 w-3.5"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															strokeWidth="2"
-															strokeLinecap="round"
-															strokeLinejoin="round"
+												<div
+													key={index}
+													className="rounded-md border border-border/60 p-2 space-y-1.5 bg-muted/20"
+												>
+													<div className="flex items-center gap-1.5">
+														<Input
+															value={mv.key}
+															onChange={(e) =>
+																handleMessageMergeVarUpdate(
+																	index,
+																	"key",
+																	e.target.value,
+																)
+															}
+															placeholder="CLAVE"
+															className="h-7 flex-1 font-mono text-xs uppercase"
+														/>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon"
+															className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
+															onClick={() => handleMessageMergeVarRemove(index)}
+															aria-label={t(
+																"propertiesPanel.messageMergeVarRemoveAriaLabel",
+															)}
 														>
-															<path d="M18 6 6 18" />
-															<path d="m6 6 12 12" />
-														</svg>
-													</Button>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																className="h-3.5 w-3.5"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																strokeWidth="2"
+																strokeLinecap="round"
+																strokeLinejoin="round"
+															>
+																<path d="M18 6 6 18" />
+																<path d="m6 6 12 12" />
+															</svg>
+														</Button>
+													</div>
+													<div className="flex items-start gap-1.5">
+														<span className="text-muted-foreground text-xs pt-2 shrink-0">
+															=
+														</span>
+														<div className="flex-1 min-w-0">
+															<VariableTemplateInput
+																nodes={upstreamVariableNodes}
+																value={parseTemplateStringToSegments(mv.value)}
+																onChange={(segs) =>
+																	handleMessageMergeVarUpdate(
+																		index,
+																		"value",
+																		segmentsToTemplateString(segs),
+																	)
+																}
+																placeholder="valor o variable..."
+																className="text-xs"
+															/>
+														</div>
+													</div>
 												</div>
 											))}
 										</div>

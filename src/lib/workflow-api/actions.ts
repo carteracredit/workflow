@@ -53,8 +53,8 @@ export async function getWorkflowsAction(
 		if (!jwt) {
 			return { data: null, error: "Failed to obtain authentication token" };
 		}
-		const data = await listWorkflows({ jwt, search });
-		return { data, error: null };
+		const { workflows } = await listWorkflows({ jwt, search });
+		return { data: workflows, error: null };
 	} catch (error) {
 		handleAuthError(error);
 	}
