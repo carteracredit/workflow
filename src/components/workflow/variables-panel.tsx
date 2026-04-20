@@ -47,7 +47,6 @@ import {
 import { extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { toast } from "sonner";
 import { useLanguage } from "@/components/LanguageProvider";
-import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -329,14 +328,7 @@ export function VariablesPanel({
 
 	return (
 		<Dialog open onOpenChange={(open) => !open && onClose()}>
-			<DialogContent
-				className={cn(
-					// DialogContent base includes `sm:max-w-lg`; we must override at sm+ or the
-					// modal stays ~512px wide and Spanish labels + table overflow past the panel.
-					"relative max-h-[min(90vh,56rem)] w-full min-w-0 gap-4 overflow-x-hidden overflow-y-auto",
-					"max-w-[calc(100vw-2rem)] sm:max-w-5xl",
-				)}
-			>
+			<DialogContent className="w-full max-w-[calc(100vw-2rem)] sm:max-w-3xl min-w-0 max-h-[85vh] overflow-y-auto">
 				<DialogHeader className="min-w-0 shrink-0 pr-10 sm:pr-12">
 					<DialogTitle className="flex items-start gap-2 break-words text-left">
 						<Variable className="mt-0.5 h-5 w-5 shrink-0" />
