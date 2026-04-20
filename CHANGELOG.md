@@ -1,3 +1,10 @@
+# [1.3.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.2...v1.3.0-rc.3) (2026-04-20)
+
+
+### Features
+
+* add Promotion node support to workflow ([e08b0d5](https://github.com/carteracredit/workflow/commit/e08b0d5d4fc3ef69fc537df2b51dffc2d9a14ed8))
+
 # [1.3.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.1...v1.3.0-rc.2) (2026-04-19)
 
 
