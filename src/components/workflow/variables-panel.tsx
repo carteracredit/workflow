@@ -47,6 +47,7 @@ import {
 import { extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { toast } from "sonner";
 import { useLanguage } from "@/components/LanguageProvider";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -328,61 +329,72 @@ export function VariablesPanel({
 
 	return (
 		<Dialog open onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="w-full max-w-3xl">
-				<DialogHeader>
-					<DialogTitle className="flex items-center gap-2">
-						<Variable className="h-5 w-5" />
-						{t("variablesPanel.title")}
+			<DialogContent
+				className={cn(
+					// DialogContent base includes `sm:max-w-lg`; we must override at sm+ or the
+					// modal stays ~512px wide and Spanish labels + table overflow past the panel.
+					"relative max-h-[min(90vh,56rem)] w-full min-w-0 gap-4 overflow-x-hidden overflow-y-auto",
+					"max-w-[calc(100vw-2rem)] sm:max-w-5xl",
+				)}
+			>
+				<DialogHeader className="min-w-0 shrink-0 pr-10 sm:pr-12">
+					<DialogTitle className="flex items-start gap-2 break-words text-left">
+						<Variable className="mt-0.5 h-5 w-5 shrink-0" />
+						<span className="min-w-0">{t("variablesPanel.title")}</span>
 					</DialogTitle>
-					<DialogDescription>{t("variablesPanel.subtitle")}</DialogDescription>
+					<DialogDescription className="break-words text-left">
+						{t("variablesPanel.subtitle")}
+					</DialogDescription>
 				</DialogHeader>
 
 				{/* Draft banner */}
-				<Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
-					<AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-					<AlertDescription className="text-amber-800 dark:text-amber-300">
+				<Alert className="min-w-0 border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+					<AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+					<AlertDescription className="min-w-0 break-words text-amber-800 dark:text-amber-300">
 						{t("variablesPanel.draftBanner")}
 					</AlertDescription>
 				</Alert>
 
-				{/* Header actions */}
-				<div className="flex items-center justify-between">
+				{/* Header actions: badge on its own row so it never overlaps the buttons */}
+				<div className="min-w-0 space-y-3">
 					{hasDraftChanges && (
-						<Badge
-							variant="outline"
-							className="text-amber-600 border-amber-300"
-						>
-							{t("variablesPanel.pendingBadge")}
-						</Badge>
+						<div className="flex flex-wrap items-center gap-2">
+							<Badge
+								variant="outline"
+								className="shrink-0 text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-600"
+							>
+								{t("variablesPanel.pendingBadge")}
+							</Badge>
+						</div>
 					)}
-					<div className="flex gap-2 ml-auto">
+					<div className="flex flex-wrap items-center justify-end gap-2">
 						<Button
 							variant="outline"
 							size="sm"
 							onClick={() => {
 								setShowSyncPanel(true);
 							}}
-							className="flex items-center gap-1"
+							className="flex shrink-0 items-center gap-1"
 						>
-							<CloudUpload className="h-4 w-4" />
+							<CloudUpload className="h-4 w-4 shrink-0" />
 							{t("variablesPanel.syncButton")}
 						</Button>
 						<Button
 							variant="outline"
 							size="sm"
 							onClick={handleCreate}
-							className="flex items-center gap-1"
+							className="flex shrink-0 items-center gap-1"
 						>
-							<Plus className="h-4 w-4" />
+							<Plus className="h-4 w-4 shrink-0" />
 							{t("variablesPanel.addVariable")}
 						</Button>
 						<Button
 							variant="outline"
 							size="sm"
 							onClick={handleCreateSecret}
-							className="flex items-center gap-1"
+							className="flex shrink-0 items-center gap-1"
 						>
-							<Lock className="h-4 w-4" />
+							<Lock className="h-4 w-4 shrink-0" />
 							{t("variablesPanel.addSecret")}
 						</Button>
 					</div>
@@ -404,115 +416,117 @@ export function VariablesPanel({
 						</p>
 					</div>
 				) : (
-					<ScrollArea className="max-h-64">
-						<table className="w-full text-sm">
-							<thead>
-								<tr className="border-b dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
-									<th className="pb-2 font-medium">
-										{t("variablesPanel.columnName")}
-									</th>
-									<th className="pb-2 font-medium">
-										{t("variablesPanel.columnType")}
-									</th>
-									<th className="pb-2 font-medium">
-										{t("variablesPanel.columnEnvironment")}
-									</th>
-									<th className="pb-2 font-medium">
-										{t("variablesPanel.columnValue")}
-									</th>
-									<th className="pb-2 font-medium" />
-								</tr>
-							</thead>
-							<tbody>
-								{variables.map((v) => (
-									<tr
-										key={v.id}
-										className="border-b dark:border-gray-700 last:border-0"
-									>
-										<td className="py-2 font-mono text-xs font-medium">
-											{v.name}
-										</td>
-										<td className="py-2">
-											{v.is_secret ? (
-												<span className="inline-flex items-center gap-1 text-xs text-purple-700 dark:text-purple-400">
-													<KeyRound className="h-3 w-3" />
-													{t("variablesPanel.typeSecret")}
-												</span>
-											) : (
-												<span className="inline-flex items-center gap-1 text-xs text-blue-700 dark:text-blue-400">
-													<Variable className="h-3 w-3" />
-													{t("variablesPanel.typeVariable")}
-												</span>
-											)}
-										</td>
-										<td className="py-2">
-											<EnvironmentBadge env={v.environment} />
-										</td>
-										<td className="py-2 font-mono text-xs text-gray-600 dark:text-gray-400">
-											{v.is_secret ? (
-												<span className="text-gray-400 dark:text-gray-500 italic">
-													{t("variablesPanel.secretValueMasked")}
-												</span>
-											) : (
-												<span className="block truncate max-w-[140px]">
-													{v.value ?? "—"}
-												</span>
-											)}
-										</td>
-										<td className="py-2">
-											<div className="flex items-center gap-1 justify-end">
-												{v.is_secret && (
+					<div className="min-w-0 max-w-full overflow-x-auto">
+						<ScrollArea className="max-h-64 w-full min-w-0">
+							<table className="w-full min-w-[36rem] text-sm">
+								<thead>
+									<tr className="border-b dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
+										<th className="pb-2 font-medium">
+											{t("variablesPanel.columnName")}
+										</th>
+										<th className="pb-2 font-medium">
+											{t("variablesPanel.columnType")}
+										</th>
+										<th className="pb-2 font-medium">
+											{t("variablesPanel.columnEnvironment")}
+										</th>
+										<th className="pb-2 font-medium">
+											{t("variablesPanel.columnValue")}
+										</th>
+										<th className="pb-2 font-medium" />
+									</tr>
+								</thead>
+								<tbody>
+									{variables.map((v) => (
+										<tr
+											key={v.id}
+											className="border-b dark:border-gray-700 last:border-0"
+										>
+											<td className="py-2 font-mono text-xs font-medium">
+												{v.name}
+											</td>
+											<td className="py-2">
+												{v.is_secret ? (
+													<span className="inline-flex items-center gap-1 text-xs text-purple-700 dark:text-purple-400">
+														<KeyRound className="h-3 w-3" />
+														{t("variablesPanel.typeSecret")}
+													</span>
+												) : (
+													<span className="inline-flex items-center gap-1 text-xs text-blue-700 dark:text-blue-400">
+														<Variable className="h-3 w-3" />
+														{t("variablesPanel.typeVariable")}
+													</span>
+												)}
+											</td>
+											<td className="py-2">
+												<EnvironmentBadge env={v.environment} />
+											</td>
+											<td className="py-2 font-mono text-xs text-gray-600 dark:text-gray-400">
+												{v.is_secret ? (
+													<span className="text-gray-400 dark:text-gray-500 italic">
+														{t("variablesPanel.secretValueMasked")}
+													</span>
+												) : (
+													<span className="block truncate max-w-[140px]">
+														{v.value ?? "—"}
+													</span>
+												)}
+											</td>
+											<td className="py-2">
+												<div className="flex items-center gap-1 justify-end">
+													{v.is_secret && (
+														<Button
+															variant="ghost"
+															size="icon"
+															className="h-7 w-7"
+															title={t("variablesPanel.rotateSecretTitle")}
+															onClick={() => handleRotate(v)}
+														>
+															<RotateCcw className="h-3.5 w-3.5" />
+														</Button>
+													)}
 													<Button
 														variant="ghost"
 														size="icon"
 														className="h-7 w-7"
-														title={t("variablesPanel.rotateSecretTitle")}
-														onClick={() => handleRotate(v)}
+														title={t("variablesPanel.editTitle")}
+														onClick={() => handleEdit(v)}
 													>
-														<RotateCcw className="h-3.5 w-3.5" />
+														<Variable className="h-3.5 w-3.5" />
 													</Button>
-												)}
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-7 w-7"
-													title={t("variablesPanel.editTitle")}
-													onClick={() => handleEdit(v)}
-												>
-													<Variable className="h-3.5 w-3.5" />
-												</Button>
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-7 w-7 text-red-500 hover:text-red-600"
-													title={t("variablesPanel.deleteTitle")}
-													disabled={deletingId === v.id}
-													onClick={() => {
-														if (
-															window.confirm(
-																t("variablesPanel.deleteConfirmBody").replace(
-																	"{name}",
-																	v.name,
-																),
-															)
-														) {
-															void handleDelete(v);
-														}
-													}}
-												>
-													{deletingId === v.id ? (
-														<Loader2 className="h-3.5 w-3.5 animate-spin" />
-													) : (
-														<Trash2 className="h-3.5 w-3.5" />
-													)}
-												</Button>
-											</div>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</ScrollArea>
+													<Button
+														variant="ghost"
+														size="icon"
+														className="h-7 w-7 text-red-500 hover:text-red-600"
+														title={t("variablesPanel.deleteTitle")}
+														disabled={deletingId === v.id}
+														onClick={() => {
+															if (
+																window.confirm(
+																	t("variablesPanel.deleteConfirmBody").replace(
+																		"{name}",
+																		v.name,
+																	),
+																)
+															) {
+																void handleDelete(v);
+															}
+														}}
+													>
+														{deletingId === v.id ? (
+															<Loader2 className="h-3.5 w-3.5 animate-spin" />
+														) : (
+															<Trash2 className="h-3.5 w-3.5" />
+														)}
+													</Button>
+												</div>
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</ScrollArea>
+					</div>
 				)}
 
 				{/* Create / Edit form */}
@@ -783,7 +797,7 @@ export function VariablesPanel({
 					</div>
 				)}
 
-				<div className="flex justify-end">
+				<div className="flex min-w-0 shrink-0 justify-end">
 					<Button variant="outline" onClick={onClose}>
 						{t("variablesPanel.close")}
 					</Button>
