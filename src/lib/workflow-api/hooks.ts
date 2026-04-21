@@ -7,6 +7,8 @@ import type {
 	Workflow,
 	WorkflowVersion,
 	ApiResponse,
+	ListApiResponse,
+	ResultInfo,
 	WorkflowFlag,
 } from "./types";
 
@@ -14,11 +16,19 @@ import type {
 // SWR key builders
 // ---------------------------------------------------------------------------
 
-function workflowsKey(params?: { search?: string; status?: string }): string {
+function workflowsKey(params?: {
+	search?: string;
+	status?: string;
+	page?: number;
+	per_page?: number;
+}): string {
 	const base = `${getWorkflowServiceUrl()}/workflows`;
 	const url = new URL(base);
 	if (params?.search) url.searchParams.set("search", params.search);
 	if (params?.status) url.searchParams.set("status", params.status);
+	if (params?.page != null) url.searchParams.set("page", String(params.page));
+	if (params?.per_page != null)
+		url.searchParams.set("per_page", String(params.per_page));
 	return url.toString();
 }
 
@@ -38,7 +48,7 @@ function workflowFlagsKey(workflowId: string | null): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Generic fetcher (JWT from tokenCache via fetchJson auto-JWT)
+// Generic fetchers
 // ---------------------------------------------------------------------------
 
 async function apiFetcher<T>(url: string): Promise<T> {
@@ -46,24 +56,40 @@ async function apiFetcher<T>(url: string): Promise<T> {
 	return json.result;
 }
 
+async function apiListFetcher<T>(
+	url: string,
+): Promise<{ result: T[]; resultInfo: ResultInfo }> {
+	const { json } = await fetchJson<ListApiResponse<T>>(url);
+	return {
+		result: json.result,
+		resultInfo: json.result_info,
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Hooks
 // ---------------------------------------------------------------------------
 
 /**
- * Hook to list workflows with optional search and status filter.
+ * Hook to list workflows with optional search, status filter and pagination.
+ * Returns the current page of workflows plus full pagination metadata.
  */
-export function useWorkflows(params?: { search?: string; status?: string }) {
+export function useWorkflows(params?: {
+	search?: string;
+	status?: string;
+	page?: number;
+	per_page?: number;
+}) {
 	const key = workflowsKey(params);
 
-	const { data, error, isLoading, mutate } = useSWR<Workflow[]>(
-		key,
-		(url: string) => apiFetcher<Workflow[]>(url),
-	);
+	const { data, error, isLoading, mutate } = useSWR<{
+		result: Workflow[];
+		resultInfo: ResultInfo;
+	}>(key, (url: string) => apiListFetcher<Workflow>(url));
 
 	return {
-		workflows: data ?? [],
-		data,
+		workflows: data?.result ?? [],
+		resultInfo: data?.resultInfo ?? null,
 		isLoading,
 		error,
 		mutate,

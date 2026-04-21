@@ -63,7 +63,7 @@ beforeEach(() => {
 
 describe("useWorkflows", () => {
 	it("passes correct URL as SWR key", () => {
-		mockSWRReturn<Workflow[]>(undefined);
+		mockSWRReturn<{ result: Workflow[]; resultInfo: unknown }>(undefined);
 
 		renderHook(() => useWorkflows());
 
@@ -72,7 +72,7 @@ describe("useWorkflows", () => {
 	});
 
 	it("appends search param to key", () => {
-		mockSWRReturn<Workflow[]>(undefined);
+		mockSWRReturn<{ result: Workflow[]; resultInfo: unknown }>(undefined);
 
 		renderHook(() => useWorkflows({ search: "credit" }));
 
@@ -81,7 +81,7 @@ describe("useWorkflows", () => {
 	});
 
 	it("appends status param to key", () => {
-		mockSWRReturn<Workflow[]>(undefined);
+		mockSWRReturn<{ result: Workflow[]; resultInfo: unknown }>(undefined);
 
 		renderHook(() => useWorkflows({ status: "published" }));
 
@@ -90,7 +90,7 @@ describe("useWorkflows", () => {
 	});
 
 	it("returns empty array when data is undefined", () => {
-		mockSWRReturn<Workflow[]>(undefined);
+		mockSWRReturn<{ result: Workflow[]; resultInfo: unknown }>(undefined);
 
 		const { result } = renderHook(() => useWorkflows());
 
@@ -101,16 +101,24 @@ describe("useWorkflows", () => {
 
 	it("returns workflows when SWR provides data", () => {
 		const workflows = [{ id: "wf-uuid-001", name: "Test" }] as Workflow[];
-		mockSWRReturn<Workflow[]>(workflows);
+		const ri = { page: 1, per_page: 20, count: 1, total_count: 1 };
+		mockSWRReturn<{ result: Workflow[]; resultInfo: typeof ri }>({
+			result: workflows,
+			resultInfo: ri,
+		});
 
 		const { result } = renderHook(() => useWorkflows());
 
 		expect(result.current.workflows).toEqual(workflows);
+		expect(result.current.resultInfo).toEqual(ri);
 	});
 
 	it("forwards isLoading and error from SWR", () => {
 		const err = new Error("network error");
-		mockSWRReturn<Workflow[]>(undefined, { error: err, isLoading: true });
+		mockSWRReturn<{ result: Workflow[]; resultInfo: unknown }>(undefined, {
+			error: err,
+			isLoading: true,
+		});
 
 		const { result } = renderHook(() => useWorkflows());
 
@@ -119,7 +127,10 @@ describe("useWorkflows", () => {
 	});
 
 	it("exposes mutate from SWR", () => {
-		mockSWRReturn<Workflow[]>([]);
+		mockSWRReturn<{ result: Workflow[]; resultInfo: unknown }>({
+			result: [],
+			resultInfo: { page: 1, per_page: 20, count: 0, total_count: 0 },
+		});
 
 		const { result } = renderHook(() => useWorkflows());
 

@@ -84,22 +84,83 @@ vi.mock("sonner", () => ({
 
 const mockMutate = vi.fn();
 
+const DEFAULT_RI = (count: number) => ({
+	page: 1,
+	per_page: 20,
+	count,
+	total_count: count,
+});
+
+/**
+ * Configure `useWorkflows` mock to simulate server-side filtering.
+ * The mock inspects `status` and `search` params and filters `workflows`
+ * to produce realistic resultInfo counts, matching what the backend would return.
+ */
 function makeHooksReturn(
 	workflows: Workflow[],
 	opts: {
 		isLoading?: boolean;
 		error?: Error;
-		data?: Workflow[];
 	} = {},
 ) {
-	const data = opts.data ?? (opts.isLoading ? undefined : workflows);
-	mockUseWorkflows.mockReturnValue({
-		workflows,
-		data,
-		isLoading: opts.isLoading ?? false,
-		error: opts.error,
-		mutate: mockMutate,
-	});
+	mockUseWorkflows.mockImplementation(
+		(params?: {
+			status?: string;
+			search?: string;
+			per_page?: number;
+			page?: number;
+		}) => {
+			if (opts.error) {
+				return {
+					workflows: [],
+					resultInfo: null,
+					isLoading: false,
+					error: opts.error,
+					mutate: mockMutate,
+				};
+			}
+			if (opts.isLoading) {
+				return {
+					workflows: [],
+					resultInfo: null,
+					isLoading: true,
+					error: undefined,
+					mutate: mockMutate,
+				};
+			}
+
+			// Filter by status
+			let filtered = params?.status
+				? workflows.filter((w) => w.status === params.status)
+				: workflows;
+			// Filter by search (simulate server-side)
+			if (params?.search) {
+				const q = params.search.toLowerCase();
+				filtered = filtered.filter(
+					(w) =>
+						w.name.toLowerCase().includes(q) ||
+						w.description.toLowerCase().includes(q),
+				);
+			}
+			const count = filtered.length;
+			const perPage = params?.per_page ?? 20;
+			const ri = {
+				page: params?.page ?? 1,
+				per_page: perPage,
+				count,
+				total_count: count,
+			};
+			// For per_page: 1 stat calls, just return count/resultInfo
+			const page = perPage === 1 ? [] : filtered.slice(0, perPage);
+			return {
+				workflows: page,
+				resultInfo: ri,
+				isLoading: false,
+				error: undefined,
+				mutate: mockMutate,
+			};
+		},
+	);
 }
 
 const TODAY = new Date().toISOString();

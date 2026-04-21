@@ -7,6 +7,8 @@ import type {
 	UpdateWorkflowPayload,
 	PublishWorkflowResponse,
 	ApiResponse,
+	ListApiResponse,
+	ResultInfo,
 	ApiCallOptions,
 } from "./types";
 
@@ -16,33 +18,44 @@ export type {
 	CreateWorkflowPayload,
 	UpdateWorkflowPayload,
 	PublishWorkflowResponse,
+	ResultInfo,
 };
 
 export interface ListWorkflowsOptions extends ApiCallOptions {
 	search?: string;
 	status?: "draft" | "published" | "archived";
+	page?: number;
+	per_page?: number;
+}
+
+export interface ListWorkflowsResult {
+	workflows: Workflow[];
+	resultInfo: ResultInfo;
 }
 
 /**
- * Lists all workflows, optionally filtered by search query and status.
+ * Lists workflows with optional search/status filter and server-side pagination.
+ * Returns both the page of results and the full `result_info` metadata.
  */
 export async function listWorkflows(
 	options?: ListWorkflowsOptions,
-): Promise<Workflow[]> {
+): Promise<ListWorkflowsResult> {
 	const baseUrl = getWorkflowServiceUrl();
 	const url = new URL(`${baseUrl}/workflows`);
-	if (options?.search) {
-		url.searchParams.set("search", options.search);
-	}
-	if (options?.status) {
-		url.searchParams.set("status", options.status);
-	}
+	if (options?.search) url.searchParams.set("search", options.search);
+	if (options?.status) url.searchParams.set("status", options.status);
+	if (options?.page != null) url.searchParams.set("page", String(options.page));
+	if (options?.per_page != null)
+		url.searchParams.set("per_page", String(options.per_page));
 
-	const { json } = await fetchJson<ApiResponse<Workflow[]>>(url.toString(), {
+	const { json } = await fetchJson<ListApiResponse<Workflow>>(url.toString(), {
 		jwt: options?.jwt,
 	});
 
-	return json.result;
+	return {
+		workflows: json.result,
+		resultInfo: json.result_info,
+	};
 }
 
 /**

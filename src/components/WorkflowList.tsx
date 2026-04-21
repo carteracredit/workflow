@@ -16,6 +16,8 @@ import {
 	CheckCircle2,
 	FileEdit,
 	Archive,
+	ChevronLeft,
+	ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -541,43 +543,60 @@ export function WorkflowList() {
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [cloningId, setCloningId] = useState<string | null>(null);
+	const [page, setPage] = useState(1);
+	const [perPage, setPerPage] = useState(20);
 
-	const { workflows, data, isLoading, error, mutate } = useWorkflows();
+	const { workflows, resultInfo, isLoading, error, mutate } = useWorkflows({
+		search: search || undefined,
+		status: activeTab === "all" ? undefined : activeTab,
+		page,
+		per_page: perPage,
+	});
 
-	// Client-side filter
+	// Lightweight stat calls (per_page=1) to get real total counts per status
+	const { resultInfo: statsAll } = useWorkflows({ per_page: 1 });
+	const { resultInfo: statsPublished } = useWorkflows({
+		status: "published",
+		per_page: 1,
+	});
+	const { resultInfo: statsDraft } = useWorkflows({
+		status: "draft",
+		per_page: 1,
+	});
+	const { resultInfo: statsArchived } = useWorkflows({
+		status: "archived",
+		per_page: 1,
+	});
+
+	// Client-side filter: only versionFilter applies (search/status handled server-side)
 	const filtered = useMemo(() => {
 		return workflows.filter((wf) => {
-			const matchesSearch = (() => {
-				if (!search) return true;
-				const q = search.toLowerCase();
-				if (searchScope === "name") return wf.name.toLowerCase().includes(q);
-				if (searchScope === "description")
-					return wf.description.toLowerCase().includes(q);
-				return (
-					wf.name.toLowerCase().includes(q) ||
-					wf.description.toLowerCase().includes(q)
-				);
-			})();
-			const matchesStatus = activeTab === "all" || wf.status === activeTab;
 			const matchesVersion = (() => {
 				if (versionFilter === "all") return true;
 				if (versionFilter === "unpublished")
 					return wf.current_major_version === 0;
 				return wf.current_major_version === versionFilter;
 			})();
-			return matchesSearch && matchesStatus && matchesVersion;
+			return matchesVersion;
 		});
-	}, [workflows, search, searchScope, activeTab, versionFilter]);
+	}, [workflows, versionFilter]);
 
 	// Stats
 	const stats = useMemo(() => {
 		return {
-			total: workflows.length,
-			published: workflows.filter((w) => w.status === "published").length,
-			draft: workflows.filter((w) => w.status === "draft").length,
-			archived: workflows.filter((w) => w.status === "archived").length,
+			total: statsAll?.total_count ?? 0,
+			published: statsPublished?.total_count ?? 0,
+			draft: statsDraft?.total_count ?? 0,
+			archived: statsArchived?.total_count ?? 0,
 		};
-	}, [workflows]);
+	}, [statsAll, statsPublished, statsDraft, statsArchived]);
+
+	// Pagination helpers
+	const totalPages = resultInfo
+		? Math.ceil(resultInfo.total_count / resultInfo.per_page)
+		: 1;
+	const canGoPrev = page > 1;
+	const canGoNext = page < totalPages;
 
 	// Unique versions for filter (excluding 0)
 	const availableVersions = useMemo(() => {
@@ -659,7 +678,7 @@ export function WorkflowList() {
 
 	// Skeleton until we have received a response (data defined) or error. Show empty
 	// state only when loading is done and data is available (possibly empty array).
-	const showSkeleton = !error && data === undefined;
+	const showSkeleton = !error && resultInfo === null && isLoading;
 
 	if (showSkeleton) {
 		return <WorkflowListSkeleton />;
@@ -749,7 +768,10 @@ export function WorkflowList() {
 						return (
 							<button
 								key={stat.label}
-								onClick={() => setActiveTab(stat.tab)}
+								onClick={() => {
+									setActiveTab(stat.tab);
+									setPage(1);
+								}}
 								className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-all hover:bg-accent ${
 									isActive
 										? `${stat.activeBorder} ${stat.activeBg} shadow-sm`
@@ -781,7 +803,10 @@ export function WorkflowList() {
 						<Input
 							placeholder={t("workflowList.searchPlaceholder")}
 							value={search}
-							onChange={(e) => setSearch(e.target.value)}
+							onChange={(e) => {
+								setSearch(e.target.value);
+								setPage(1);
+							}}
 							className="pl-9"
 						/>
 					</div>
@@ -1041,6 +1066,64 @@ export function WorkflowList() {
 									</TableBody>
 								</Table>
 							</div>
+
+							{/* Pagination controls */}
+							{resultInfo && resultInfo.total_count > 0 && (
+								<div className="flex flex-col items-center justify-between gap-3 border-t px-4 py-3 sm:flex-row">
+									<div className="flex items-center gap-2">
+										<span className="text-sm text-muted-foreground">
+											{t("workflowList.rowsPerPage")}
+										</span>
+										<Select
+											value={String(perPage)}
+											onValueChange={(v) => {
+												setPerPage(Number(v));
+												setPage(1);
+											}}
+										>
+											<SelectTrigger className="h-8 w-[72px]">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{[10, 20, 50, 100].map((n) => (
+													<SelectItem key={n} value={String(n)}>
+														{n}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+									<div className="flex items-center gap-3">
+										<span className="text-sm text-muted-foreground">
+											{t("workflowList.pageInfo")
+												.replace("{page}", String(page))
+												.replace("{total}", String(totalPages))}
+										</span>
+										<div className="flex items-center gap-1">
+											<Button
+												variant="outline"
+												size="icon"
+												className="h-8 w-8"
+												disabled={!canGoPrev}
+												onClick={() => setPage((p) => p - 1)}
+												aria-label={t("workflowList.prevPage")}
+											>
+												<ChevronLeft className="h-4 w-4" />
+											</Button>
+											<Button
+												variant="outline"
+												size="icon"
+												className="h-8 w-8"
+												disabled={!canGoNext}
+												onClick={() => setPage((p) => p + 1)}
+												aria-label={t("workflowList.nextPage")}
+											>
+												<ChevronRight className="h-4 w-4" />
+											</Button>
+										</div>
+									</div>
+								</div>
+							)}
 						</>
 					)}
 				</Card>
