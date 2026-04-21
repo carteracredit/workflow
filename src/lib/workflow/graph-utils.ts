@@ -8,6 +8,7 @@ import type {
 import { cloneCaseVariables } from "./case-variables";
 import { cloneChallengeOutputSchema } from "./challenge-output";
 import { clonePromotionOutputSchema } from "./promotion-output";
+import { buildAliasMap } from "./node-alias";
 
 /**
  * Encuentra el checkpoint anterior más próximo a un nodo dado.
@@ -274,6 +275,10 @@ function mergePropertiesByName(
  *  - When `options.allNodes` is provided and contains a Start not already in
  *    `upstreamNodes` (e.g. the selected node is disconnected), the Start is
  *    still emitted as a source so case-level variables are never hidden.
+ *
+ * `options.allNodes` is also used to build the alias map so that variable
+ * paths use the human-readable camelCase alias (e.g. `coapplicantForm.phone`)
+ * instead of the raw node id (`node-1734056123.phone`).
  */
 export function buildVariableSourceNodes(
 	upstreamNodes: WorkflowNode[],
@@ -281,6 +286,10 @@ export function buildVariableSourceNodes(
 ): VariableSourceNode[] {
 	const result: VariableSourceNode[] = [];
 	const seenStart = new Set<string>();
+
+	// Build the alias map from ALL nodes so aliases are deterministically unique
+	// across the entire workflow, not just the visible upstream slice.
+	const aliasMap = buildAliasMap(options?.allNodes ?? upstreamNodes);
 
 	const emitStartSource = (startNode: WorkflowNode) => {
 		if (seenStart.has(startNode.id)) return;
@@ -290,12 +299,13 @@ export function buildVariableSourceNodes(
 		const customProps = schema?.properties ?? [];
 		const merged = mergePropertiesByName(cloneCaseVariables(), customProps);
 
+		const alias = aliasMap.get(startNode.id) ?? startNode.id;
 		const variables: VariableLeafNode[] = merged.map((prop) =>
-			schemaPropertyToVariable(prop, startNode.id),
+			schemaPropertyToVariable(prop, alias),
 		);
 
 		result.push({
-			id: startNode.id,
+			id: alias,
 			name: startNode.title || "Start",
 			variables,
 		});
@@ -334,12 +344,13 @@ export function buildVariableSourceNodes(
 			continue;
 		}
 
+		const alias = aliasMap.get(node.id) ?? node.id;
 		const variables: VariableLeafNode[] = properties.map((prop) =>
-			schemaPropertyToVariable(prop, node.id),
+			schemaPropertyToVariable(prop, alias),
 		);
 
 		result.push({
-			id: node.id,
+			id: alias,
 			name: node.title || node.type,
 			variables,
 		});

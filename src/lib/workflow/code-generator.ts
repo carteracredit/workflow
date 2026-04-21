@@ -18,6 +18,7 @@ import {
 	validateTransformCode,
 	validateConditionExpression,
 } from "./validate-code";
+import { buildAliasMap, isLegacyNodeId } from "./node-alias";
 
 /**
  * Configuration for code generation
@@ -124,21 +125,91 @@ function toJsTemplateLiteral(str: string): string {
 }
 
 /**
- * Converts a node ID into a valid JavaScript identifier by replacing hyphens
- * with underscores. E.g. "node-1773093521695" → "node_1773093521695".
+ * Module-level alias map populated at the start of `generateWorkflowCode` so
+ * that all internal step-generator helpers can resolve camelCase aliases from
+ * node IDs without threading the map through every function signature.
+ *
+ * JavaScript is single-threaded; this is safe for synchronous generation.
  */
-function nodeIdToVarName(nodeId: string): string {
-	return nodeId.replace(/-/g, "_");
+let _activeAliasMap: Map<string, string> = new Map();
+
+/**
+ * Returns the camelCase alias for a node ID, falling back to the legacy
+ * hyphen→underscore transform when no alias is available.
+ *
+ * This replaces the old `nodeIdToVarName` helper and ensures that generated
+ * variable names match the aliases used in the variable picker tokens.
+ */
+function getVarName(nodeId: string): string {
+	return _activeAliasMap.get(nodeId) ?? nodeId.replace(/-/g, "_");
+}
+
+/**
+ * Expands a property access trail (everything after the first `.` in a
+ * variable path) into safe JS property access expressions.
+ *
+ * Each dot-separated segment:
+ *  - If it is a valid identifier (`/^[a-zA-Z_$][a-zA-Z0-9_$]*$/`): use dot
+ *    notation → `.name` (or just `name` for the first segment).
+ *  - Otherwise (e.g. contains hyphens): use bracket notation → `["name"]`.
+ *  Array accessors like `[0]` are preserved intact and appended to the
+ *  preceding segment.
+ *
+ * Examples:
+ *   "phone"                  → "phone"
+ *   "results[0].url"         → "results[0].url"
+ *   "my-field"               → `["my-field"]`
+ *   "data.my-key.value"      → `data["my-key"].value`
+ */
+function expandPropertyTrail(trail: string): string {
+	const parts: string[] = [];
+	let buf = "";
+	let depth = 0;
+	for (const ch of trail) {
+		if (ch === "[") {
+			depth++;
+			buf += ch;
+		} else if (ch === "]") {
+			depth--;
+			buf += ch;
+		} else if (ch === "." && depth === 0) {
+			parts.push(buf);
+			buf = "";
+		} else {
+			buf += ch;
+		}
+	}
+	if (buf || trail.length === 0) parts.push(buf);
+
+	return parts
+		.map((part, i) => {
+			const bracketIdx = part.indexOf("[");
+			const name = bracketIdx >= 0 ? part.slice(0, bracketIdx) : part;
+			const suffix = bracketIdx >= 0 ? part.slice(bracketIdx) : "";
+
+			if (!name) return suffix;
+
+			if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
+				return (i === 0 ? name : `.${name}`) + suffix;
+			}
+			const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+			return `["${escaped}"]${suffix}`;
+		})
+		.join("");
 }
 
 /**
  * Expands a single variable-picker path into a runtime JavaScript expression.
  *
  *  - `secret.NAME`          → `this.env.NAME` (workflow-level variable/secret;
- *                             preserves UPPER_SNAKE case and does not dehyphenate).
- *  - `<anyOther.path>`      → same string with hyphens replaced by underscores,
- *                             so node IDs like `node-123` become valid JS
- *                             identifiers (`node_123.foo`).
+ *                             preserves UPPER_SNAKE case).
+ *  - `<alias.prop…>`        → The first segment is kept as-is when it is
+ *                             already a valid camelCase alias (new format), or
+ *                             dehyphenated when it is a legacy `node-<id>`.
+ *                             The property trail uses dot notation for valid
+ *                             identifiers or bracket notation (`["key"]`) for
+ *                             segments that contain hyphens or other special
+ *                             characters.
  *
  * Centralizing this mapping keeps the `${secret.X}` → `this.env.X` contract in
  * one place, regardless of whether the reference lives inside an auth field,
@@ -150,7 +221,27 @@ function expandVariablePath(path: string): string {
 	if (/^secret\./.test(trimmed)) {
 		return `this.env.${trimmed.slice("secret.".length)}`;
 	}
-	return trimmed.replace(/-/g, "_");
+
+	const dotIdx = trimmed.indexOf(".");
+	const firstSeg = dotIdx >= 0 ? trimmed.slice(0, dotIdx) : trimmed;
+	const propertyTrail = dotIdx >= 0 ? trimmed.slice(dotIdx + 1) : null;
+
+	// For legacy node-IDs (`node-<timestamp>`), look up the camelCase alias
+	// from the active alias map (populated during code generation), or fall
+	// back to simple hyphen→underscore replacement.
+	let safeFirst: string;
+	if (isLegacyNodeId(firstSeg) && _activeAliasMap.size > 0) {
+		safeFirst = _activeAliasMap.get(firstSeg) ?? firstSeg.replace(/-/g, "_");
+	} else {
+		// Already a camelCase alias or any other form – dehyphenate as safety net.
+		safeFirst = firstSeg.replace(/-/g, "_");
+	}
+
+	if (propertyTrail === null) {
+		return safeFirst;
+	}
+
+	return `${safeFirst}.${expandPropertyTrail(propertyTrail)}`;
 }
 
 /**
@@ -186,15 +277,15 @@ function containsVariableRefs(str: string): boolean {
  *
  * - If the string has no variable references it is wrapped in double quotes
  *   (existing behaviour).
- * - If the string contains `${nodeId.property}` references it is wrapped in
+ * - If the string contains `${alias.property}` references it is wrapped in
  *   backticks so the references become valid template-literal interpolations.
- *   Node IDs are also dehyphenated (e.g. `node-123` → `node_123`) to produce
- *   valid JavaScript identifiers.
+ *   Each `${...}` token is expanded via `expandVariablePath` which handles
+ *   both new-format camelCase aliases and legacy node-ID paths.
  *
  * Examples:
- *   "https://api.example.com/items"         → `"https://api.example.com/items"`
- *   "${node-123.results[0].url}"            → `` `${node_123.results[0].url}` ``
- *   "https://api.example.com/${node-123.id}" → `` `https://api.example.com/${node_123.id}` ``
+ *   "https://api.example.com/items"             → `"https://api.example.com/items"`
+ *   "${coapplicantForm.results[0].url}"          → `` `${coapplicantForm.results[0].url}` ``
+ *   "https://api.example.com/${myNode.id}"       → `` `https://api.example.com/${myNode.id}` ``
  */
 function emitInterpolatedString(str: string): string {
 	if (!containsVariableRefs(str)) {
@@ -545,7 +636,7 @@ function generateFormStep(
 	const stepName = createStepName(node);
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const captureResult = nodeHasOutputSchema(node);
-	const varName = nodeIdToVarName(node.id);
+	const varName = getVarName(node.id);
 	const varDecl = captureResult ? `const ${varName} = ` : "";
 	const eventType = `form-submission-${stepName}`;
 	const stepNameExpr = retryVarName
@@ -614,7 +705,7 @@ function generateAPIStep(
 	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
 	// API nodes always capture the response so the cases UI can display it,
 	// regardless of whether an explicit outputSchema is configured.
-	const varName = nodeIdToVarName(node.id);
+	const varName = getVarName(node.id);
 	const varDecl = `const ${varName} = `;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
@@ -668,7 +759,7 @@ function generateAPIStep(
 		) {
 			code += `${indent}\theaders[${JSON.stringify(authConfig.apiKeyHeader)}] = ${emitAuthValue(authConfig.apiKeyValue)};\n`;
 		} else if (isOAuth2) {
-			code += `${indent}\theaders["Authorization"] = \`Bearer \${_oauth2Token_${nodeIdToVarName(node.id)}.access_token}\`;\n`;
+			code += `${indent}\theaders["Authorization"] = \`Bearer \${_oauth2Token_${getVarName(node.id)}.access_token}\`;\n`;
 		}
 		// Custom headers. Supports, in order:
 		//   - "env:VAR"             → this.env.VAR        (legacy prefix)
@@ -838,7 +929,7 @@ function generateTransformStep(
 	const stepName = createStepName(node);
 	const transformCode = (node.config.code as string) || "// Transform logic";
 	const captureResult = nodeHasOutputSchema(node);
-	const varName = nodeIdToVarName(node.id);
+	const varName = getVarName(node.id);
 	const varDecl = captureResult ? `const ${varName} = ` : "";
 	const resultCast = captureResult ? " as Record<string, unknown>" : "";
 	const stepNameExpr = retryVarName
@@ -1077,8 +1168,10 @@ function generateChallengeStep(
 	retryVarName?: string,
 ): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "challengeResult");
-	const outputVar = nodeIdToVarName(node.id);
+	// `outputVar` is the public-facing alias used by downstream tokens (e.g. `approval.accepted`).
+	// `rawVar` is the internal waitForEvent result; suffixed to avoid collision with outputVar.
+	const outputVar = getVarName(node.id);
+	const rawVar = `_${outputVar}Evt`;
 	const config = node.config as ChallengeNodeConfig | undefined;
 	const challengeType = config?.challengeType || "acceptance";
 	const timeout = config?.challengeTimeout;
@@ -1124,7 +1217,7 @@ function generateChallengeStep(
 			retryVarName,
 			chVar,
 		);
-		code += `${innerIndent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${innerIndent}${rawVar} = await step.waitForEvent<{ accepted: boolean }>(\n`;
 		code += `${innerIndent}\t${stepNameExpr},\n`;
 		code += `${innerIndent}\t{\n`;
 		code += `${innerIndent}\t\ttype: "${challengeType}",\n`;
@@ -1134,11 +1227,11 @@ function generateChallengeStep(
 		code += generateCaseObjectCall(
 			node,
 			innerIndent,
-			varName,
+			rawVar,
 			retryVarName,
 			chVar,
 		);
-		code += emitChallengeOutputAssignment(innerIndent, varName, outputVar);
+		code += emitChallengeOutputAssignment(innerIndent, rawVar, outputVar);
 		code += generateProgressCall(
 			node,
 			innerIndent,
@@ -1163,15 +1256,15 @@ function generateChallengeStep(
 			eventType,
 			retryVarName,
 		);
-		code += `${indent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${indent}${rawVar} = await step.waitForEvent<{ accepted: boolean }>(\n`;
 		code += `${indent}\t${stepNameExpr},\n`;
 		code += `${indent}\t{\n`;
 		code += `${indent}\t\ttype: "${challengeType}",\n`;
 		code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
 		code += `${indent}\t},\n`;
 		code += `${indent});\n`;
-		code += generateCaseObjectCall(node, indent, varName, retryVarName);
-		code += emitChallengeOutputAssignment(indent, varName, outputVar);
+		code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
+		code += emitChallengeOutputAssignment(indent, rawVar, outputVar);
 		code += generateProgressCall(
 			node,
 			indent,
@@ -1228,8 +1321,9 @@ function generatePromotionStep(
 	retryVarName?: string,
 ): string {
 	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "promotionResult");
-	const outputVar = nodeIdToVarName(node.id);
+	// `outputVar` is the public alias; `rawVar` is the internal event result variable.
+	const outputVar = getVarName(node.id);
+	const rawVar = `_${outputVar}Evt`;
 	const config = node.config as PromotionNodeConfig | undefined;
 	const commission =
 		typeof config?.commission === "number"
@@ -1251,7 +1345,7 @@ function generatePromotionStep(
 		eventType,
 		retryVarName,
 	);
-	code += `${indent}${varName} = await step.waitForEvent<PromotionSelectionPayload>(\n`;
+	code += `${indent}${rawVar} = await step.waitForEvent<PromotionSelectionPayload>(\n`;
 	code += `${indent}\t${stepNameExpr},\n`;
 	code += `${indent}\t{\n`;
 	code += `${indent}\t\ttype: "${eventType}",\n`;
@@ -1261,8 +1355,8 @@ function generatePromotionStep(
 	code += `${indent}\t\ttimeout: "365 days",\n`;
 	code += `${indent}\t},\n`;
 	code += `${indent});\n`;
-	code += generateCaseObjectCall(node, indent, varName, retryVarName);
-	code += emitPromotionOutputAssignment(indent, varName, outputVar);
+	code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
+	code += emitPromotionOutputAssignment(indent, rawVar, outputVar);
 	code += generateProgressCall(
 		node,
 		indent,
@@ -1706,7 +1800,7 @@ function traverseBranch(
 		}
 		// Handle Challenge nodes (branching based on acceptance)
 		else if (node.type === "Challenge" && forwardOutgoing.length === 2) {
-			const outputVar = nodeIdToVarName(node.id);
+			const outputVar = getVarName(node.id);
 			const topEdge = forwardOutgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "top",
 			);
@@ -1832,9 +1926,14 @@ export function generateWorkflowCode(
 	const warnings: string[] = [];
 	let code = "";
 
+	// Build the alias map once for this generation run so all step generators
+	// can resolve `getVarName(node.id)` → camelCase alias.
+	_activeAliasMap = buildAliasMap(nodes);
+
 	// Find start node
 	const startNode = nodes.find((n) => n.type === "Start");
 	if (!startNode) {
+		_activeAliasMap = new Map();
 		return {
 			code: "// Error: No Start node found in workflow",
 			warnings: ["No Start node found in workflow"],
@@ -1952,27 +2051,26 @@ export function generateWorkflowCode(
 	const challengeNodes = nodes.filter((n) => n.type === "Challenge");
 	if (challengeNodes.length > 0) {
 		for (const node of challengeNodes) {
-			const varName = createVariableName(node.title, "challengeResult");
-			const outputVar = nodeIdToVarName(node.id);
-			code += `\t\tlet ${varName}: unknown = null;\n`;
+			const outputVar = getVarName(node.id);
+			const rawVar = `_${outputVar}Evt`;
+			code += `\t\tlet ${rawVar}: unknown = null;\n`;
 			// Exposed output object referenced from downstream nodes via
-			// `${nodeId.accepted}`, `${nodeId.timedOut}`, `${nodeId.respondedBy}`,
-			// and `${nodeId.respondedAt}`. Hoisted so branches and the
-			// convergence path can reference it safely.
+			// `${alias.accepted}`, `${alias.timedOut}`, etc. Hoisted so branches
+			// and the convergence path can reference it safely.
 			code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
 		}
 		code += `\n`;
 	}
 
 	// Same pattern for Promotion nodes — hoist the normalized output object
-	// so downstream steps can dereference `${nodeId.promotionId}` safely even
+	// so downstream steps can dereference `${alias.promotionId}` safely even
 	// across retry/checkpoint loops.
 	const promotionNodes = nodes.filter((n) => n.type === "Promotion");
 	if (promotionNodes.length > 0) {
 		for (const node of promotionNodes) {
-			const varName = createVariableName(node.title, "promotionResult");
-			const outputVar = nodeIdToVarName(node.id);
-			code += `\t\tlet ${varName}: unknown = null;\n`;
+			const outputVar = getVarName(node.id);
+			const rawVar = `_${outputVar}Evt`;
+			code += `\t\tlet ${rawVar}: unknown = null;\n`;
 			code += `\t\tlet ${outputVar}: { promotionId: string; promotionName: string; selectedTerm: number; finalAmount: number; monthlyPayment: number; interestRate: number; downPayment: number; contractorFee: number; commission: number; selectedBy: string; selectedAt: string } = { promotionId: "", promotionName: "", selectedTerm: 0, finalAmount: 0, monthlyPayment: 0, interestRate: 0, downPayment: 0, contractorFee: 0, commission: 0, selectedBy: "", selectedAt: "" };\n`;
 		}
 		code += `\n`;
@@ -1992,6 +2090,9 @@ export function generateWorkflowCode(
 	// Close class
 	code += `\t}\n`;
 	code += `}\n`;
+
+	// Clear the module-level alias map after generation
+	_activeAliasMap = new Map();
 
 	return { code, warnings };
 }

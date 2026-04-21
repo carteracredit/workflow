@@ -909,6 +909,8 @@ export const translations = {
 			enumPlaceholder: "Add value (Enter or comma)",
 			propNamePlaceholder: "name",
 			propNameError: "Must start with a letter",
+			propNameInvalidChars:
+				"Only letters, digits, _ and $ are allowed, and the name must start with a letter or _",
 			propDescPlaceholder: "description",
 			addProperty: "Add property",
 			arrayItemType: "Item type",
@@ -1869,6 +1871,8 @@ export const translations = {
 			enumPlaceholder: "Agregar valor (Enter o coma)",
 			propNamePlaceholder: "nombre",
 			propNameError: "Debe empezar con una letra",
+			propNameInvalidChars:
+				"Solo se permiten letras, dígitos, _ y $, y el nombre debe empezar con letra o _",
 			propDescPlaceholder: "descripción",
 			addProperty: "Agregar propiedad",
 			arrayItemType: "Tipo de elemento",

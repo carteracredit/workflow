@@ -52,6 +52,9 @@ import {
 	buildSecretsSource,
 	type VariableSourceNode,
 } from "@/lib/workflow/graph-utils";
+import { migrateWorkflowTokens } from "@/lib/workflow/migrate-tokens";
+import { renameAliasInTokens } from "@/lib/workflow/migrate-tokens";
+import { buildAliasMap } from "@/lib/workflow/node-alias";
 import { Monitor } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -313,19 +316,28 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 	zoom: number;
 	pan: { x: number; y: number };
 	metadata?: DefinitionMetadata;
+	migratedTokens?: boolean;
 } | null {
 	try {
 		const parsed =
 			typeof definition === "string" ? JSON.parse(definition) : definition;
+		const nodes: WorkflowNode[] = migrateLegacyNodes(parsed.nodes || []).map(
+			withDefaultStaleTimeout,
+		);
+		const edges: WorkflowEdge[] = parsed.edges || [];
+
+		// Migrate legacy ${node-<id>.prop} tokens to ${<alias>.prop}.
+		// This is idempotent: already-migrated workflows produce no change.
+		const { changed: migratedTokens } = migrateWorkflowTokens(nodes, edges);
+
 		return {
-			nodes: migrateLegacyNodes(parsed.nodes || []).map(
-				withDefaultStaleTimeout,
-			),
-			edges: parsed.edges || [],
+			nodes,
+			edges,
 			flags: parsed.flags || [],
 			zoom: parsed.zoom ?? 1,
 			pan: parsed.pan || { ...DEFAULT_START_NODE_PAN },
 			metadata: parsed.metadata || undefined,
+			migratedTokens,
 		};
 	} catch {
 		return null;
@@ -490,6 +502,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 								selectedEdgeIds: [],
 							}),
 						);
+						if (parsed.migratedTokens) {
+							toast.info(
+								"Las variables del workflow fueron actualizadas al nuevo formato (alias por nombre de nodo). Guarda para persistir los cambios.",
+								{ duration: 6000 },
+							);
+						}
 					} else {
 						const metadata: WorkflowMetadata = {
 							name: wf.name,
@@ -826,6 +844,46 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 				edges: prev.edges,
 				recordHistory: true,
 			}));
+		},
+		[applyHistoryChange],
+	);
+
+	/**
+	 * Renames a node's title and (optionally) rewrites all token references
+	 * pointing to its old alias so they point to the new alias.
+	 */
+	const renameNodeAlias = useCallback(
+		(
+			nodeId: string,
+			oldAlias: string,
+			newTitle: string,
+			renameAll: boolean,
+		) => {
+			applyHistoryChange((prev) => {
+				let nextNodes = prev.nodes.map((n) => {
+					if (n.id !== nodeId) return n;
+					return withDefaultStaleTimeout({ ...n, title: newTitle });
+				});
+
+				if (renameAll) {
+					const newAliasMap = buildAliasMap(nextNodes);
+					const newAlias = newAliasMap.get(nodeId) ?? "";
+
+					if (oldAlias !== newAlias) {
+						// Deep-clone configs so prev state is not mutated
+						nextNodes = nextNodes.map((n) => ({
+							...n,
+							config: JSON.parse(JSON.stringify(n.config)) as Record<
+								string,
+								unknown
+							>,
+						}));
+						renameAliasInTokens(nextNodes, oldAlias, newAlias);
+					}
+				}
+
+				return { nodes: nextNodes, edges: prev.edges, recordHistory: true };
+			});
 		},
 		[applyHistoryChange],
 	);
@@ -1448,6 +1506,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 								onUpdateMetadata={updateMetadata}
 								onAddEdge={addEdge}
 								onDeleteEdge={deleteEdge}
+								onRenameNodeAlias={renameNodeAlias}
 								showWorkflowProperties={showWorkflowProperties}
 								onCloseWorkflowProperties={() =>
 									setShowWorkflowProperties(false)
