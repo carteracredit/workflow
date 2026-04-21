@@ -1,3 +1,10 @@
+# [1.3.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.5...v1.3.0-rc.6) (2026-04-21)
+
+
+### Features
+
+* add variable-picker token substitution tests ([48df191](https://github.com/carteracredit/workflow/commit/48df191aaecb266022cf1b26157f323f7e891959))
+
 # [1.3.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.4...v1.3.0-rc.5) (2026-04-21)
 
 
