@@ -343,3 +343,50 @@ describe("validateTransformCode – ESBuild semantic rules", () => {
 		expect(result.valid).toBe(true);
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Variable-picker token substitution in Transform code
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("validateTransformCode – variable-picker token substitution", () => {
+	it("should accept bare ${alias.prop} reference as ternary condition", async () => {
+		const result = await validateTransformCode(
+			`return \${itsTheSameAddress.accepted} ? {
+  "street": \${inicio.clientAddress.streetName}
+} : {
+  "street": \${alternateAddress.address.street}
+}`,
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept ${alias.prop} reference inside a string value (quoted)", async () => {
+		const result = await validateTransformCode(
+			`return { "greeting": "\${user.name}" };`,
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept multiple ${...} references in a complex expression", async () => {
+		const result = await validateTransformCode(
+			`const total = \${cart.subtotal} + \${cart.tax};
+return { total };`,
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should accept ${alias.prop} as an if condition", async () => {
+		const result = await validateTransformCode(
+			`if (\${approval.accepted}) {
+  return { status: "approved" };
+}
+return { status: "rejected" };`,
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("should still reject code with a real syntax error even after substitution", async () => {
+		const result = await validateTransformCode(`return \${alias.prop} > `);
+		expect(result.valid).toBe(false);
+	});
+});
