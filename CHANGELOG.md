@@ -1,3 +1,10 @@
+# [1.3.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.4...v1.3.0-rc.5) (2026-04-21)
+
+
+### Features
+
+* enhance WorkflowEditor with token migration and alias renaming ([8eec396](https://github.com/carteracredit/workflow/commit/8eec3968ffaae85fdf7120bd91bd355f3493b399))
+
 # [1.3.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.3...v1.3.0-rc.4) (2026-04-21)
 
 
