@@ -1,3 +1,10 @@
+# [1.3.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.3...v1.3.0-rc.4) (2026-04-21)
+
+
+### Features
+
+* enhance WorkflowList with server-side pagination and filtering ([a8cf6ba](https://github.com/carteracredit/workflow/commit/a8cf6babc1779392b81d40c33d26ec7098303986))
+
 # [1.3.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.2...v1.3.0-rc.3) (2026-04-20)
 
 
