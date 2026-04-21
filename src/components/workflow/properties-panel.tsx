@@ -32,6 +32,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+	DialogFooter,
+} from "@/components/ui/dialog";
+import {
 	Select,
 	SelectContent,
 	SelectItem,
@@ -82,6 +89,11 @@ import {
 import type { Form as WorkflowForm } from "@/lib/workflow-api/forms";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
 import { useLanguage } from "@/components/LanguageProvider";
+import { buildAliasMap, titleToCamelCase } from "@/lib/workflow/node-alias";
+import {
+	findTokenOccurrences,
+	type TokenOccurrence,
+} from "@/lib/workflow/migrate-tokens";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -166,6 +178,17 @@ interface PropertiesPanelProps {
 	onUpdateMetadata: (updates: Partial<WorkflowMetadata>) => void;
 	onAddEdge: (edge: WorkflowEdge) => void;
 	onDeleteEdge: (edgeId: string) => void;
+	/**
+	 * Called when a node's title is changed AND its alias collides with existing
+	 * token references. Receives the old alias, new title, and whether to
+	 * rewrite all token references (`renameAll`).
+	 */
+	onRenameNodeAlias?: (
+		nodeId: string,
+		oldAlias: string,
+		newTitle: string,
+		renameAll: boolean,
+	) => void;
 	showWorkflowProperties: boolean;
 	onCloseWorkflowProperties: () => void;
 	position?: "left" | "right";
@@ -240,6 +263,7 @@ export function PropertiesPanel({
 	onUpdateMetadata,
 	onAddEdge,
 	onDeleteEdge,
+	onRenameNodeAlias,
 	showWorkflowProperties,
 	onCloseWorkflowProperties,
 	position = "right",
@@ -260,6 +284,15 @@ export function PropertiesPanel({
 	const hasMultipleItems =
 		selectedNodes.length + selectedEdges.length > 1 ||
 		(selectedNodes.length > 0 && selectedEdges.length > 0);
+
+	// ── Rename alias modal state ───────────────────────────────────────────
+	const [renameModalState, setRenameModalState] = useState<{
+		open: boolean;
+		nodeId: string;
+		oldAlias: string;
+		newTitle: string;
+		occurrences: TokenOccurrence[];
+	} | null>(null);
 	// Upstream variable source nodes for the variable picker
 	const upstreamVariableNodes = useMemo(() => {
 		if (!selectedNode) return [];
@@ -1251,6 +1284,96 @@ export function PropertiesPanel({
 
 	return (
 		<div {...panelContainerProps}>
+			{/* Rename alias confirmation modal */}
+			{renameModalState && (
+				<Dialog
+					open={renameModalState.open}
+					onOpenChange={(open) => {
+						if (!open) {
+							// Cancelled: don't change anything
+							setRenameModalState(null);
+						}
+					}}
+				>
+					<DialogContent className="max-w-lg">
+						<DialogHeader>
+							<DialogTitle>Cambiar nombre del nodo</DialogTitle>
+						</DialogHeader>
+						<div className="space-y-3 text-sm">
+							<p>
+								El alias del nodo cambiará de{" "}
+								<code className="bg-muted px-1 rounded font-mono text-xs">
+									{renameModalState.oldAlias}
+								</code>{" "}
+								a{" "}
+								<code className="bg-muted px-1 rounded font-mono text-xs">
+									{buildAliasMap(
+										nodes.map((n) =>
+											n.id === renameModalState.nodeId
+												? { ...n, title: renameModalState.newTitle }
+												: n,
+										),
+									).get(renameModalState.nodeId) ??
+										titleToCamelCase(renameModalState.newTitle)}
+								</code>
+								.
+							</p>
+							<p className="text-muted-foreground">
+								Los siguientes campos referencian este nodo (
+								{renameModalState.occurrences.length} ocurrencia
+								{renameModalState.occurrences.length !== 1 ? "s" : ""}):
+							</p>
+							<ul className="space-y-1 max-h-40 overflow-y-auto">
+								{renameModalState.occurrences.map((occ, i) => (
+									<li key={i} className="rounded bg-muted/40 px-2 py-1 text-xs">
+										<span className="font-medium">{occ.nodeTitle}</span>
+										<span className="text-muted-foreground ml-1 font-mono">
+											{occ.context}
+										</span>
+									</li>
+								))}
+							</ul>
+							<p className="text-muted-foreground text-xs">
+								Si no actualizas las referencias, quedarán como variables
+								huérfanas y la validación del workflow reportará errores.
+							</p>
+						</div>
+						<DialogFooter className="flex gap-2 flex-col sm:flex-row">
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									// Just rename the node, leave tokens as-is (orphaned)
+									onRenameNodeAlias!(
+										renameModalState.nodeId,
+										renameModalState.oldAlias,
+										renameModalState.newTitle,
+										false,
+									);
+									setRenameModalState(null);
+								}}
+							>
+								Solo renombrar el nodo
+							</Button>
+							<Button
+								size="sm"
+								onClick={() => {
+									// Rename node and rewrite all references
+									onRenameNodeAlias!(
+										renameModalState.nodeId,
+										renameModalState.oldAlias,
+										renameModalState.newTitle,
+										true,
+									);
+									setRenameModalState(null);
+								}}
+							>
+								Actualizar todas las referencias
+							</Button>
+						</DialogFooter>
+					</DialogContent>
+				</Dialog>
+			)}
 			{resizeHandle}
 			<div className="border-b border-border p-4 flex-shrink-0">
 				<h2 className="font-semibold">{t("propertiesPanel.nodePropsTitle")}</h2>
@@ -1262,17 +1385,63 @@ export function PropertiesPanel({
 					<div className="space-y-2 w-full">
 						<Label>{t("propertiesPanel.nodeTitleLabel")}</Label>
 						<div className="grid grid-cols-2 gap-2">
-							<Input
-								id="title"
-								value={selectedNode.title}
-								onChange={(e) =>
-									onUpdateNode(selectedNode.id, { title: e.target.value })
-								}
-								placeholder={t("propertiesPanel.nodeTitlePlaceholder")}
-								className="w-full"
-								readOnly={selectedNode.type === "Start"}
-								disabled={selectedNode.type === "Start"}
-							/>
+							<div className="space-y-1">
+								<Input
+									id="title"
+									value={selectedNode.title}
+									onChange={(e) => {
+										const newTitle = e.target.value;
+										// Check if the alias would change and if tokens reference the old alias
+										if (
+											onRenameNodeAlias &&
+											selectedNode.type !== "Start" &&
+											newTitle !== selectedNode.title
+										) {
+											const aliasMap = buildAliasMap(nodes);
+											const oldAlias =
+												aliasMap.get(selectedNode.id) ??
+												titleToCamelCase(
+													selectedNode.title || selectedNode.type,
+												);
+											const newAlias = titleToCamelCase(
+												newTitle || selectedNode.type,
+											);
+											if (oldAlias !== newAlias) {
+												const occurrences = findTokenOccurrences(
+													nodes,
+													oldAlias,
+												);
+												if (occurrences.length > 0) {
+													setRenameModalState({
+														open: true,
+														nodeId: selectedNode.id,
+														oldAlias,
+														newTitle,
+														occurrences,
+													});
+													return; // Don't update yet - wait for modal choice
+												}
+											}
+										}
+										onUpdateNode(selectedNode.id, { title: newTitle });
+									}}
+									placeholder={t("propertiesPanel.nodeTitlePlaceholder")}
+									className="w-full"
+									readOnly={selectedNode.type === "Start"}
+									disabled={selectedNode.type === "Start"}
+								/>
+								{selectedNode.type !== "Start" && (
+									<p className="text-[10px] text-muted-foreground font-mono">
+										alias:{" "}
+										<span className="text-foreground">
+											{buildAliasMap(nodes).get(selectedNode.id) ??
+												titleToCamelCase(
+													selectedNode.title || selectedNode.type,
+												)}
+										</span>
+									</p>
+								)}
+							</div>
 							<Input
 								id="title-es"
 								value={selectedNode.titleEs || ""}

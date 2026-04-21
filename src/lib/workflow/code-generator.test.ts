@@ -367,9 +367,11 @@ describe("generateWorkflowCode", () => {
 
 		expect(result.code).toContain("step.waitForEvent<{ accepted: boolean }>(");
 		expect(result.code).toContain('"manual-approval"');
-		// Challenge nodes get a hoisted let so the if/else branch can access it
-		expect(result.code).toContain("let manualApproval: unknown = null;");
-		expect(result.code).toContain("manualApproval = await step.waitForEvent");
+		// "Manual Approval" → alias "manualApproval"; rawVar = "_manualApprovalEvt"
+		expect(result.code).toContain("let _manualApprovalEvt: unknown = null;");
+		expect(result.code).toContain(
+			"_manualApprovalEvt = await step.waitForEvent",
+		);
 		expect(result.code).not.toContain("const manualApproval");
 		expect(result.code).toContain('type: "acceptance"');
 		expect(result.code).toContain('timeout: "48 hours"');
@@ -400,10 +402,13 @@ describe("generateWorkflowCode", () => {
 		);
 		expect(result.code).toContain('type: "promotion_selection"');
 		expect(result.code).toContain('"seleccionar-promo"');
-		expect(result.code).toContain("interface PromotionSelectionPayload {");
-		expect(result.code).toContain("let seleccionarPromo: unknown = null;");
+		// "Seleccionar promo" → alias "seleccionarPromo"; rawVar = "_seleccionarPromoEvt"
+		expect(result.code).toContain("let _seleccionarPromoEvt: unknown = null;");
 		expect(result.code).toMatch(/commission: 75/);
-		expect(result.code).toContain("promo = (seleccionarPromo === null)");
+		// hoisted output variable uses the alias "seleccionarPromo"
+		expect(result.code).toContain(
+			"seleccionarPromo = (_seleccionarPromoEvt === null)",
+		);
 	});
 
 	it("should generate Decision branching code", () => {
@@ -466,12 +471,12 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Variable reference should be expanded to valid JS
-		expect(result.code).toContain("if (node_1773093521695.count > 0)");
+		// Variable reference should be expanded to valid JS using the camelCase alias
+		expect(result.code).toContain("if (pokemonAvailable.count > 0)");
 		// The original template syntax must NOT appear in generated code
 		expect(result.code).not.toContain("${node-1773093521695.count}");
-		// The API step result should be captured in a variable
-		expect(result.code).toContain("const node_1773093521695 =");
+		// The API step result should be captured in the alias variable
+		expect(result.code).toContain("const pokemonAvailable =");
 	});
 
 	it("should always capture step result for API nodes (response is always visible in cases UI)", () => {
@@ -494,7 +499,8 @@ describe("generateWorkflowCode", () => {
 		const result = generateWorkflowCode(nodes, edges);
 
 		// API nodes ALWAYS capture result so it's visible in the cases UI
-		expect(result.code).toContain("const node_api =");
+		// variable name is the camelCase alias derived from title "Call API" → "callApi"
+		expect(result.code).toContain("const callApi =");
 		expect(result.code).toContain("await step.do(");
 	});
 
@@ -911,11 +917,12 @@ describe("generateWorkflowCode with Challenge branching", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Challenge nodes get a hoisted let variable used in the if/else branch
-		expect(result.code).toContain("let approval: unknown = null;");
-		expect(result.code).toContain("approval = await step.waitForEvent");
+		// Challenge nodes get a hoisted let variable used in the if/else branch.
+		// The raw event var uses the `_<alias>Evt` pattern; the output var uses the alias.
+		expect(result.code).toContain("let _approvalEvt: unknown = null;");
+		expect(result.code).toContain("_approvalEvt = await step.waitForEvent");
 		expect(result.code).not.toContain("const approval");
-		expect(result.code).toContain("if (challenge.accepted) {");
+		expect(result.code).toContain("if (approval.accepted) {");
 		expect(result.code).toContain("return { success: true");
 		expect(result.code).toContain("} else {");
 		expect(result.code).toContain("return { success: false");
@@ -1684,7 +1691,8 @@ describe("generateWorkflowCode – branch convergence (post-dominator fix)", () 
 		expect(result.code).toContain('step.do("mensaje-rechazo"');
 
 		// Join and End must appear AFTER the if/else, not inside a branch
-		const ifIdx = result.code.indexOf("if (challenge.accepted) {");
+		// Challenge "Aprobacion" → alias "aprobacion"
+		const ifIdx = result.code.indexOf("if (aprobacion.accepted) {");
 		const joinIdx = result.code.indexOf('step.do("union"');
 		const returnIdx = result.code.indexOf("return { success: true");
 
@@ -2467,9 +2475,11 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Challenge gets hoisted let so the if/else can reference it
-		expect(result.code).toContain("let aprobacionManual: unknown = null;");
-		expect(result.code).toContain("aprobacionManual = await step.waitForEvent");
+		// "Aprobacion Manual" → alias "aprobacionManual"; rawVar = "_aprobacionManualEvt"
+		expect(result.code).toContain("let _aprobacionManualEvt: unknown = null;");
+		expect(result.code).toContain(
+			"_aprobacionManualEvt = await step.waitForEvent",
+		);
 		expect(result.code).not.toContain("const aprobacionManual");
 	});
 
@@ -2527,9 +2537,10 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("let challengeResult: unknown = null;");
+		// empty title → falls back to node.type "Challenge" → alias "challenge"; rawVar = "_challengeEvt"
+		expect(result.code).toContain("let _challengeEvt: unknown = null;");
 		expect(result.code).toContain(
-			"challengeResult = await step.waitForEvent<{ accepted: boolean }>(",
+			"_challengeEvt = await step.waitForEvent<{ accepted: boolean }>(",
 		);
 	});
 
@@ -2553,9 +2564,10 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("let aprobacionBasica: unknown = null;");
+		// "Aprobación Básica" → alias "aprobacionBasica"; rawVar = "_aprobacionBasicaEvt"
+		expect(result.code).toContain("let _aprobacionBasicaEvt: unknown = null;");
 		expect(result.code).toContain(
-			"aprobacionBasica = await step.waitForEvent<{ accepted: boolean }>(",
+			"_aprobacionBasicaEvt = await step.waitForEvent<{ accepted: boolean }>(",
 		);
 	});
 
@@ -2579,7 +2591,8 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		const letIdx = result.code.indexOf("let testApproval: unknown = null;");
+		// "Test Approval" → alias "testApproval"; rawVar = "_testApprovalEvt"
+		const letIdx = result.code.indexOf("let _testApprovalEvt: unknown = null;");
 		const startedIdx = result.code.indexOf("// Workflow started");
 
 		expect(letIdx).toBeGreaterThanOrEqual(0);
@@ -2662,10 +2675,9 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 			makeEdges(),
 		);
 
-		// Must use backtick template literal with dehyphenated node ID
-		expect(result.code).toContain(
-			"fetch(`${node_1773102326632.results[0].url}`",
-		);
+		// Must use backtick template literal with alias-based variable name (legacy node-ID → alias)
+		// "List Pokemon" → alias "listPokemon"
+		expect(result.code).toContain("fetch(`${listPokemon.results[0].url}`");
 		// Must NOT contain the original hyphenated literal string form
 		expect(result.code).not.toContain('"${node-1773102326632.results[0].url}"');
 	});
@@ -2679,8 +2691,9 @@ describe("generateWorkflowCode – variable interpolation in generated strings",
 			makeEdges(),
 		);
 
+		// "List Pokemon" → alias "listPokemon"
 		expect(result.code).toContain(
-			"fetch(`https://api.example.com/${node_1773102326632.id}`",
+			"fetch(`https://api.example.com/${listPokemon.id}`",
 		);
 	});
 
@@ -2915,10 +2928,10 @@ describe("generateWorkflowCode – updateCaseObject calls", () => {
 		];
 		const { code } = generateWorkflowCode(nodes, edges);
 
-		// Should include the form step name as key and the variable as value
+		// "Test Form" → alias "testForm"
 		expect(code).toContain("updateCaseObject");
 		expect(code).toContain('"test-form"');
-		expect(code).toContain("node_111");
+		expect(code).toContain("testForm");
 	});
 
 	it("emits updateCaseObject with _status/_type for Message nodes", () => {
@@ -3958,16 +3971,17 @@ describe("generateWorkflowCode – Challenge exposed outputs (accepted/timedOut/
 		createEdge("challenge-abc", "end-ko", { fromPort: "bottom" }),
 	];
 
-	it("hoists a typed output variable named after the nodeId", () => {
+	it("hoists a typed output variable named after the node alias", () => {
 		const { code } = generateWorkflowCode(buildBasicNodes(), buildBasicEdges());
+		// alias for "Aprobación" → "aprobacion"; raw event var → "_aprobacionEvt"
 		expect(code).toContain(
-			"let challenge_abc: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null }",
+			"let aprobacion: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null }",
 		);
 	});
 
 	it("normalizes waitForEvent into { accepted, timedOut, respondedBy, respondedAt }", () => {
 		const { code } = generateWorkflowCode(buildBasicNodes(), buildBasicEdges());
-		expect(code).toContain("challenge_abc = (aprobacion === null)");
+		expect(code).toContain("aprobacion = (_aprobacionEvt === null)");
 		expect(code).toContain("timedOut: true");
 		expect(code).toContain("timedOut: false");
 		expect(code).toContain("respondedAt: new Date().toISOString()");
@@ -3975,9 +3989,9 @@ describe("generateWorkflowCode – Challenge exposed outputs (accepted/timedOut/
 
 	it("branches on the exposed output variable (outputVar.accepted)", () => {
 		const { code } = generateWorkflowCode(buildBasicNodes(), buildBasicEdges());
-		expect(code).toContain("if (challenge_abc.accepted) {");
+		expect(code).toContain("if (aprobacion.accepted) {");
 		expect(code).not.toContain(
-			"if ((aprobacion as { payload: { accepted: boolean } }).payload.accepted)",
+			"if ((_aprobacionEvt as { payload: { accepted: boolean } }).payload.accepted)",
 		);
 	});
 
@@ -4017,7 +4031,8 @@ describe("generateWorkflowCode – Challenge exposed outputs (accepted/timedOut/
 		];
 
 		const { code } = generateWorkflowCode(nodes, edges);
-		expect(code).toContain("challenge_abc.accepted");
+		// alias for "Aprobación" → "aprobacion"; downstream token ${challenge-abc.accepted} resolves to aprobacion.accepted
+		expect(code).toContain("aprobacion.accepted");
 	});
 
 	it("uses outputVar.accepted in the inline retry break condition", () => {
@@ -4042,7 +4057,8 @@ describe("generateWorkflowCode – Challenge exposed outputs (accepted/timedOut/
 		];
 
 		const { code } = generateWorkflowCode(nodes, edges);
-		expect(code).toContain("if (challenge_retry.accepted) break;");
+		// alias for "Reintento" → "reintento"; break condition uses the output alias
+		expect(code).toContain("if (reintento.accepted) break;");
 	});
 });
 

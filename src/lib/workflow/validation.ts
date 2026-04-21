@@ -13,6 +13,8 @@ import {
 	validateTransformCode,
 	validateConditionExpression,
 } from "./validate-code";
+import { buildAliasMap } from "./node-alias";
+import { findOrphanedTokens } from "./migrate-tokens";
 
 type ChallengeResult = "accepted" | "rejected" | "failed";
 
@@ -562,6 +564,22 @@ export function validateWorkflow(
 					}
 				});
 			});
+	}
+
+	// Validación: tokens huérfanos (referencias a alias que no existen en el workflow)
+	{
+		const aliasMap = buildAliasMap(nodes);
+		for (const node of nodes) {
+			const orphans = findOrphanedTokens(node, aliasMap);
+			if (orphans.length > 0) {
+				const uniqueOrphans = [...new Set(orphans)];
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": referencia a variable(s) huérfana(s) — ${uniqueOrphans.join(", ")}. El nodo de origen ya no existe o fue renombrado.`,
+					severity: "error",
+				});
+			}
+		}
 	}
 
 	return errors;

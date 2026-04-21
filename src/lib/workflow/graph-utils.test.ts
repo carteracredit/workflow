@@ -422,17 +422,18 @@ describe("graph-utils", () => {
 
 			const result = buildVariableSourceNodes(nodes);
 			expect(result).toHaveLength(1);
-			expect(result[0].id).toBe("api-1");
+			// id is now the camelCase alias derived from the node title
+			expect(result[0].id).toBe("myApi");
 			expect(result[0].name).toBe("My API");
 			expect(result[0].variables).toHaveLength(2);
 
 			const status = result[0].variables.find((v) => v.name === "status");
 			expect(status?.type).toBe("number");
-			expect(status?.path).toBe("api-1.status");
+			expect(status?.path).toBe("myApi.status");
 
 			const message = result[0].variables.find((v) => v.name === "message");
 			expect(message?.type).toBe("string");
-			expect(message?.path).toBe("api-1.message");
+			expect(message?.path).toBe("myApi.message");
 		});
 
 		it("should convert nested object properties", () => {
@@ -470,7 +471,7 @@ describe("graph-utils", () => {
 			const dataVar = result[0].variables.find((v) => v.name === "data");
 			expect(dataVar?.type).toBe("object");
 			expect(dataVar?.children).toHaveLength(2);
-			expect(dataVar?.children?.[0].path).toBe("api-1.data.id");
+			expect(dataVar?.children?.[0].path).toBe("myApi.data.id");
 		});
 
 		it("should map enum type to string for variable picker", () => {
@@ -564,18 +565,18 @@ describe("graph-utils", () => {
 				(c) => c.name === "firstName",
 			);
 			expect(firstNameChild).toBeDefined();
-			expect(firstNameChild?.path).toBe("form-1.userName.firstName");
+			expect(firstNameChild?.path).toBe("personalData.userName.firstName");
 			expect(firstNameChild?.type).toBe("string");
 
 			const lastNameChild = userNameVar?.children?.find(
 				(c) => c.name === "lastName",
 			);
-			expect(lastNameChild?.path).toBe("form-1.userName.lastName");
+			expect(lastNameChild?.path).toBe("personalData.userName.lastName");
 
 			const fullNameChild = userNameVar?.children?.find(
 				(c) => c.name === "fullName",
 			);
-			expect(fullNameChild?.path).toBe("form-1.userName.fullName");
+			expect(fullNameChild?.path).toBe("personalData.userName.fullName");
 		});
 
 		it("should expand compound address field into children in the variable tree", () => {
@@ -634,7 +635,7 @@ describe("graph-utils", () => {
 			const streetChild = addressVar?.children?.find(
 				(c) => c.name === "street",
 			);
-			expect(streetChild?.path).toBe("form-2.homeAddress.street");
+			expect(streetChild?.path).toBe("contactForm.homeAddress.street");
 		});
 
 		it("always emits the Start source with CASE_VARIABLES even when it has no custom outputSchema", () => {
@@ -651,7 +652,8 @@ describe("graph-utils", () => {
 
 			const result = buildVariableSourceNodes([start]);
 			expect(result).toHaveLength(1);
-			expect(result[0].id).toBe("start-1");
+			// id is the camelCase alias derived from the node title "Start" → "start"
+			expect(result[0].id).toBe("start");
 
 			const names = result[0].variables.map((v) => v.name);
 			expect(names).toEqual(
@@ -710,7 +712,8 @@ describe("graph-utils", () => {
 
 			const campaign = result[0].variables.find((v) => v.name === "campaignId");
 			expect(campaign).toBeDefined();
-			expect(campaign?.path).toBe("start-1.campaignId");
+			// path uses the alias "start" not the raw node id "start-1"
+			expect(campaign?.path).toBe("start.campaignId");
 
 			const caseIdEntries = result[0].variables.filter(
 				(v) => v.name === "caseId",
@@ -745,7 +748,8 @@ describe("graph-utils", () => {
 				allNodes: [start, disconnected],
 			});
 			expect(result).toHaveLength(1);
-			expect(result[0].id).toBe("start-1");
+			// id is the alias derived from title "Start" → "start"
+			expect(result[0].id).toBe("start");
 			const names = result[0].variables.map((v) => v.name);
 			expect(names).toContain("caseId");
 		});
@@ -764,7 +768,8 @@ describe("graph-utils", () => {
 
 			const result = buildVariableSourceNodes([challenge]);
 			expect(result).toHaveLength(1);
-			expect(result[0].id).toBe("challenge-1");
+			// id is the alias derived from title "Aprobación" → "aprobacion"
+			expect(result[0].id).toBe("aprobacion");
 
 			const names = result[0].variables.map((v) => v.name);
 			expect(names).toEqual([
@@ -775,7 +780,7 @@ describe("graph-utils", () => {
 			]);
 
 			const accepted = result[0].variables.find((v) => v.name === "accepted");
-			expect(accepted?.path).toBe("challenge-1.accepted");
+			expect(accepted?.path).toBe("aprobacion.accepted");
 			expect(accepted?.type).toBe("boolean");
 		});
 
@@ -825,7 +830,8 @@ describe("graph-utils", () => {
 
 			const result = buildVariableSourceNodes([promotion]);
 			expect(result).toHaveLength(1);
-			expect(result[0].id).toBe("promotion-1");
+			// id is the alias derived from title "Seleccionar promoción" → "seleccionarPromocion"
+			expect(result[0].id).toBe("seleccionarPromocion");
 
 			const names = result[0].variables.map((v) => v.name);
 			expect(names).toEqual([
@@ -845,7 +851,7 @@ describe("graph-utils", () => {
 			const monthly = result[0].variables.find(
 				(v) => v.name === "monthlyPayment",
 			);
-			expect(monthly?.path).toBe("promotion-1.monthlyPayment");
+			expect(monthly?.path).toBe("seleccionarPromocion.monthlyPayment");
 			expect(monthly?.type).toBe("number");
 		});
 

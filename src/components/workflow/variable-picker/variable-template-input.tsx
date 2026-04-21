@@ -19,6 +19,8 @@ export interface TemplateSegment {
 	variableType?: VariableType;
 	nodeName?: string;
 	nodeId?: string;
+	/** `true` when the alias in the path cannot be resolved to any known source node. */
+	orphan?: boolean;
 }
 
 interface VariableTemplateInputProps {
@@ -259,6 +261,33 @@ function SegmentBadge({ segment, onRemove }: SegmentBadgeProps) {
 	const colorClass =
 		variableColorMap[segment.variableType ?? "any"] ?? variableColorMap.any;
 
+	if (segment.orphan) {
+		return (
+			<span
+				className={cn(
+					"inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 text-xs rounded border",
+					"bg-red-100 text-red-700 border-red-300 transition-colors",
+				)}
+				title={`Variable huérfana: ${segment.variablePath}`}
+			>
+				<span className="font-mono opacity-70 shrink-0">!</span>
+				<span className="truncate line-through">
+					{segment.variablePath ?? segment.value}
+				</span>
+				<button
+					type="button"
+					onClick={(e) => {
+						e.stopPropagation();
+						onRemove();
+					}}
+					className="p-0.5 hover:bg-black/10 rounded transition-colors shrink-0"
+				>
+					<X className="w-3 h-3" />
+				</button>
+			</span>
+		);
+	}
+
 	return (
 		<span
 			className={cn(
@@ -268,6 +297,14 @@ function SegmentBadge({ segment, onRemove }: SegmentBadgeProps) {
 			)}
 		>
 			<VariableTypeIcon type={segment.variableType ?? "any"} />
+			{segment.nodeName && (
+				<>
+					<span className="font-medium truncate opacity-70">
+						{segment.nodeName}
+					</span>
+					<span className="opacity-40 shrink-0">·</span>
+				</>
+			)}
 			<span className="font-medium truncate">{segment.value}</span>
 			<button
 				type="button"
