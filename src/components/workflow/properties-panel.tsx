@@ -293,6 +293,9 @@ export function PropertiesPanel({
 		newTitle: string;
 		occurrences: TokenOccurrence[];
 	} | null>(null);
+	// Alias the node had when the title input received focus — used by onBlur
+	// to detect whether the alias actually changed across the full edit session.
+	const titleFocusAliasRef = useRef<string | null>(null);
 	// Upstream variable source nodes for the variable picker
 	const upstreamVariableNodes = useMemo(() => {
 		if (!selectedNode) return [];
@@ -1390,40 +1393,48 @@ export function PropertiesPanel({
 									id="title"
 									value={selectedNode.title}
 									onChange={(e) => {
-										const newTitle = e.target.value;
-										// Check if the alias would change and if tokens reference the old alias
+										// Update title freely on every keystroke — no modal here.
+										onUpdateNode(selectedNode.id, {
+											title: e.target.value,
+										});
+									}}
+									onFocus={() => {
+										// Snapshot the alias at focus time so onBlur can detect net change.
+										const aliasMap = buildAliasMap(nodes);
+										titleFocusAliasRef.current =
+											aliasMap.get(selectedNode.id) ??
+											titleToCamelCase(selectedNode.title || selectedNode.type);
+									}}
+									onBlur={(e) => {
+										// Only after the user leaves the field do we check whether the
+										// alias changed AND there are references that need updating.
 										if (
-											onRenameNodeAlias &&
-											selectedNode.type !== "Start" &&
-											newTitle !== selectedNode.title
+											!onRenameNodeAlias ||
+											selectedNode.type === "Start" ||
+											titleFocusAliasRef.current === null
 										) {
-											const aliasMap = buildAliasMap(nodes);
-											const oldAlias =
-												aliasMap.get(selectedNode.id) ??
-												titleToCamelCase(
-													selectedNode.title || selectedNode.type,
-												);
-											const newAlias = titleToCamelCase(
-												newTitle || selectedNode.type,
-											);
-											if (oldAlias !== newAlias) {
-												const occurrences = findTokenOccurrences(
-													nodes,
-													oldAlias,
-												);
-												if (occurrences.length > 0) {
-													setRenameModalState({
-														open: true,
-														nodeId: selectedNode.id,
-														oldAlias,
-														newTitle,
-														occurrences,
-													});
-													return; // Don't update yet - wait for modal choice
-												}
-											}
+											titleFocusAliasRef.current = null;
+											return;
 										}
-										onUpdateNode(selectedNode.id, { title: newTitle });
+										// Use e.target.value (current DOM value) to avoid stale
+										// React state when onChange and onBlur fire in the same batch.
+										const currentTitle = e.target.value;
+										const currentAlias = titleToCamelCase(
+											currentTitle || selectedNode.type,
+										);
+										const oldAlias = titleFocusAliasRef.current;
+										titleFocusAliasRef.current = null;
+										if (oldAlias === currentAlias) return;
+										const occurrences = findTokenOccurrences(nodes, oldAlias);
+										if (occurrences.length > 0) {
+											setRenameModalState({
+												open: true,
+												nodeId: selectedNode.id,
+												oldAlias,
+												newTitle: currentTitle,
+												occurrences,
+											});
+										}
 									}}
 									placeholder={t("propertiesPanel.nodeTitlePlaceholder")}
 									className="w-full"
