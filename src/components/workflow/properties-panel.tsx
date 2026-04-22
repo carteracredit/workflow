@@ -315,8 +315,12 @@ export function PropertiesPanel({
 	// Ref to track textarea cursor for variable insertion (Decision/Transform)
 	const conditionTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const transformTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const descriptionRef = useRef<HTMLTextAreaElement>(null);
+	const descriptionEsRef = useRef<HTMLTextAreaElement>(null);
 	const [showDecisionVarPicker, setShowDecisionVarPicker] = useState(false);
 	const [showTransformVarPicker, setShowTransformVarPicker] = useState(false);
+	const [showDescVarPicker, setShowDescVarPicker] = useState(false);
+	const [showDescEsVarPicker, setShowDescEsVarPicker] = useState(false);
 
 	// Estado local para el input de maxRetries del nodo API
 	const [apiMaxRetriesInput, setApiMaxRetriesInput] = useState<string>("");
@@ -602,6 +606,30 @@ export function PropertiesPanel({
 				config: { ...selectedNode.config, [configKey]: next },
 			});
 			// Restore focus and cursor after the inserted token
+			requestAnimationFrame(() => {
+				el.focus();
+				const pos = start + token.length;
+				el.setSelectionRange(pos, pos);
+			});
+		},
+		[selectedNode, onUpdateNode],
+	);
+
+	// ── Variable insertion for top-level node fields (description / descriptionEs) ──
+	const insertVariableIntoNodeField = useCallback(
+		(
+			ref: React.RefObject<HTMLTextAreaElement | null>,
+			path: string,
+			field: "description" | "descriptionEs",
+		) => {
+			if (!selectedNode || !ref.current) return;
+			const el = ref.current;
+			const start = el.selectionStart ?? 0;
+			const end = el.selectionEnd ?? 0;
+			const current = (selectedNode[field] as string | undefined | null) ?? "";
+			const token = `\${${path}}`;
+			const next = current.slice(0, start) + token + current.slice(end);
+			onUpdateNode(selectedNode.id, { [field]: next || undefined });
 			requestAnimationFrame(() => {
 				el.focus();
 				const pos = start + token.length;
@@ -1481,34 +1509,106 @@ export function PropertiesPanel({
 					<div className="space-y-2 w-full">
 						<Label>{t("propertiesPanel.nodeDescLabel")}</Label>
 						<div className="grid grid-cols-2 gap-2">
-							<Textarea
-								id="description"
-								value={selectedNode.description}
-								onChange={(e) =>
-									onUpdateNode(selectedNode.id, {
-										description: e.target.value,
-									})
-								}
-								placeholder={t("propertiesPanel.nodeDescPlaceholder")}
-								rows={3}
-								className="w-full"
-								readOnly={selectedNode.type === "Start"}
-								disabled={selectedNode.type === "Start"}
-							/>
-							<Textarea
-								id="description-es"
-								value={selectedNode.descriptionEs || ""}
-								onChange={(e) =>
-									onUpdateNode(selectedNode.id, {
-										descriptionEs: e.target.value || undefined,
-									})
-								}
-								placeholder={t("propertiesPanel.nodeDescEsPlaceholder")}
-								rows={3}
-								className="w-full"
-								readOnly={selectedNode.type === "Start"}
-								disabled={selectedNode.type === "Start"}
-							/>
+							<div className="space-y-1">
+								<Textarea
+									id="description"
+									ref={descriptionRef}
+									value={selectedNode.description}
+									onChange={(e) =>
+										onUpdateNode(selectedNode.id, {
+											description: e.target.value,
+										})
+									}
+									placeholder={t("propertiesPanel.nodeDescPlaceholder")}
+									rows={3}
+									className="w-full"
+									readOnly={selectedNode.type === "Start"}
+									disabled={selectedNode.type === "Start"}
+								/>
+								{selectedNode.type !== "Start" && (
+									<div className="rounded-md border border-border/60 overflow-hidden">
+										<button
+											type="button"
+											onClick={() => setShowDescVarPicker(!showDescVarPicker)}
+											className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+										>
+											<span className="font-medium">
+												{t("propertiesPanel.availableVarsLabel")}
+											</span>
+											<span>{showDescVarPicker ? "▲" : "▼"}</span>
+										</button>
+										{showDescVarPicker &&
+											(upstreamVariableNodes.length > 0 ? (
+												<VariablePicker
+													nodes={upstreamVariableNodes}
+													onSelect={(variable) =>
+														insertVariableIntoNodeField(
+															descriptionRef,
+															variable.path,
+															"description",
+														)
+													}
+													className="rounded-none border-0 shadow-none"
+												/>
+											) : (
+												<div className="px-3 py-2 text-xs text-muted-foreground">
+													{t("propertiesPanel.noVarsAvailable")}
+												</div>
+											))}
+									</div>
+								)}
+							</div>
+							<div className="space-y-1">
+								<Textarea
+									id="description-es"
+									ref={descriptionEsRef}
+									value={selectedNode.descriptionEs || ""}
+									onChange={(e) =>
+										onUpdateNode(selectedNode.id, {
+											descriptionEs: e.target.value || undefined,
+										})
+									}
+									placeholder={t("propertiesPanel.nodeDescEsPlaceholder")}
+									rows={3}
+									className="w-full"
+									readOnly={selectedNode.type === "Start"}
+									disabled={selectedNode.type === "Start"}
+								/>
+								{selectedNode.type !== "Start" && (
+									<div className="rounded-md border border-border/60 overflow-hidden">
+										<button
+											type="button"
+											onClick={() =>
+												setShowDescEsVarPicker(!showDescEsVarPicker)
+											}
+											className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+										>
+											<span className="font-medium">
+												{t("propertiesPanel.availableVarsLabel")}
+											</span>
+											<span>{showDescEsVarPicker ? "▲" : "▼"}</span>
+										</button>
+										{showDescEsVarPicker &&
+											(upstreamVariableNodes.length > 0 ? (
+												<VariablePicker
+													nodes={upstreamVariableNodes}
+													onSelect={(variable) =>
+														insertVariableIntoNodeField(
+															descriptionEsRef,
+															variable.path,
+															"descriptionEs",
+														)
+													}
+													className="rounded-none border-0 shadow-none"
+												/>
+											) : (
+												<div className="px-3 py-2 text-xs text-muted-foreground">
+													{t("propertiesPanel.noVarsAvailable")}
+												</div>
+											))}
+									</div>
+								)}
+							</div>
 						</div>
 						<div className="grid grid-cols-2 gap-2">
 							<span className="text-[10px] text-muted-foreground">
@@ -3472,6 +3572,172 @@ export function PropertiesPanel({
 										</div>
 									</div>
 								)}
+							</div>
+
+							{/* Challenge UI labels: prompt text and button labels */}
+							<div className="space-y-3 rounded-md border border-border/60 p-3">
+								<Label className="text-xs font-semibold">
+									{t("propertiesPanel.challengeLabelsTitle")}
+								</Label>
+
+								{/* Prompt text */}
+								<div className="space-y-1">
+									<Label htmlFor="challenge-prompt" className="text-xs">
+										{t("propertiesPanel.challengePromptLabel")}
+									</Label>
+									<div className="grid grid-cols-2 gap-2">
+										<Textarea
+											id="challenge-prompt"
+											rows={2}
+											value={challengeConfig.labels?.prompt ?? ""}
+											onChange={(e) =>
+												setChallengeConfig({
+													...challengeConfig,
+													labels: {
+														...challengeConfig.labels,
+														prompt: e.target.value || undefined,
+													},
+												})
+											}
+											placeholder={
+												challengeConfig.challengeType === "signature"
+													? "Se requiere tu firma para continuar con el proceso."
+													: "Se requiere tu aprobación para continuar con el proceso."
+											}
+											className="text-xs"
+										/>
+										<Textarea
+											id="challenge-prompt-es"
+											rows={2}
+											value={challengeConfig.labels?.promptEs ?? ""}
+											onChange={(e) =>
+												setChallengeConfig({
+													...challengeConfig,
+													labels: {
+														...challengeConfig.labels,
+														promptEs: e.target.value || undefined,
+													},
+												})
+											}
+											placeholder={
+												challengeConfig.challengeType === "signature"
+													? "Se requiere tu firma para continuar con el proceso."
+													: "Se requiere tu aprobación para continuar con el proceso."
+											}
+											className="text-xs"
+										/>
+									</div>
+									<div className="grid grid-cols-2 gap-2">
+										<span className="text-[10px] text-muted-foreground">
+											{t("common.english")}
+										</span>
+										<span className="text-[10px] text-muted-foreground">
+											{t("common.spanish")}
+										</span>
+									</div>
+								</div>
+
+								{/* Approve button label */}
+								<div className="space-y-1">
+									<Label htmlFor="challenge-approve-label" className="text-xs">
+										{t("propertiesPanel.challengeApproveLabelField")}
+									</Label>
+									<div className="grid grid-cols-2 gap-2">
+										<Input
+											id="challenge-approve-label"
+											value={challengeConfig.labels?.approveLabel ?? ""}
+											onChange={(e) =>
+												setChallengeConfig({
+													...challengeConfig,
+													labels: {
+														...challengeConfig.labels,
+														approveLabel: e.target.value || undefined,
+													},
+												})
+											}
+											placeholder={
+												challengeConfig.challengeType === "signature"
+													? "Firmar"
+													: "Aprobar"
+											}
+											className="text-xs"
+										/>
+										<Input
+											id="challenge-approve-label-es"
+											value={challengeConfig.labels?.approveLabelEs ?? ""}
+											onChange={(e) =>
+												setChallengeConfig({
+													...challengeConfig,
+													labels: {
+														...challengeConfig.labels,
+														approveLabelEs: e.target.value || undefined,
+													},
+												})
+											}
+											placeholder={
+												challengeConfig.challengeType === "signature"
+													? "Firmar"
+													: "Aprobar"
+											}
+											className="text-xs"
+										/>
+									</div>
+									<div className="grid grid-cols-2 gap-2">
+										<span className="text-[10px] text-muted-foreground">
+											{t("common.english")}
+										</span>
+										<span className="text-[10px] text-muted-foreground">
+											{t("common.spanish")}
+										</span>
+									</div>
+								</div>
+
+								{/* Reject button label */}
+								<div className="space-y-1">
+									<Label htmlFor="challenge-reject-label" className="text-xs">
+										{t("propertiesPanel.challengeRejectLabelField")}
+									</Label>
+									<div className="grid grid-cols-2 gap-2">
+										<Input
+											id="challenge-reject-label"
+											value={challengeConfig.labels?.rejectLabel ?? ""}
+											onChange={(e) =>
+												setChallengeConfig({
+													...challengeConfig,
+													labels: {
+														...challengeConfig.labels,
+														rejectLabel: e.target.value || undefined,
+													},
+												})
+											}
+											placeholder="Rechazar"
+											className="text-xs"
+										/>
+										<Input
+											id="challenge-reject-label-es"
+											value={challengeConfig.labels?.rejectLabelEs ?? ""}
+											onChange={(e) =>
+												setChallengeConfig({
+													...challengeConfig,
+													labels: {
+														...challengeConfig.labels,
+														rejectLabelEs: e.target.value || undefined,
+													},
+												})
+											}
+											placeholder="Rechazar"
+											className="text-xs"
+										/>
+									</div>
+									<div className="grid grid-cols-2 gap-2">
+										<span className="text-[10px] text-muted-foreground">
+											{t("common.english")}
+										</span>
+										<span className="text-[10px] text-muted-foreground">
+											{t("common.spanish")}
+										</span>
+									</div>
+								</div>
 							</div>
 
 							<div className="rounded-md bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">

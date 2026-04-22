@@ -114,6 +114,23 @@ export interface AcceptanceChallengeConfig extends Record<string, unknown> {
 	challengeTimeout: ChallengeTimeoutConfig;
 	deliveryMethod: ChallengeDeliveryMethod;
 	retries?: ChallengeRetryConfig;
+	/** Optional UI labels shown in the cases resolver. Fallback to hardcoded defaults when absent. */
+	labels?: ChallengeLabels;
+}
+
+export interface ChallengeLabels {
+	/** Prompt text shown above the approve/reject buttons (EN) */
+	prompt?: string;
+	/** Prompt text shown above the approve/reject buttons (ES) */
+	promptEs?: string;
+	/** Label for the positive/approve button (EN) */
+	approveLabel?: string;
+	/** Label for the positive/approve button (ES) */
+	approveLabelEs?: string;
+	/** Label for the negative/reject button (EN) */
+	rejectLabel?: string;
+	/** Label for the negative/reject button (ES) */
+	rejectLabelEs?: string;
 }
 
 export type ChallengeNodeConfig = AcceptanceChallengeConfig;

@@ -721,6 +721,10 @@ export const translations = {
 			challengeRetryRolesLabel: "Responsible roles (retries)",
 			challengeRetryRolesNote:
 				"Select at least one role authorized to execute retries.",
+			challengeLabelsTitle: "UI Labels (optional)",
+			challengePromptLabel: "Prompt text",
+			challengeApproveLabelField: "Approve button label",
+			challengeRejectLabelField: "Reject button label",
 			challengeNotesTitle: "Notes",
 			challengeNotesBody:
 				"Acceptance and signature challenges allow pausing the flow until the user completes the required action (accept terms or sign documents) respecting the configured timeout.",
@@ -1682,6 +1686,10 @@ export const translations = {
 			challengeRetryRolesLabel: "Roles responsables (reintentos)",
 			challengeRetryRolesNote:
 				"Selecciona al menos un rol autorizado para ejecutar reintentos.",
+			challengeLabelsTitle: "Etiquetas de UI (opcionales)",
+			challengePromptLabel: "Texto de la solicitud",
+			challengeApproveLabelField: "Etiqueta botón de aprobación",
+			challengeRejectLabelField: "Etiqueta botón de rechazo",
 			challengeNotesTitle: "Notas",
 			challengeNotesBody:
 				"Los challenges de aceptación y firma permiten pausar el flujo hasta que el usuario complete la acción requerida (aceptar términos o firmar documentos) respetando el timeout configurado.",
