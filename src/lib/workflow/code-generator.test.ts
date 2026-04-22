@@ -4138,3 +4138,231 @@ describe("Message node: template string interpolation in subject and mergeVars",
 		);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Branch-scope hoisting: Form / API / Transform referenced post-merge
+// ---------------------------------------------------------------------------
+
+describe("generateWorkflowCode – branch-scoped node hoisting", () => {
+	it("hoists a Form node that is in a Decision branch and referenced by a post-merge Transform", () => {
+		// Graph: Start → Decision → (top: Form "alternateAddress") / (bottom: ∅) → Join → Transform that uses ${alternateAddress.address.street}
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Is Same Address",
+				config: { condition: "${start.accepted}" },
+			}),
+			createNode({
+				id: "altForm",
+				type: "Form",
+				title: "Alternate Address",
+				roles: ["client"],
+				config: {
+					outputSchema: {
+						properties: [{ id: "p1", name: "street", type: "string" }],
+					},
+				},
+			}),
+			createNode({ id: "join", type: "Join", title: "Join Address" }),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Transform Address",
+				config: {
+					code: "return { street: ${alternateAddress.street} };",
+					outputSchema: {
+						properties: [{ id: "p2", name: "result", type: "string" }],
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "decision"),
+			createEdge("decision", "altForm", { fromPort: "bottom" }),
+			createEdge("decision", "join", { fromPort: "top" }),
+			createEdge("altForm", "join"),
+			createEdge("join", "transform"),
+			createEdge("transform", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// The Form node should be hoisted with let at the top of run()
+		expect(result.code).toContain(
+			"let alternateAddress: Record<string, unknown> | undefined = undefined;",
+		);
+
+		// Inside the branch, the assignment should NOT use const
+		expect(result.code).toContain(
+			"alternateAddress = (await step.waitForEvent",
+		);
+		expect(result.code).not.toMatch(
+			/const alternateAddress\s*=\s*\(await step\.waitForEvent/,
+		);
+
+		// The Transform is generated post-merge (after the if/else block)
+		const hoistIdx = result.code.indexOf(
+			"let alternateAddress: Record<string, unknown> | undefined",
+		);
+		const ifIdx = result.code.indexOf("if (");
+		const transformIdx = result.code.indexOf('step.do("transform-address"');
+		expect(hoistIdx).toBeLessThan(ifIdx);
+		expect(transformIdx).toBeGreaterThan(ifIdx);
+
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	it("does NOT hoist a Form node that is in a branch but only referenced within that same branch", () => {
+		// Graph: Start → Decision → (top: Form → Transform using ${form.field}) / (bottom: End) → End
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Decide",
+				config: { condition: "true" },
+			}),
+			createNode({
+				id: "myForm",
+				type: "Form",
+				title: "My Form",
+				roles: [],
+				config: {
+					outputSchema: {
+						properties: [{ id: "p1", name: "value", type: "string" }],
+					},
+				},
+			}),
+			createNode({
+				id: "innerTransform",
+				type: "Transform",
+				title: "Inner Transform",
+				config: {
+					code: "return { v: ${myForm.value} };",
+				},
+			}),
+			createNode({ id: "endOk", type: "End", title: "OK" }),
+			createNode({ id: "endKo", type: "Reject", title: "KO" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "decision"),
+			createEdge("decision", "myForm", { fromPort: "top" }),
+			createEdge("myForm", "innerTransform"),
+			createEdge("innerTransform", "endOk"),
+			createEdge("decision", "endKo", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Form is only used inside its own branch — should NOT be hoisted
+		expect(result.code).not.toContain(
+			"let myForm: Record<string, unknown> | undefined",
+		);
+		// Normal const assignment inside the branch
+		expect(result.code).toContain("const myForm = (await step.waitForEvent");
+	});
+
+	it("hoists an API node that is in a Decision branch and referenced post-merge", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "dec",
+				type: "Decision",
+				title: "Check",
+				config: { condition: "true" },
+			}),
+			createNode({
+				id: "apiNode",
+				type: "API",
+				title: "Fetch Data",
+				config: { url: "https://api.example.com/data", method: "GET" },
+			}),
+			createNode({ id: "joinNode", type: "Join", title: "Merge" }),
+			createNode({
+				id: "txNode",
+				type: "Transform",
+				title: "Use Data",
+				config: {
+					code: "return ${fetchData.result};",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "dec"),
+			createEdge("dec", "apiNode", { fromPort: "top" }),
+			createEdge("dec", "joinNode", { fromPort: "bottom" }),
+			createEdge("apiNode", "joinNode"),
+			createEdge("joinNode", "txNode"),
+			createEdge("txNode", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain(
+			"let fetchData: Record<string, unknown> | undefined = undefined;",
+		);
+		expect(result.code).toContain("fetchData = await step.do");
+		expect(result.code).not.toMatch(/const fetchData\s*=\s*await step\.do/);
+	});
+
+	it("does NOT hoist Form/API/Transform nodes in linear flow (regression guard)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form",
+				type: "Form",
+				title: "Linear Form",
+				roles: [],
+				config: {
+					outputSchema: {
+						properties: [{ id: "p1", name: "value", type: "string" }],
+					},
+				},
+			}),
+			createNode({
+				id: "api",
+				type: "API",
+				title: "Linear Api",
+				config: { url: "https://example.com", method: "GET" },
+			}),
+			createNode({
+				id: "tx",
+				type: "Transform",
+				title: "Linear Transform",
+				config: {
+					code: "return ${linearForm.value};",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form"),
+			createEdge("form", "api"),
+			createEdge("api", "tx"),
+			createEdge("tx", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Linear nodes → no let hoisting
+		expect(result.code).not.toContain(
+			"let linearForm: Record<string, unknown> | undefined",
+		);
+		expect(result.code).not.toContain(
+			"let linearApi: Record<string, unknown> | undefined",
+		);
+		// Normal const assignments
+		expect(result.code).toContain(
+			"const linearForm = (await step.waitForEvent",
+		);
+		expect(result.code).toContain("const linearApi = await step.do");
+	});
+});

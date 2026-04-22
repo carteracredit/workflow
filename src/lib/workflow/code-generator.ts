@@ -134,6 +134,18 @@ function toJsTemplateLiteral(str: string): string {
 let _activeAliasMap: Map<string, string> = new Map();
 
 /**
+ * Set of node IDs (Form / API / Transform) that are inside a Decision or
+ * Challenge branch AND whose alias is referenced by a node outside that branch
+ * (i.e., post-merge). These need a hoisted `let` declaration at the start of
+ * `run()` so the reference is visible after the if/else block closes.
+ *
+ * Populated by `computeHoistedNodeIds` at the start of `generateWorkflowCode`.
+ * Challenge and Promotion nodes are NOT included here — they have their own
+ * dedicated hoisting block.
+ */
+let _hoistedNodeIds: Set<string> = new Set();
+
+/**
  * Returns the camelCase alias for a node ID, falling back to the legacy
  * hyphen→underscore transform when no alias is available.
  *
@@ -637,7 +649,12 @@ function generateFormStep(
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const captureResult = nodeHasOutputSchema(node);
 	const varName = getVarName(node.id);
-	const varDecl = captureResult ? `const ${varName} = ` : "";
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = captureResult
+		? isHoisted
+			? `${varName} = `
+			: `const ${varName} = `
+		: "";
 	const eventType = `form-submission-${stepName}`;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
@@ -706,7 +723,8 @@ function generateAPIStep(
 	// API nodes always capture the response so the cases UI can display it,
 	// regardless of whether an explicit outputSchema is configured.
 	const varName = getVarName(node.id);
-	const varDecl = `const ${varName} = `;
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = isHoisted ? `${varName} = ` : `const ${varName} = `;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
@@ -930,7 +948,12 @@ function generateTransformStep(
 	const transformCode = (node.config.code as string) || "// Transform logic";
 	const captureResult = nodeHasOutputSchema(node);
 	const varName = getVarName(node.id);
-	const varDecl = captureResult ? `const ${varName} = ` : "";
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = captureResult
+		? isHoisted
+			? `${varName} = `
+			: `const ${varName} = `
+		: "";
 	const resultCast = captureResult ? " as Record<string, unknown>" : "";
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
@@ -1907,6 +1930,173 @@ function traverseAndGenerate(
 	return { code, warnings: ctx.warnings };
 }
 
+// ---------------------------------------------------------------------------
+// Branch-scope hoisting analysis
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the set of node IDs that live inside at least one Decision or
+ * Challenge branch (i.e., are only reachable after a Decision/Challenge
+ * fork and before the convergence/join node).
+ *
+ * These nodes emit `const alias = await step.do(...)` inside an if/else block,
+ * so their variable is lexically scoped to that block.  When a downstream
+ * consumer (post-merge) references `${alias.field}` the runtime throws
+ * `ReferenceError: alias is not defined`.
+ *
+ * Note: Challenge and Promotion nodes are excluded because they are handled
+ * by their own dedicated hoisting block in `generateWorkflowCode`.
+ */
+function computeBranchScopedNodeIds(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+): Set<string> {
+	const { outgoingMap } = buildAdjacencyMaps(edges);
+	const retryZones = detectRetryZones(nodes, edges);
+	const branchScoped = new Set<string>();
+
+	for (const node of nodes) {
+		if (node.type !== "Decision" && node.type !== "Challenge") continue;
+
+		const outgoing = outgoingMap.get(node.id) ?? [];
+		const topEdge = outgoing.find((e) => e.fromPort === "top");
+		const bottomEdge = outgoing.find((e) => e.fromPort === "bottom");
+		if (!topEdge || !bottomEdge) continue;
+
+		const convergenceNodeId = findConvergenceNode(
+			topEdge.to,
+			bottomEdge.to,
+			outgoingMap,
+			retryZones,
+		);
+
+		const collectBranch = (startId: string) => {
+			const queue: string[] = [startId];
+			const visited = new Set<string>();
+			while (queue.length > 0) {
+				const id = queue.shift()!;
+				if (visited.has(id)) continue;
+				if (convergenceNodeId && id === convergenceNodeId) continue;
+				visited.add(id);
+				branchScoped.add(id);
+				for (const e of outgoingMap.get(id) ?? []) {
+					if (!visited.has(e.to)) queue.push(e.to);
+				}
+			}
+		};
+
+		collectBranch(topEdge.to);
+		collectBranch(bottomEdge.to);
+	}
+
+	return branchScoped;
+}
+
+/**
+ * Returns the set of node IDs (Form / API / Transform only) that are
+ * branch-scoped AND whose camelCase alias is referenced by at least one
+ * node's code/condition/body string.
+ *
+ * These need a `let alias: Record<string, unknown> | undefined = undefined;`
+ * hoisted at the top of `run()`, and their own assignment must drop `const`
+ * so it writes to the hoisted binding instead of creating a new block-scoped one.
+ */
+function computeHoistedNodeIds(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+	aliasMap: Map<string, string>,
+): Set<string> {
+	const hoistableTypes = new Set<WorkflowNode["type"]>([
+		"Form",
+		"API",
+		"Transform",
+	]);
+
+	const branchScopedIds = computeBranchScopedNodeIds(nodes, edges);
+
+	// Reverse map: camelCase alias → nodeId (for both new-format and legacy IDs)
+	const aliasToNodeId = new Map<string, string>();
+	for (const [nodeId, alias] of aliasMap) {
+		aliasToNodeId.set(alias, nodeId);
+		// Also register the legacy hyphen→underscore form as a fallback
+		aliasToNodeId.set(nodeId.replace(/-/g, "_"), nodeId);
+	}
+
+	const needsHoisting = new Set<string>();
+
+	/** Extract the alias first-segment from every ${...} token in a string. */
+	const extractAliases = (str: string): string[] => {
+		const aliases: string[] = [];
+		for (const match of str.matchAll(/\$\{([^}]+)\}/g)) {
+			const path = match[1].trim();
+			if (path.startsWith("secret.")) continue;
+			const firstSeg = path.split(".")[0].replace(/-/g, "_");
+			aliases.push(firstSeg);
+		}
+		return aliases;
+	};
+
+	for (const node of nodes) {
+		const stringsToScan: string[] = [];
+
+		if (node.type === "Transform" && node.config.code) {
+			stringsToScan.push(node.config.code as string);
+		}
+		if (node.type === "Decision" && node.config.condition) {
+			stringsToScan.push(node.config.condition as string);
+		}
+		if (node.type === "API") {
+			if (node.config.url) stringsToScan.push(node.config.url as string);
+			const bodyConfig = node.config.bodyConfig as APIBodyConfig | undefined;
+			if (bodyConfig?.rawJson) stringsToScan.push(bodyConfig.rawJson);
+			if (bodyConfig?.fieldMappings) {
+				for (const m of bodyConfig.fieldMappings as Array<{
+					sourceExpression: string;
+				}>) {
+					if (m.sourceExpression) stringsToScan.push(m.sourceExpression);
+				}
+			}
+			const customHeaders =
+				(node.config.customHeaders as APIHeaderEntry[]) ?? [];
+			for (const h of customHeaders) {
+				if (h.value) stringsToScan.push(h.value);
+			}
+		}
+		if (node.type === "Message") {
+			const msgConfig = node.config as MessageNodeConfig | undefined;
+			if (msgConfig?.subject) stringsToScan.push(msgConfig.subject);
+			if (Array.isArray(msgConfig?.mergeVars)) {
+				for (const mv of msgConfig.mergeVars) {
+					if (mv.value) stringsToScan.push(mv.value);
+				}
+			}
+		}
+
+		for (const str of stringsToScan) {
+			for (const alias of extractAliases(str)) {
+				const referencedNodeId = aliasToNodeId.get(alias);
+				if (
+					referencedNodeId &&
+					branchScopedIds.has(referencedNodeId) &&
+					// The consuming node itself must be OUTSIDE the branch (e.g. post-merge)
+					// so that hoisting is only done when there is a genuine cross-scope reference.
+					// If the consumer is also branch-scoped (inside the same or another branch),
+					// we still hoist to be safe — unless both are in the same branch context,
+					// which is approximated by checking if the consumer is NOT branch-scoped at all.
+					!branchScopedIds.has(node.id) &&
+					hoistableTypes.has(
+						nodes.find((n) => n.id === referencedNodeId)?.type ?? "Start",
+					)
+				) {
+					needsHoisting.add(referencedNodeId);
+				}
+			}
+		}
+	}
+
+	return needsHoisting;
+}
+
 /**
  * Generate TypeScript Cloudflare Workflow code from visual workflow
  */
@@ -1929,6 +2119,10 @@ export function generateWorkflowCode(
 	// Build the alias map once for this generation run so all step generators
 	// can resolve `getVarName(node.id)` → camelCase alias.
 	_activeAliasMap = buildAliasMap(nodes);
+
+	// Determine which branch-scoped nodes need let-hoisting before traversal.
+	// Must run after _activeAliasMap is populated (getVarName depends on it).
+	_hoistedNodeIds = computeHoistedNodeIds(nodes, edges, _activeAliasMap);
 
 	// Find start node
 	const startNode = nodes.find((n) => n.type === "Start");
@@ -2076,6 +2270,18 @@ export function generateWorkflowCode(
 		code += `\n`;
 	}
 
+	// Hoist Form/API/Transform nodes that live inside Decision/Challenge branches
+	// but whose alias is referenced post-merge (outside that branch's if/else block).
+	// Without this, the runtime throws ReferenceError because `const alias` only
+	// exists inside the block where it was declared.
+	if (_hoistedNodeIds.size > 0) {
+		for (const nodeId of _hoistedNodeIds) {
+			const varName = getVarName(nodeId);
+			code += `\t\tlet ${varName}: Record<string, unknown> | undefined = undefined;\n`;
+		}
+		code += `\n`;
+	}
+
 	// Traverse and generate step code (2 tabs = class body + method body)
 	const { code: stepsCode, warnings: traverseWarnings } = traverseAndGenerate(
 		startNode,
@@ -2093,6 +2299,7 @@ export function generateWorkflowCode(
 
 	// Clear the module-level alias map after generation
 	_activeAliasMap = new Map();
+	_hoistedNodeIds = new Set();
 
 	return { code, warnings };
 }
