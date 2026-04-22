@@ -14,9 +14,11 @@ import type { Flag, FlagOption } from "./workflow/types";
 
 describe("flag-manager", () => {
 	describe("generateFlagId", () => {
-		it("should generate a unique ID with 'flag-' prefix", () => {
+		it("should generate a valid UUID v4", () => {
 			const id = generateFlagId();
-			expect(id).toMatch(/^flag-\d+-[a-z0-9]+$/);
+			expect(id).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+			);
 		});
 
 		it("should generate different IDs on each call", () => {
@@ -27,9 +29,11 @@ describe("flag-manager", () => {
 	});
 
 	describe("generateFlagOptionId", () => {
-		it("should generate a unique ID with 'option-' prefix", () => {
+		it("should generate a valid UUID v4", () => {
 			const id = generateFlagOptionId();
-			expect(id).toMatch(/^option-\d+-[a-z0-9]+$/);
+			expect(id).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+			);
 		});
 
 		it("should generate different IDs on each call", () => {
@@ -237,10 +241,14 @@ describe("flag-manager", () => {
 	describe("createDefaultFlag", () => {
 		it("should create a flag with default values", () => {
 			const flag = createDefaultFlag();
-			expect(flag.id).toMatch(/^flag-\d+-[a-z0-9]+$/);
+			expect(flag.id).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+			);
 			expect(flag.name).toBe("");
 			expect(flag.options).toHaveLength(1);
-			expect(flag.options[0].id).toMatch(/^option-\d+-[a-z0-9]+$/);
+			expect(flag.options[0].id).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+			);
 			expect(flag.options[0].label).toBe("Opción 1");
 			expect(TAILWIND_COLORS_500).toContain(flag.options[0].color);
 		});
@@ -249,7 +257,9 @@ describe("flag-manager", () => {
 	describe("createDefaultFlagOption", () => {
 		it("should create a flag option with default values", () => {
 			const option = createDefaultFlagOption();
-			expect(option.id).toMatch(/^option-\d+-[a-z0-9]+$/);
+			expect(option.id).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+			);
 			expect(option.label).toBe("");
 			expect(TAILWIND_COLORS_500).toContain(option.color);
 		});
