@@ -1,3 +1,10 @@
+# [1.3.0-rc.7](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.6...v1.3.0-rc.7) (2026-04-22)
+
+
+### Features
+
+* enhance PropertiesPanel with title alias tracking and update logic ([33b8dcd](https://github.com/carteracredit/workflow/commit/33b8dcd73f7fe887819e1c7e14c3573748c87804))
+
 # [1.3.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.5...v1.3.0-rc.6) (2026-04-21)
 
 
