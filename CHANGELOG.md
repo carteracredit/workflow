@@ -1,3 +1,10 @@
+# [1.3.0-rc.8](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.7...v1.3.0-rc.8) (2026-04-22)
+
+
+### Features
+
+* enhance PropertiesPanel with description variable insertion and UI labels ([9ad3c10](https://github.com/carteracredit/workflow/commit/9ad3c1085004535d34d50450fcabd6f2fd2f5604))
+
 # [1.3.0-rc.7](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.6...v1.3.0-rc.7) (2026-04-22)
 
 
