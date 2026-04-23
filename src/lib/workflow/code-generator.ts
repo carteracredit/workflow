@@ -267,13 +267,156 @@ function expandVariablePath(path: string): string {
  * `${node-123.count} > 0` becomes `node_123.count > 0` and
  * `${secret.NLS_TOKEN}` becomes `this.env.NLS_TOKEN`.
  *
- * Use this for Decision conditions and Transform code bodies (bare expressions).
+ * Use this for Decision conditions and bare JS expressions only.
+ * For Transform code bodies use `expandVariableRefsInCode` instead.
  * For quoted string values use `emitInterpolatedString` instead.
  */
 function expandVariableRefs(expr: string): string {
 	return expr.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
 		expandVariablePath(path),
 	);
+}
+
+/**
+ * Context-aware expansion of variable-picker references inside a **full
+ * TypeScript code block** (i.e. a Transform node body).
+ *
+ * Unlike the simple `expandVariableRefs`, this function understands JavaScript
+ * string-literal context.  When a `${alias.path}` token appears **inside** a
+ * double-quoted or single-quoted string literal it converts the entire string
+ * to a template literal so the interpolation remains a runtime expression
+ * rather than becoming literal text.
+ *
+ * Examples
+ * ────────
+ * Bare expression (outside a string):
+ *   `${myForm.value} > 100`  →  `myForm.value > 100`
+ *
+ * Inside a double-quoted string:
+ *   `"Hello, ${myApi.name}!"`  →  `` `Hello, ${myApi.name}!` ``
+ *
+ * Inside an existing template literal (passed through with expanded paths):
+ *   `` `Hi ${myForm.name}` ``  →  `` `Hi ${myForm.name}` ``
+ *
+ * Line/block comments are passed through unchanged.
+ */
+function expandVariableRefsInCode(code: string): string {
+	let result = "";
+	let i = 0;
+	const n = code.length;
+
+	while (i < n) {
+		// ── Line comment ────────────────────────────────────────────────────
+		if (code[i] === "/" && i + 1 < n && code[i + 1] === "/") {
+			while (i < n && code[i] !== "\n") result += code[i++];
+			continue;
+		}
+
+		// ── Block comment ───────────────────────────────────────────────────
+		if (code[i] === "/" && i + 1 < n && code[i + 1] === "*") {
+			result += code[i++]; // /
+			result += code[i++]; // *
+			while (i < n) {
+				if (code[i] === "*" && i + 1 < n && code[i + 1] === "/") {
+					result += code[i++]; // *
+					result += code[i++]; // /
+					break;
+				}
+				result += code[i++];
+			}
+			continue;
+		}
+
+		// ── Double-quoted string ─────────────────────────────────────────────
+		if (code[i] === '"') {
+			i++; // consume opening quote
+			let content = "";
+			let hasRefs = false;
+			while (i < n && code[i] !== '"') {
+				if (code[i] === "\\" && i + 1 < n) {
+					content += code[i++] + code[i++];
+					continue;
+				}
+				const varMatch = code.slice(i).match(/^\$\{([^}]+)\}/);
+				if (varMatch) {
+					hasRefs = true;
+					content += "${" + expandVariablePath(varMatch[1].trim()) + "}";
+					i += varMatch[0].length;
+					continue;
+				}
+				content += code[i++];
+			}
+			if (i < n) i++; // consume closing quote
+			if (hasRefs) {
+				// Re-escape any bare backticks in the content string (they are
+				// not escaped in double-quoted strings but must be in a template).
+				result += "`" + content.replace(/`/g, "\\`") + "`";
+			} else {
+				result += '"' + content + '"';
+			}
+			continue;
+		}
+
+		// ── Single-quoted string ─────────────────────────────────────────────
+		if (code[i] === "'") {
+			i++; // consume opening quote
+			let content = "";
+			let hasRefs = false;
+			while (i < n && code[i] !== "'") {
+				if (code[i] === "\\" && i + 1 < n) {
+					content += code[i++] + code[i++];
+					continue;
+				}
+				const varMatch = code.slice(i).match(/^\$\{([^}]+)\}/);
+				if (varMatch) {
+					hasRefs = true;
+					content += "${" + expandVariablePath(varMatch[1].trim()) + "}";
+					i += varMatch[0].length;
+					continue;
+				}
+				content += code[i++];
+			}
+			if (i < n) i++; // consume closing quote
+			if (hasRefs) {
+				result += "`" + content.replace(/`/g, "\\`") + "`";
+			} else {
+				result += "'" + content + "'";
+			}
+			continue;
+		}
+
+		// ── Existing template literal ────────────────────────────────────────
+		if (code[i] === "`") {
+			result += code[i++]; // opening backtick
+			while (i < n && code[i] !== "`") {
+				if (code[i] === "\\" && i + 1 < n) {
+					result += code[i++] + code[i++];
+					continue;
+				}
+				const varMatch = code.slice(i).match(/^\$\{([^}]+)\}/);
+				if (varMatch) {
+					result += "${" + expandVariablePath(varMatch[1].trim()) + "}";
+					i += varMatch[0].length;
+					continue;
+				}
+				result += code[i++];
+			}
+			if (i < n) result += code[i++]; // closing backtick
+			continue;
+		}
+
+		// ── Bare code: expand ${X} as a plain JS expression ─────────────────
+		const bareMatch = code.slice(i).match(/^\$\{([^}]+)\}/);
+		if (bareMatch) {
+			result += expandVariablePath(bareMatch[1].trim());
+			i += bareMatch[0].length;
+			continue;
+		}
+
+		result += code[i++];
+	}
+
+	return result;
 }
 
 /**
@@ -968,7 +1111,9 @@ function generateTransformStep(
 		retryVarName,
 	);
 	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
-	const expandedCode = expandVariableRefs(transformCode);
+	// Use context-aware expansion so that variable refs inside string literals
+	// are converted to template literals instead of bare identifiers.
+	const expandedCode = expandVariableRefsInCode(transformCode);
 	code += `${indent}\t${expandedCode.split("\n").join(`\n${indent}\t`)}\n`;
 	code += `${indent}})${resultCast};\n`;
 	code += generateCaseObjectCall(

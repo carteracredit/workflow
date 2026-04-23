@@ -4366,3 +4366,80 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 		expect(result.code).toContain("const linearApi = await step.do");
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// expandVariableRefsInCode – string-literal awareness
+// Tested indirectly through generateWorkflowCode with a Transform node.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("expandVariableRefsInCode – variable refs inside string literals", () => {
+	function makeGraph(transformCode: string) {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start" }),
+			createNode({
+				id: "transform-1",
+				type: "Transform",
+				title: "Test Transform",
+				config: {
+					code: transformCode,
+					outputSchema: {
+						name: "out",
+						properties: [{ id: "p1", name: "result", type: "string" }],
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "transform-1"),
+			createEdge("transform-1", "end"),
+		];
+		return { nodes, edges };
+	}
+
+	it("keeps bare variable references as plain JS expressions", () => {
+		const { nodes, edges } = makeGraph(`return { value: \${myForm.count} }`);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.warnings).toHaveLength(0);
+		expect(result.code).toContain("myForm.count");
+		expect(result.code).not.toContain("${myForm.count}");
+	});
+
+	it("converts double-quoted strings containing variable refs to template literals", () => {
+		const { nodes, edges } = makeGraph(
+			`return { msg: "Hello \${myApi.name}!" }`,
+		);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.warnings).toHaveLength(0);
+		// Should be emitted as a template literal with the expanded path
+		expect(result.code).toContain("`Hello ${myApi.name}!`");
+		// Must NOT appear as a plain string literal with the raw path
+		expect(result.code).not.toContain('"Hello myApi.name!"');
+	});
+
+	it("converts single-quoted strings containing variable refs to template literals", () => {
+		const { nodes, edges } = makeGraph(
+			`return { label: 'Value: \${someForm.field}' }`,
+		);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.warnings).toHaveLength(0);
+		expect(result.code).toContain("`Value: ${someForm.field}`");
+	});
+
+	it("leaves double-quoted strings without variable refs unchanged", () => {
+		const { nodes, edges } = makeGraph(`return { msg: "No variables here" }`);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.warnings).toHaveLength(0);
+		expect(result.code).toContain('"No variables here"');
+	});
+
+	it("handles multiple variable refs in a single string", () => {
+		const { nodes, edges } = makeGraph(
+			`return { msg: "Owner: \${api.owner}, amount: \${form.amount}" }`,
+		);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.warnings).toHaveLength(0);
+		expect(result.code).toContain(
+			"`Owner: ${api.owner}, amount: ${form.amount}`",
+		);
+	});
+});
