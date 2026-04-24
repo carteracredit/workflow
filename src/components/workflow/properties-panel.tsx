@@ -414,6 +414,7 @@ export function PropertiesPanel({
 	const [apiMockResponse, setApiMockResponse] = useState<string>("");
 	const [apiMockSimulated, setApiMockSimulated] = useState<boolean>(false);
 	const [apiMockError, setApiMockError] = useState<string | null>(null);
+	const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
 
 	// Limpiar estado mock cuando cambia el nodo seleccionado
 	useEffect(() => {
@@ -1179,8 +1180,6 @@ export function PropertiesPanel({
 			...nextSig,
 		} as ChallengeNodeConfig);
 	};
-
-	const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
 
 	const handleRefreshTemplateFields = async () => {
 		if (!signatureConfig?.templateId) return;
