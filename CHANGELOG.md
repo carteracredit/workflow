@@ -1,3 +1,10 @@
+# [1.3.0-rc.10](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.9...v1.3.0-rc.10) (2026-04-24)
+
+
+### Features
+
+* add loading state for template refresh in PropertiesPanel ([3ef33eb](https://github.com/carteracredit/workflow/commit/3ef33eb60706a943677f593b213553783a0bf9f7))
+
 # [1.3.0-rc.9](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.8...v1.3.0-rc.9) (2026-04-24)
 
 
