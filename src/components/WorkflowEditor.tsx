@@ -330,6 +330,27 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 		// This is idempotent: already-migrated workflows produce no change.
 		const { changed: migratedTokens } = migrateWorkflowTokens(nodes, edges);
 
+		// Normalize Start node title to "Start" so the alias is always "start"
+		// regardless of the language the workflow was created in. If the node was
+		// saved as "Inicio" (Spanish), rename the alias in all token references
+		// across all nodes before the editor mounts (lazy migration on open).
+		let startAliasMigrated = false;
+		for (const node of nodes) {
+			if (node.type === "Start" && node.title !== "Start") {
+				const oldAlias = node.title
+					? node.title
+							.toLowerCase()
+							.replace(/[^a-z0-9]+(.)/g, (_, c: string) => c.toUpperCase())
+							.replace(/[^a-z0-9]/gi, "")
+					: "inicio";
+				// renameAliasInTokens mutates nodes in-place
+				renameAliasInTokens(nodes, oldAlias, "start");
+				node.titleEs = node.titleEs ?? node.title;
+				node.title = "Start";
+				startAliasMigrated = true;
+			}
+		}
+
 		return {
 			nodes,
 			edges,
@@ -337,7 +358,7 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 			zoom: parsed.zoom ?? 1,
 			pan: parsed.pan || { ...DEFAULT_START_NODE_PAN },
 			metadata: parsed.metadata || undefined,
-			migratedTokens,
+			migratedTokens: migratedTokens || startAliasMigrated,
 		};
 	} catch {
 		return null;

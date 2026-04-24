@@ -3761,6 +3761,142 @@ describe("generateWorkflowCode – ${secret.X} in Decision and Transform", () =>
 	});
 });
 
+describe("generateWorkflowCode – start-node alias rewriting to event.payload", () => {
+	it("rewrites ${inicio.clientAddress.zipCode} in Transform to event.payload.clientAddress.zipCode", () => {
+		// Start title "Inicio" → alias "inicio". The picker stores
+		// ${inicio.clientAddress.zipCode} but at runtime it must resolve to
+		// event.payload.clientAddress.zipCode.
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Transform Address",
+				config: {
+					code: "return { zip: ${inicio.clientAddress.zipCode} };",
+					outputSchema: {
+						properties: [{ id: "p1", name: "zip", type: "string" }],
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "transform"),
+			createEdge("transform", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("event.payload.clientAddress.zipCode");
+		expect(code).not.toContain("inicio.clientAddress");
+	});
+
+	it("rewrites ${start.clientAddress.zipCode} in Transform to event.payload.clientAddress.zipCode", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Transform Address",
+				config: {
+					code: "return { zip: ${start.clientAddress.zipCode} };",
+					outputSchema: {
+						properties: [{ id: "p1", name: "zip", type: "string" }],
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "transform"),
+			createEdge("transform", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("event.payload.clientAddress.zipCode");
+		expect(code).not.toContain("start.clientAddress");
+	});
+
+	it("rewrites ${inicio.clientName} in Decision condition to event.payload.clientName", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Has name?",
+				config: { condition: "${inicio.clientName} !== ''" },
+			}),
+			createNode({ id: "end-top", type: "End", title: "Si" }),
+			createNode({ id: "end-bot", type: "End", title: "No" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "decision"),
+			createEdge("decision", "end-top", { fromPort: "top" }),
+			createEdge("decision", "end-bot", { fromPort: "bottom" }),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("event.payload.clientName !== ''");
+		expect(code).not.toContain("inicio.clientName");
+	});
+
+	it("does NOT rewrite other node aliases (form, API, etc.) to event.payload", () => {
+		// The form node "Installation Address" gets alias "installationAddress".
+		// It must NOT be rewritten to event.payload.
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form1",
+				type: "Form",
+				title: "Installation Address",
+				roles: ["client"],
+				config: {
+					outputSchema: {
+						properties: [{ id: "p1", name: "address", type: "object" }],
+					},
+				},
+			}),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Use Form Output",
+				config: {
+					code: "return { zip: ${installationAddress.address.zip} };",
+					outputSchema: {
+						properties: [{ id: "p2", name: "zip", type: "string" }],
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form1"),
+			createEdge("form1", "transform"),
+			createEdge("transform", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("installationAddress.address.zip");
+		expect(code).not.toContain("event.payload.address");
+	});
+
+	it("secret.X still resolves to this.env.X (not event.payload)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "With secret",
+				config: { code: "return { key: ${secret.MY_KEY} };" },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "transform"),
+			createEdge("transform", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("this.env.MY_KEY");
+		expect(code).not.toContain("event.payload.MY_KEY");
+	});
+});
+
 describe("generateWorkflowCode – Fase 2 API body: field-mapping", () => {
 	it("generates body from field mappings", () => {
 		const result = genApi({
@@ -4138,6 +4274,87 @@ describe("Message node: template string interpolation in subject and mergeVars",
 		expect(code).toContain(
 			"BODY: `Su caso ${event.payload.caseNumber} fue aprobado en ${event.payload.jurisdictionName}`",
 		);
+	});
+
+	it("rewrites ${inicio.clientName} in subject to event.payload.clientName", () => {
+		// Start node title is "Inicio" → alias "inicio". The picker inserts
+		// ${inicio.clientName} but the generated code must use event.payload.
+		const nodes = makeMessageNode({
+			subject: "Hola ${inicio.clientName}",
+		});
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain("subject: `Hola ${event.payload.clientName}`");
+		expect(code).not.toContain("inicio.clientName");
+	});
+
+	it("rewrites ${start.clientName} in subject to event.payload.clientName", () => {
+		// Start node title is "Start" → alias "start".
+		const nodesWithStart: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({
+				id: "msg",
+				type: "Message",
+				title: "Email",
+				config: {
+					channel: "email",
+					templateName: "tpl",
+					subject: "Hola ${start.clientName}",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const { code } = generateWorkflowCode(nodesWithStart, makeEdges());
+		expect(code).toContain("subject: `Hola ${event.payload.clientName}`");
+		expect(code).not.toContain("start.clientName");
+	});
+
+	it("rewrites ${inicio.X} in mergeVar value to event.payload.X", () => {
+		const nodes = makeMessageNode({
+			mergeVars: [{ key: "NOMBRE", value: "${inicio.clientFirstName}" }],
+		});
+		const { code } = generateWorkflowCode(nodes, makeEdges());
+		expect(code).toContain("NOMBRE: `${event.payload.clientFirstName}`");
+		expect(code).not.toContain("inicio.");
+	});
+
+	it("does NOT rewrite non-start aliases (form/API node aliases) to event.payload", () => {
+		// formNode alias should remain as-is (e.g. "installationAddress"), not
+		// be rewritten to event.payload.
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form1",
+				type: "Form",
+				title: "Installation Address",
+				roles: ["client"],
+				config: {
+					outputSchema: {
+						properties: [{ id: "p1", name: "address", type: "object" }],
+					},
+				},
+			}),
+			createNode({
+				id: "msg",
+				type: "Message",
+				title: "Email",
+				config: {
+					channel: "email",
+					templateName: "tpl",
+					subject: "Street: ${installationAddress.address.street}",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form1"),
+			createEdge("form1", "msg"),
+			createEdge("msg", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain(
+			"subject: `Street: ${installationAddress.address.street}`",
+		);
+		expect(code).not.toContain("event.payload.address");
 	});
 });
 
