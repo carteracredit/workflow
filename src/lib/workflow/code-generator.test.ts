@@ -1423,8 +1423,10 @@ describe("generateWorkflowCode edge cases", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain('type: "signature"');
-		expect(result.code).toContain('timeout: "24 hours"'); // default timeout
+		// Signature challenges now use the signature_signed event (not the old "signature" waitForEvent type)
+		expect(result.code).toContain("CASES_SVC.createSignatureRequest");
+		expect(result.code).toContain('type: "signature_signed"');
+		expect(result.code).toContain('timeout: "72 hours"'); // default timeout
 	});
 
 	it("should generate camelCase variable names for forms with special characters", () => {
@@ -4364,5 +4366,158 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 			"const linearForm = (await step.waitForEvent",
 		);
 		expect(result.code).toContain("const linearApi = await step.do");
+	});
+});
+
+// ─── Signature Challenge code generation ──────────────────────────────────────
+
+describe("generateWorkflowCode — Signature Challenge", () => {
+	const makeSignatureWorkflow = (sigConfig: Record<string, unknown>) => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "sig-challenge",
+				type: "Challenge",
+				title: "Firma Contrato",
+				roles: ["client"],
+				config: sigConfig,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "sig-challenge"),
+			createEdge("sig-challenge", "end"),
+		];
+		return { nodes, edges };
+	};
+
+	it("generates a step.do for creating the signature request", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			challengeTimeout: { value: 72, unit: "hours" },
+			templateId: "tpl-abc123",
+			flow: "email_only",
+			signers: [{ role: "Client", source: "case_role", caseRole: "client" }],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("CASES_SVC.createSignatureRequest");
+		expect(result.code).toContain("firma-contrato-create");
+		expect(result.code).toContain('"tpl-abc123"');
+	});
+
+	it("generates a waitForEvent for signature_signed", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			challengeTimeout: { value: 24, unit: "hours" },
+			templateId: "tpl-xyz",
+			flow: "embedded",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('type: "signature_signed"');
+		expect(result.code).toContain('timeout: "24 hours"');
+	});
+
+	it("emits the correct flow value", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl-sms",
+			flow: "email_and_sms",
+			challengeTimeout: { value: 3, unit: "days" },
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('"email_and_sms"');
+	});
+
+	it("interpolates templateId expression", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "${someForm.contractTemplateId}",
+			flow: "email_only",
+			challengeTimeout: { value: 48, unit: "hours" },
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("someForm");
+	});
+
+	it("emits custom fields", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl-abc",
+			flow: "email_only",
+			challengeTimeout: { value: 12, unit: "hours" },
+			signers: [],
+			customFields: [
+				{
+					apiId: "loanAmount",
+					name: "loanAmount",
+					value: "${someForm.amount}",
+					source: "discovered",
+				},
+			],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("loanAmount");
+	});
+
+	it("emits signer with case_role source", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			challengeTimeout: { value: 24, unit: "hours" },
+			signers: [{ role: "Client", source: "case_role", caseRole: "client" }],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('"case_role"');
+		expect(result.code).toContain('"client"');
+	});
+
+	it("marks output variable with signed property on all_signed", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			challengeTimeout: { value: 24, unit: "hours" },
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("signed: true");
+		expect(result.code).toContain("signed: false");
+		expect(result.code).toContain("timedOut: true");
+	});
+
+	it("uses acceptance flow for challengeType === 'acceptance'", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "acc-challenge",
+				type: "Challenge",
+				title: "Aceptar",
+				roles: ["client"],
+				config: {
+					challengeType: "acceptance",
+					challengeTimeout: { value: 5, unit: "minutes" },
+					deliveryMethod: "none",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "acc-challenge"),
+			createEdge("acc-challenge", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		// Acceptance challenge should NOT contain signature-specific code
+		expect(result.code).not.toContain("CASES_SVC.createSignatureRequest");
+		expect(result.code).toContain("accepted");
 	});
 });

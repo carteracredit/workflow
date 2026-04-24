@@ -133,7 +133,85 @@ export interface ChallengeLabels {
 	rejectLabelEs?: string;
 }
 
-export type ChallengeNodeConfig = AcceptanceChallengeConfig;
+export type ChallengeNodeConfig =
+	| AcceptanceChallengeConfig
+	| SignatureChallengeConfig;
+
+// ─── Signature Challenge Config ────────────────────────────────────────────────
+
+export type SignatureFlow = "embedded" | "email_only" | "email_and_sms";
+
+/**
+ * Configuration for a single signer in a Dropbox Sign signature request.
+ * source === "case_role" auto-resolves email/name from the case at runtime.
+ * source === "variable" uses VariableTemplateInput expressions.
+ */
+export interface SignatureSignerConfig {
+	/** Role name as defined in the Dropbox Sign template (e.g. "Client", "Dealer"). */
+	role: string;
+	source: "case_role" | "variable";
+	/** Only set when source === "case_role". Mapped to a user in cases-svc. */
+	caseRole?: "client" | "seller" | "credit_agent" | "org_manager";
+	/** Template expression for email when source === "variable". */
+	email?: string;
+	/** Template expression for name when source === "variable". */
+	name?: string;
+	/** E.164 phone for SMS Delivery add-on. Only used when flow === "email_and_sms". */
+	smsPhoneNumber?: string;
+}
+
+/**
+ * Configuration for a single custom field injected into the Dropbox Sign template.
+ * source === "discovered" means the field was loaded via API (auto-discover).
+ * source === "manual" means the user added it manually.
+ */
+export interface SignatureCustomFieldConfig {
+	apiId: string;
+	name: string;
+	/** "text" | "checkbox" | "date_signed" | "dropdown" | "initials" */
+	type?: string;
+	/** Template expression value (may reference workflow variables). */
+	value: string;
+	required?: boolean;
+	source: "discovered" | "manual";
+}
+
+/**
+ * Full config for a Challenge node with challengeType === "signature".
+ * Extends AcceptanceChallengeConfig (inherits timeout, deliveryMethod, retries, labels).
+ *
+ * NOTE: deliveryMethod on AcceptanceChallengeConfig controls how the actor is
+ * NOTIFIED that a challenge is waiting. It has NO relation to the Dropbox Sign
+ * email/SMS delivery flow (controlled by `flow` here).
+ */
+export interface SignatureChallengeConfig extends AcceptanceChallengeConfig {
+	challengeType: "signature";
+	/**
+	 * Dropbox Sign template ID. Accepts a workflow variable expression such as
+	 * `${case.templates.withCoBuyer}` so the correct template can be chosen
+	 * dynamically by an upstream Transform/Decision node.
+	 */
+	templateId: string;
+	/** How the signature request is delivered to signers. */
+	flow: SignatureFlow;
+	/** Optional title (admite template expressions). */
+	title?: string;
+	/** Optional email subject sent by Dropbox Sign. */
+	subject?: string;
+	/** Optional message body in the Dropbox Sign email. */
+	message?: string;
+	signers: SignatureSignerConfig[];
+	customFields: SignatureCustomFieldConfig[];
+	/** CC email addresses for the Dropbox Sign request. */
+	ccEmailAddresses?: string[];
+	/**
+	 * When true, forces test_mode on this node regardless of the env variable.
+	 * When false, forces production mode. When undefined, uses env default.
+	 */
+	testMode?: boolean;
+	/** When true, adds SMS authentication (OTP) for signers with phone number. */
+	smsAuthentication?: boolean;
+}
 
 export const DEFAULT_CHALLENGE_TIMEOUT: ChallengeTimeoutConfig = {
 	value: 5,
@@ -152,6 +230,19 @@ export function createDefaultChallengeConfig(
 	const timeout = {
 		...(options?.challengeTimeout ?? DEFAULT_CHALLENGE_TIMEOUT),
 	};
+
+	if (challengeType === "signature") {
+		const base: SignatureChallengeConfig = {
+			challengeType: "signature",
+			challengeTimeout: timeout,
+			deliveryMethod: "none",
+			templateId: "",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		};
+		return base;
+	}
 
 	return {
 		challengeType,

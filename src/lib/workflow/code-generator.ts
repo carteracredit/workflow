@@ -3,6 +3,7 @@ import type {
 	WorkflowEdge,
 	WorkflowMetadata,
 	ChallengeNodeConfig,
+	SignatureChallengeConfig,
 	PromotionNodeConfig,
 	APIFailureHandling,
 	APIAuthConfig,
@@ -1183,6 +1184,160 @@ function generateCheckpointStep(
 }
 
 /**
+ * Generate code for a Challenge node with challengeType === "signature".
+ *
+ * The generated workflow step:
+ * 1. Calls `CASES_SVC.createSignatureRequest(...)` with the node config and
+ *    resolved variable values — this triggers the Dropbox Sign API call.
+ * 2. Waits for the "signature_signed" event forwarded by the webhook handler
+ *    (webhook → cases-svc → WORKFLOW_SVC.sendEvent).
+ *
+ * Template expressions in templateId, signers.email/name, and customField.value
+ * are resolved using `escapeStringTemplate` so they evaluate against runtime
+ * workflow variables (same pattern as Message node mergeVars).
+ */
+function generateSignatureChallengeStep(
+	node: WorkflowNode,
+	config: SignatureChallengeConfig | undefined,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	const outputVar = getVarName(node.id);
+	const rawVar = `_${outputVar}Evt`;
+	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
+	const timeout = config?.challengeTimeout;
+	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "72 hours";
+
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	// Build signers JSON
+	const signersLines: string[] = [];
+	for (const signer of config?.signers ?? []) {
+		const emailExpr =
+			signer.source === "variable" && signer.email
+				? emitInterpolatedString(signer.email)
+				: `""`;
+		const nameExpr =
+			signer.source === "variable" && signer.name
+				? emitInterpolatedString(signer.name)
+				: `""`;
+		const phoneExpr = signer.smsPhoneNumber
+			? emitInterpolatedString(signer.smsPhoneNumber)
+			: "undefined";
+		signersLines.push(
+			`{ role: ${JSON.stringify(signer.role)}, source: ${JSON.stringify(signer.source)}` +
+				(signer.caseRole
+					? `, caseRole: ${JSON.stringify(signer.caseRole)}`
+					: "") +
+				(signer.source === "variable"
+					? `, email: ${emailExpr}, name: ${nameExpr}`
+					: "") +
+				(signer.smsPhoneNumber ? `, smsPhoneNumber: ${phoneExpr}` : "") +
+				" }",
+		);
+	}
+
+	// Build customFields JSON
+	const cfLines: string[] = [];
+	for (const cf of config?.customFields ?? []) {
+		const valueExpr = cf.value ? emitInterpolatedString(cf.value) : '""';
+		cfLines.push(
+			`{ apiId: ${JSON.stringify(cf.apiId)}, name: ${JSON.stringify(cf.name)}, value: ${valueExpr} }`,
+		);
+	}
+
+	const templateIdExpr = config?.templateId
+		? emitInterpolatedString(config.templateId)
+		: '""';
+
+	let code = `${indent}// Signature Challenge: ${node.title} (flow: ${config?.flow ?? "email_only"} | roles: ${roles})\n`;
+
+	// Step 1: create the signature request via cases-svc RPC
+	code += `${indent}await step.do(\`${stepName}-create\`, async () => {\n`;
+	code += `${indent}\tconst _sigTemplateId = ${templateIdExpr};\n`;
+	code += `${indent}\tconst _sigSigners = [\n`;
+	for (const line of signersLines) {
+		code += `${indent}\t\t${line},\n`;
+	}
+	code += `${indent}\t];\n`;
+	code += `${indent}\tconst _sigCustomFields = [\n`;
+	for (const line of cfLines) {
+		code += `${indent}\t\t${line},\n`;
+	}
+	code += `${indent}\t];\n`;
+	code += `${indent}\tawait env.CASES_SVC.createSignatureRequest({\n`;
+	code += `${indent}\t\tcaseId,\n`;
+	code += `${indent}\t\tworkflowInstanceId: instanceId,\n`;
+	code += `${indent}\t\tworkflowNodeId: ${JSON.stringify(node.id)},\n`;
+	code += `${indent}\t\tnodeConfig: {\n`;
+	code += `${indent}\t\t\ttemplateId: _sigTemplateId,\n`;
+	code += `${indent}\t\t\tflow: ${JSON.stringify(config?.flow ?? "email_only")},\n`;
+	if (config?.title) {
+		code += `${indent}\t\t\ttitle: ${emitInterpolatedString(config.title)},\n`;
+	}
+	if (config?.subject) {
+		code += `${indent}\t\t\tsubject: ${emitInterpolatedString(config.subject)},\n`;
+	}
+	if (config?.message) {
+		code += `${indent}\t\t\tmessage: ${emitInterpolatedString(config.message)},\n`;
+	}
+	if (config?.testMode !== undefined) {
+		code += `${indent}\t\t\ttestMode: ${config.testMode},\n`;
+	}
+	if (config?.smsAuthentication) {
+		code += `${indent}\t\t\tsmsAuthentication: true,\n`;
+	}
+	if ((config?.ccEmailAddresses ?? []).length > 0) {
+		code += `${indent}\t\t\tccEmailAddresses: ${JSON.stringify(config!.ccEmailAddresses)},\n`;
+	}
+	code += `${indent}\t\t\tsigners: _sigSigners,\n`;
+	code += `${indent}\t\t\tcustomFields: _sigCustomFields,\n`;
+	code += `${indent}\t\t},\n`;
+	code += `${indent}\t});\n`;
+	code += `${indent}});\n`;
+
+	// Step 2: wait for "signature_signed" event sent by webhook handler
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		"signature_signed",
+		retryVarName,
+	);
+	code += `${indent}${rawVar} = await step.waitForEvent<{ signatureRequestId: string; documentId?: string }>(\n`;
+	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}\t{\n`;
+	code += `${indent}\t\ttype: "signature_signed",\n`;
+	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
+	code += `${indent}\t},\n`;
+	code += `${indent});\n`;
+	code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
+
+	// Normalize output
+	code += `${indent}${outputVar} = (${rawVar} === null)\n`;
+	code += `${indent}\t? { signed: false, timedOut: true, signatureRequestId: null, documentId: null }\n`;
+	code += `${indent}\t: {\n`;
+	code += `${indent}\t\tsigned: true,\n`;
+	code += `${indent}\t\ttimedOut: false,\n`;
+	code += `${indent}\t\tsignatureRequestId: (${rawVar} as { payload: { signatureRequestId?: string } }).payload?.signatureRequestId ?? null,\n`;
+	code += `${indent}\t\tdocumentId: (${rawVar} as { payload: { documentId?: string } }).payload?.documentId ?? null,\n`;
+	code += `${indent}\t};\n`;
+
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
  * Generate code for a Challenge node (waitForEvent)
  */
 function generateChallengeStep(
@@ -1190,13 +1345,25 @@ function generateChallengeStep(
 	indent: string,
 	retryVarName?: string,
 ): string {
+	const config = node.config as ChallengeNodeConfig | undefined;
+	const challengeType = config?.challengeType || "acceptance";
+
+	// Signature challenges have a completely different execution pattern:
+	// 1. Create the Dropbox Sign request via cases-svc RPC
+	// 2. Wait for the "signature_signed" event sent by the webhook handler
+	if (challengeType === "signature") {
+		return generateSignatureChallengeStep(
+			node,
+			config as SignatureChallengeConfig,
+			indent,
+			retryVarName,
+		);
+	}
 	const stepName = createStepName(node);
 	// `outputVar` is the public-facing alias used by downstream tokens (e.g. `approval.accepted`).
 	// `rawVar` is the internal waitForEvent result; suffixed to avoid collision with outputVar.
 	const outputVar = getVarName(node.id);
 	const rawVar = `_${outputVar}Evt`;
-	const config = node.config as ChallengeNodeConfig | undefined;
-	const challengeType = config?.challengeType || "acceptance";
 	const timeout = config?.challengeTimeout;
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
 	const eventType = challengeType;
