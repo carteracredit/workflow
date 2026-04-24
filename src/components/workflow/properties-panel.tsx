@@ -91,6 +91,11 @@ import {
 	getFormAction,
 } from "@/lib/workflow-api/forms-actions";
 import type { Form as WorkflowForm } from "@/lib/workflow-api/forms";
+import {
+	listSignatureTemplatesAction,
+	getSignatureTemplateAction,
+} from "@/lib/workflow-api/signatures-actions";
+import type { SignatureTemplateSummary } from "@/lib/workflow-api/signatures-actions";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
 import { useLanguage } from "@/components/LanguageProvider";
 import { buildAliasMap, titleToCamelCase } from "@/lib/workflow/node-alias";
@@ -363,6 +368,24 @@ export function PropertiesPanel({
 			.finally(() => setFormsLoading(false));
 	}, [selectedNode?.type]);
 
+	// Cargar templates de Dropbox Sign cuando hay un nodo Challenge con tipo signature seleccionado
+	useEffect(() => {
+		const isChallengeSignature =
+			selectedNode?.type === "Challenge" &&
+			(selectedNode?.config as { challengeType?: string } | undefined)
+				?.challengeType === "signature";
+		if (!isChallengeSignature) return;
+		setSignatureTemplatesLoading(true);
+		listSignatureTemplatesAction()
+			.then((templates) => setAvailableSignatureTemplates(templates))
+			.catch(() => setAvailableSignatureTemplates([]))
+			.finally(() => setSignatureTemplatesLoading(false));
+	}, [
+		selectedNode?.type,
+		(selectedNode?.config as { challengeType?: string } | undefined)
+			?.challengeType,
+	]);
+
 	// Cargar el formulario completo (con versiones) cuando ya hay un formId en el config
 	useEffect(() => {
 		if (selectedNode?.type !== "Form") {
@@ -415,6 +438,10 @@ export function PropertiesPanel({
 	const [apiMockSimulated, setApiMockSimulated] = useState<boolean>(false);
 	const [apiMockError, setApiMockError] = useState<string | null>(null);
 	const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
+	const [availableSignatureTemplates, setAvailableSignatureTemplates] =
+		useState<SignatureTemplateSummary[]>([]);
+	const [signatureTemplatesLoading, setSignatureTemplatesLoading] =
+		useState(false);
 
 	// Limpiar estado mock cuando cambia el nodo seleccionado
 	useEffect(() => {
@@ -3510,38 +3537,109 @@ export function PropertiesPanel({
 										Configuración Dropbox Sign
 									</p>
 
-									{/* Template ID */}
+									{/* Template */}
 									<div className="space-y-1">
 										<Label htmlFor="sig-template-id" className="text-xs">
-											Template ID
+											Template
 										</Label>
-										<div className="flex gap-1">
-											<Input
-												id="sig-template-id"
-												className="text-xs font-mono flex-1"
-												placeholder="e.g. abc123 o ${case.templates.withCoBuyer}"
+										{availableSignatureTemplates.length > 0 ? (
+											<Select
 												value={signatureConfig.templateId ?? ""}
-												onChange={(e) =>
-													setSignatureConfig({ templateId: e.target.value })
-												}
-											/>
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												disabled={
-													isLoadingTemplate || !signatureConfig.templateId
-												}
-												onClick={handleRefreshTemplateFields}
-												className="text-xs"
+												onValueChange={(v) => {
+													setSignatureConfig({ templateId: v });
+													// Auto-cargar campos del template seleccionado
+													setIsLoadingTemplate(true);
+													getSignatureTemplateAction(v)
+														.then((tpl) => {
+															setSignatureConfig({
+																templateId: v,
+																signers: tpl.signerRoles.map((sr) => ({
+																	role: sr.name,
+																	source: "variable" as const,
+																	email: "",
+																	name: "",
+																})),
+																customFields: tpl.customFields.map((cf) => ({
+																	apiId: cf.apiId,
+																	name: cf.name,
+																	type: cf.type,
+																	value: "",
+																	required: cf.required,
+																	source: "discovered" as const,
+																})),
+															});
+														})
+														.catch(() => {
+															/* silent fail */
+														})
+														.finally(() => setIsLoadingTemplate(false));
+												}}
 											>
-												{isLoadingTemplate ? "Cargando…" : "Refrescar"}
-											</Button>
-										</div>
-										<p className="text-[10px] text-muted-foreground">
-											Acepta expresiones de workflow como{" "}
-											<code>{"{${case.templates.id}}"}</code>
-										</p>
+												<SelectTrigger id="sig-template-id" className="text-xs">
+													<SelectValue
+														placeholder={
+															signatureTemplatesLoading
+																? "Cargando templates…"
+																: "Selecciona un template"
+														}
+													/>
+												</SelectTrigger>
+												<SelectContent>
+													{availableSignatureTemplates.map((tpl) => (
+														<SelectItem
+															key={tpl.templateId}
+															value={tpl.templateId}
+															className="text-xs"
+														>
+															{tpl.title}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										) : (
+											<div className="space-y-1">
+												<div className="flex gap-1">
+													<Input
+														id="sig-template-id"
+														className="text-xs font-mono flex-1"
+														placeholder="e.g. abc123"
+														value={signatureConfig.templateId ?? ""}
+														onChange={(e) =>
+															setSignatureConfig({ templateId: e.target.value })
+														}
+													/>
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														disabled={
+															isLoadingTemplate || !signatureConfig.templateId
+														}
+														onClick={handleRefreshTemplateFields}
+														className="text-xs"
+													>
+														{isLoadingTemplate ? "Cargando…" : "Cargar"}
+													</Button>
+												</div>
+												<p className="text-[10px] text-muted-foreground">
+													{signatureTemplatesLoading
+														? "Cargando templates disponibles…"
+														: "No se pudieron cargar los templates. Ingresa el ID manualmente."}
+												</p>
+											</div>
+										)}
+										{availableSignatureTemplates.length > 0 &&
+											signatureConfig.templateId && (
+												<p className="text-[10px] text-muted-foreground">
+													También puedes usar expresiones:{" "}
+													<code>{"{${case.templateId}}"}</code>
+												</p>
+											)}
+										{isLoadingTemplate && (
+											<p className="text-[10px] text-muted-foreground">
+												Cargando campos del template…
+											</p>
+										)}
 									</div>
 
 									{/* Flow */}
