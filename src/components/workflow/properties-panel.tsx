@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Pencil, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp } from "lucide-react";
 import type {
 	WorkflowNode,
 	WorkflowEdge,
@@ -3995,13 +3995,13 @@ export function PropertiesPanel({
 																variant="ghost"
 																size="sm"
 																className="h-5 w-5 p-0 shrink-0"
-																title={isExpanded ? "Colapsar" : "Editar"}
+																title={isExpanded ? "Colapsar" : "Expandir"}
 																onClick={toggleExpanded}
 															>
 																{isExpanded ? (
 																	<ChevronUp className="h-3 w-3" />
 																) : (
-																	<Pencil className="h-3 w-3" />
+																	<ChevronDown className="h-3 w-3" />
 																)}
 															</Button>
 															<Button
