@@ -1,3 +1,10 @@
+# [1.3.0-rc.11](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.10...v1.3.0-rc.11) (2026-04-24)
+
+
+### Features
+
+* integrate Dropbox Sign templates into PropertiesPanel ([71cc537](https://github.com/carteracredit/workflow/commit/71cc537b9c51c3311c514e8486c7c3259a469167))
+
 # [1.3.0-rc.10](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.9...v1.3.0-rc.10) (2026-04-24)
 
 
