@@ -19,6 +19,10 @@ import type {
 	ChallengeType,
 	ChallengeDeliveryMethod,
 	ChallengeRetryConfig,
+	SignatureChallengeConfig,
+	SignatureSignerConfig,
+	SignatureCustomFieldConfig,
+	SignatureFlow,
 	PromotionNodeConfig,
 	MessageNodeConfig,
 	MessageMergeVar,
@@ -1161,6 +1165,100 @@ export function PropertiesPanel({
 	const setChallengeConfig = (nextConfig: ChallengeNodeConfig) => {
 		onUpdateNode(selectedNode.id, { config: nextConfig });
 	};
+
+	// ── Signature challenge helpers ───────────────────────────────────────────
+	const signatureConfig =
+		challengeConfig?.challengeType === "signature"
+			? (challengeConfig as SignatureChallengeConfig)
+			: null;
+
+	const setSignatureConfig = (nextSig: Partial<SignatureChallengeConfig>) => {
+		if (!signatureConfig) return;
+		setChallengeConfig({
+			...signatureConfig,
+			...nextSig,
+		} as ChallengeNodeConfig);
+	};
+
+	const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
+
+	const handleRefreshTemplateFields = async () => {
+		if (!signatureConfig?.templateId) return;
+		setIsLoadingTemplate(true);
+		try {
+			const resp = await fetch(
+				`/api/signatures/templates/${encodeURIComponent(signatureConfig.templateId)}`,
+			);
+			if (!resp.ok) throw new Error("Failed to fetch template");
+			const data = (await resp.json()) as {
+				result: {
+					signerRoles: Array<{ name: string; order: number | null }>;
+					customFields: Array<{
+						name: string;
+						apiId: string;
+						type: string;
+						required: boolean;
+					}>;
+				};
+			};
+			const discoveredSigners: SignatureSignerConfig[] =
+				data.result.signerRoles.map((sr) => ({
+					role: sr.name,
+					source: "variable" as const,
+					email: "",
+					name: "",
+				}));
+			const discoveredFields: SignatureCustomFieldConfig[] =
+				data.result.customFields.map((cf) => ({
+					apiId: cf.apiId,
+					name: cf.name,
+					type: cf.type,
+					value: "",
+					required: cf.required,
+					source: "discovered" as const,
+				}));
+			setSignatureConfig({
+				signers: discoveredSigners,
+				customFields: discoveredFields,
+			});
+		} catch {
+			// silent fail — user can retry
+		} finally {
+			setIsLoadingTemplate(false);
+		}
+	};
+
+	const CASE_ROLE_OPTIONS: Array<{
+		value: SignatureSignerConfig["caseRole"];
+		label: string;
+	}> = [
+		{ value: "client", label: "Cliente" },
+		{ value: "seller", label: "Vendedor" },
+		{ value: "credit_agent", label: "Agente de crédito" },
+		{ value: "org_manager", label: "Gerente de organización" },
+	];
+
+	const SIGNATURE_FLOW_OPTIONS: Array<{
+		value: SignatureFlow;
+		label: string;
+		desc: string;
+	}> = [
+		{
+			value: "embedded",
+			label: "Embebida",
+			desc: "El firmante firma directamente en la aplicación (requiere plan Standard+)",
+		},
+		{
+			value: "email_only",
+			label: "Solo correo",
+			desc: "Dropbox Sign envía el link de firma por correo",
+		},
+		{
+			value: "email_and_sms",
+			label: "Correo + SMS",
+			desc: "El link se envía por correo y también por SMS (add-on, solo fuera de test_mode)",
+		},
+	];
 
 	const updateChallengeTimeout = (
 		updates: Partial<ChallengeNodeConfig["challengeTimeout"]>,
@@ -3405,6 +3503,401 @@ export function PropertiesPanel({
 									</p>
 								)}
 							</div>
+
+							{/* ── Signature Config ─────────────────────────────── */}
+							{signatureConfig && (
+								<div className="space-y-4 rounded-md border border-amber-200 bg-amber-50/40 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+									<p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+										Configuración Dropbox Sign
+									</p>
+
+									{/* Template ID */}
+									<div className="space-y-1">
+										<Label htmlFor="sig-template-id" className="text-xs">
+											Template ID
+										</Label>
+										<div className="flex gap-1">
+											<Input
+												id="sig-template-id"
+												className="text-xs font-mono flex-1"
+												placeholder="e.g. abc123 o ${case.templates.withCoBuyer}"
+												value={signatureConfig.templateId ?? ""}
+												onChange={(e) =>
+													setSignatureConfig({ templateId: e.target.value })
+												}
+											/>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												disabled={
+													isLoadingTemplate || !signatureConfig.templateId
+												}
+												onClick={handleRefreshTemplateFields}
+												className="text-xs"
+											>
+												{isLoadingTemplate ? "Cargando…" : "Refrescar"}
+											</Button>
+										</div>
+										<p className="text-[10px] text-muted-foreground">
+											Acepta expresiones de workflow como{" "}
+											<code>{"{${case.templates.id}}"}</code>
+										</p>
+									</div>
+
+									{/* Flow */}
+									<div className="space-y-1">
+										<Label htmlFor="sig-flow" className="text-xs">
+											Flujo de firma
+										</Label>
+										<Select
+											value={signatureConfig.flow ?? "email_only"}
+											onValueChange={(v) =>
+												setSignatureConfig({ flow: v as SignatureFlow })
+											}
+										>
+											<SelectTrigger id="sig-flow">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{SIGNATURE_FLOW_OPTIONS.map((opt) => (
+													<SelectItem key={opt.value} value={opt.value}>
+														{opt.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										{(() => {
+											const desc = SIGNATURE_FLOW_OPTIONS.find(
+												(o) => o.value === signatureConfig.flow,
+											)?.desc;
+											return desc ? (
+												<p className="text-[10px] text-muted-foreground">
+													{desc}
+												</p>
+											) : null;
+										})()}
+									</div>
+
+									{/* Subject / Message */}
+									<div className="grid grid-cols-2 gap-2">
+										<div className="space-y-1">
+											<Label htmlFor="sig-subject" className="text-xs">
+												Asunto (opcional)
+											</Label>
+											<Input
+												id="sig-subject"
+												className="text-xs"
+												value={signatureConfig.subject ?? ""}
+												onChange={(e) =>
+													setSignatureConfig({
+														subject: e.target.value || undefined,
+													})
+												}
+											/>
+										</div>
+										<div className="space-y-1">
+											<Label htmlFor="sig-message" className="text-xs">
+												Mensaje (opcional)
+											</Label>
+											<Input
+												id="sig-message"
+												className="text-xs"
+												value={signatureConfig.message ?? ""}
+												onChange={(e) =>
+													setSignatureConfig({
+														message: e.target.value || undefined,
+													})
+												}
+											/>
+										</div>
+									</div>
+
+									{/* Signers */}
+									<div className="space-y-2">
+										<div className="flex items-center justify-between">
+											<Label className="text-xs font-semibold">Firmantes</Label>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												className="h-6 text-xs"
+												onClick={() =>
+													setSignatureConfig({
+														signers: [
+															...(signatureConfig.signers ?? []),
+															{
+																role: "",
+																source: "variable",
+																email: "",
+																name: "",
+															},
+														],
+													})
+												}
+											>
+												+ Agregar
+											</Button>
+										</div>
+										{(signatureConfig.signers ?? []).map((signer, idx) => (
+											<div
+												key={idx}
+												className="space-y-1 rounded border border-border/40 p-2"
+											>
+												<div className="flex items-center gap-1">
+													<Input
+														className="text-xs flex-1"
+														placeholder="Rol (ej. Client)"
+														value={signer.role}
+														onChange={(e) => {
+															const next = [...(signatureConfig.signers ?? [])];
+															next[idx] = {
+																...next[idx],
+																role: e.target.value,
+															};
+															setSignatureConfig({ signers: next });
+														}}
+													/>
+													<Select
+														value={signer.source}
+														onValueChange={(v) => {
+															const next = [...(signatureConfig.signers ?? [])];
+															next[idx] = {
+																...next[idx],
+																source: v as "case_role" | "variable",
+															};
+															setSignatureConfig({ signers: next });
+														}}
+													>
+														<SelectTrigger className="h-8 text-xs w-32">
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															<SelectItem value="case_role">
+																Rol del case
+															</SelectItem>
+															<SelectItem value="variable">Variable</SelectItem>
+														</SelectContent>
+													</Select>
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														className="h-6 text-xs text-destructive"
+														onClick={() => {
+															const next = (
+																signatureConfig.signers ?? []
+															).filter((_, i) => i !== idx);
+															setSignatureConfig({ signers: next });
+														}}
+													>
+														×
+													</Button>
+												</div>
+												{signer.source === "case_role" ? (
+													<Select
+														value={signer.caseRole ?? ""}
+														onValueChange={(v) => {
+															const next = [...(signatureConfig.signers ?? [])];
+															next[idx] = {
+																...next[idx],
+																caseRole:
+																	v as SignatureSignerConfig["caseRole"],
+															};
+															setSignatureConfig({ signers: next });
+														}}
+													>
+														<SelectTrigger className="h-8 text-xs">
+															<SelectValue placeholder="Selecciona rol" />
+														</SelectTrigger>
+														<SelectContent>
+															{CASE_ROLE_OPTIONS.map((opt) => (
+																<SelectItem
+																	key={opt.value}
+																	value={opt.value ?? ""}
+																>
+																	{opt.label}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												) : (
+													<>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																signer.email ?? "",
+															)}
+															placeholder="email@ejemplo.com o expresión"
+															onChange={(segs) => {
+																const next = [
+																	...(signatureConfig.signers ?? []),
+																];
+																next[idx] = {
+																	...next[idx],
+																	email: segmentsToTemplateString(segs),
+																};
+																setSignatureConfig({ signers: next });
+															}}
+														/>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																signer.name ?? "",
+															)}
+															placeholder="Nombre completo o expresión"
+															onChange={(segs) => {
+																const next = [
+																	...(signatureConfig.signers ?? []),
+																];
+																next[idx] = {
+																	...next[idx],
+																	name: segmentsToTemplateString(segs),
+																};
+																setSignatureConfig({ signers: next });
+															}}
+														/>
+													</>
+												)}
+												{signatureConfig.flow === "email_and_sms" && (
+													<Input
+														className="text-xs font-mono"
+														placeholder="Teléfono E.164 (ej. +15551234567)"
+														value={signer.smsPhoneNumber ?? ""}
+														onChange={(e) => {
+															const next = [...(signatureConfig.signers ?? [])];
+															next[idx] = {
+																...next[idx],
+																smsPhoneNumber: e.target.value || undefined,
+															};
+															setSignatureConfig({ signers: next });
+														}}
+													/>
+												)}
+											</div>
+										))}
+									</div>
+
+									{/* Custom fields */}
+									<div className="space-y-2">
+										<div className="flex items-center justify-between">
+											<Label className="text-xs font-semibold">
+												Custom fields
+											</Label>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												className="h-6 text-xs"
+												onClick={() =>
+													setSignatureConfig({
+														customFields: [
+															...(signatureConfig.customFields ?? []),
+															{
+																apiId: "",
+																name: "",
+																value: "",
+																source: "manual",
+															},
+														],
+													})
+												}
+											>
+												+ Manual
+											</Button>
+										</div>
+										{(signatureConfig.customFields ?? []).map((cf, idx) => (
+											<div
+												key={idx}
+												className={cn(
+													"rounded border p-2 space-y-1",
+													cf.source === "discovered"
+														? "border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/20"
+														: "border-border/40",
+												)}
+											>
+												<div className="flex items-center gap-1">
+													<span className="text-[10px] text-muted-foreground flex-1 truncate font-mono">
+														{cf.apiId || cf.name || "campo sin nombre"}
+														{cf.source === "discovered" && (
+															<span className="ml-1 text-blue-500">(auto)</span>
+														)}
+													</span>
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														className="h-5 w-5 p-0 text-destructive"
+														onClick={() => {
+															const next = (
+																signatureConfig.customFields ?? []
+															).filter((_, i) => i !== idx);
+															setSignatureConfig({ customFields: next });
+														}}
+													>
+														×
+													</Button>
+												</div>
+												{cf.source === "manual" && (
+													<div className="grid grid-cols-2 gap-1">
+														<Input
+															className="text-xs font-mono"
+															placeholder="api_id"
+															value={cf.apiId}
+															onChange={(e) => {
+																const next = [
+																	...(signatureConfig.customFields ?? []),
+																];
+																next[idx] = {
+																	...next[idx],
+																	apiId: e.target.value,
+																};
+																setSignatureConfig({ customFields: next });
+															}}
+														/>
+														<Input
+															className="text-xs"
+															placeholder="nombre"
+															value={cf.name}
+															onChange={(e) => {
+																const next = [
+																	...(signatureConfig.customFields ?? []),
+																];
+																next[idx] = {
+																	...next[idx],
+																	name: e.target.value,
+																};
+																setSignatureConfig({ customFields: next });
+															}}
+														/>
+													</div>
+												)}
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(cf.value)}
+													placeholder="valor o expresión"
+													onChange={(segs) => {
+														const next = [
+															...(signatureConfig.customFields ?? []),
+														];
+														next[idx] = {
+															...next[idx],
+															value: segmentsToTemplateString(segs),
+														};
+														setSignatureConfig({ customFields: next });
+													}}
+												/>
+											</div>
+										))}
+									</div>
+
+									<p className="text-[10px] text-muted-foreground">
+										SMS solo funciona fuera de test_mode. El delivery method del
+										nodo (arriba) es solo para notificar al actor; la entrega de
+										la liga de firma la controla el "Flujo de firma".
+									</p>
+								</div>
+							)}
 
 							<div className="space-y-2">
 								<Label htmlFor="challenge-delivery">
