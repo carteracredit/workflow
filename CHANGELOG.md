@@ -1,3 +1,11 @@
+# [1.3.0-rc.12](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.11...v1.3.0-rc.12) (2026-04-25)
+
+
+### Features
+
+* enhance PropertiesPanel with custom fields management ([7f4e84a](https://github.com/carteracredit/workflow/commit/7f4e84aca9428d2756f662c286645bc8c00f8a42))
+* standardize Start node title and alias handling ([16ec50f](https://github.com/carteracredit/workflow/commit/16ec50f1ce0f4ffd50494583a8465ad0111bb083))
+
 # [1.3.0-rc.11](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.10...v1.3.0-rc.11) (2026-04-24)
 
 
