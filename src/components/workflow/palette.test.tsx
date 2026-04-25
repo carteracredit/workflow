@@ -50,7 +50,10 @@ describe("Palette", () => {
 		const [node] = onAddNode.mock.calls[0];
 		expect(node).toBeDefined();
 		expect(node.type).toBe("Start");
-		expect(node.title).toBe("Inicio");
+		// title is always "Start" (canonical EN) so alias is language-agnostic
+		expect(node.title).toBe("Start");
+		// localized label stored in titleEs for display
+		expect(node.titleEs).toBe("Inicio");
 		expect(typeof node.id).toBe("string");
 		expect(node.id).toMatch(/^node-/);
 		expect(node.position).toBeDefined();

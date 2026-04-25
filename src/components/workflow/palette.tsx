@@ -168,6 +168,11 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 
 	const handleAddNode = (type: NodeType, labelKey: string) => {
 		const label = t(labelKey);
+		// For the Start node we always use the canonical English title so that the
+		// alias derived from it (titleToCamelCase → "start") is language-agnostic.
+		// The localized label is stored in titleEs for display purposes only.
+		const canonicalTitle = type === "Start" ? "Start" : label;
+		const titleEs = type === "Start" ? t(labelKey) : undefined;
 		const propertiesPanel = document.querySelector<HTMLElement>(
 			'[data-workflow-panel="properties"]',
 		);
@@ -190,7 +195,8 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 			id: `node-${Date.now()}`,
 			type,
 			checkpointType: type === "Checkpoint" ? "normal" : undefined,
-			title: label,
+			title: canonicalTitle,
+			titleEs,
 			description: "",
 			roles: [],
 			config: getDefaultConfigForType(type),

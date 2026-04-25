@@ -135,6 +135,19 @@ function toJsTemplateLiteral(str: string): string {
 let _activeAliasMap: Map<string, string> = new Map();
 
 /**
+ * The camelCase alias of the Start node for the current code-generation run.
+ *
+ * When `expandVariablePath` sees this alias as the first segment of a variable
+ * reference (e.g. `${inicio.clientName}` or `${start.clientAddress.zipCode}`),
+ * it rewrites the expression to `event.payload.<trail>` because the Start
+ * node's case variables are injected by cases-svc directly into the workflow
+ * event payload — no runtime binding is declared for the Start node itself.
+ *
+ * Reset to `""` after each generation run.
+ */
+let _startNodeAlias: string = "";
+
+/**
  * Set of node IDs (Form / API / Transform) that are inside a Decision or
  * Challenge branch AND whose alias is referenced by a node outside that branch
  * (i.e., post-merge). These need a hoisted `let` declaration at the start of
@@ -238,6 +251,16 @@ function expandVariablePath(path: string): string {
 	const dotIdx = trimmed.indexOf(".");
 	const firstSeg = dotIdx >= 0 ? trimmed.slice(0, dotIdx) : trimmed;
 	const propertyTrail = dotIdx >= 0 ? trimmed.slice(dotIdx + 1) : null;
+
+	// Start-node alias → rewrite to event.payload.<trail> because the Start
+	// node's case variables live in the workflow event payload at runtime; no
+	// JS binding is ever declared for the Start node in the generated code.
+	if (_startNodeAlias && firstSeg === _startNodeAlias) {
+		if (propertyTrail === null) {
+			return "event.payload";
+		}
+		return `event.payload.${expandPropertyTrail(propertyTrail)}`;
+	}
 
 	// For legacy node-IDs (`node-<timestamp>`), look up the camelCase alias
 	// from the active alias map (populated during code generation), or fall
@@ -1089,10 +1112,7 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 			code += `${indent}\t\ttemplateName: "", // TODO: set Mandrill template name\n`;
 		}
 		if (subject) {
-			const subjectCode = hasTemplateVars(subject)
-				? toJsTemplateLiteral(subject)
-				: `"${escapeString(subject)}"`;
-			code += `${indent}\t\tsubject: ${subjectCode},\n`;
+			code += `${indent}\t\tsubject: ${emitInterpolatedString(subject)},\n`;
 		}
 		if (mergeVars.length > 0) {
 			code += `${indent}\t\tmergeVars: {\n`;
@@ -1102,7 +1122,9 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 				let valueCode: string;
 				if (hasTemplateVars(value)) {
 					// Template string with variable interpolation → JS template literal
-					valueCode = toJsTemplateLiteral(value);
+					// with each ${alias.x} token expanded via expandVariablePath so that
+					// start-node vars resolve to event.payload.x at runtime.
+					valueCode = emitInterpolatedString(value);
 				} else if (/[.[\](]/.test(value)) {
 					// Plain JS expression (path access) → emit raw with type cast
 					valueCode = `${value} as string`;
@@ -1129,7 +1151,7 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\tawait notifications.sendSms({\n`;
 		code += `${indent}\t\tto: toList.length === 1 ? toList[0] : toList,\n`;
 		if (body) {
-			code += `${indent}\t\tbody: "${escapeString(body)}",\n`;
+			code += `${indent}\t\tbody: ${emitInterpolatedString(body)},\n`;
 		} else {
 			code += `${indent}\t\tbody: "", // TODO: set SMS body\n`;
 		}
@@ -2301,6 +2323,10 @@ export function generateWorkflowCode(
 		};
 	}
 
+	// Capture the Start node alias so expandVariablePath can rewrite
+	// ${<startAlias>.X} → event.payload.X throughout the generated code.
+	_startNodeAlias = _activeAliasMap.get(startNode.id) ?? "";
+
 	// Generate imports
 	if (includeImports) {
 		code += `import {\n\tWorkflowEntrypoint,\n\tWorkflowEvent,\n\tWorkflowStep,\n} from "cloudflare:workers";\n\n`;
@@ -2467,6 +2493,7 @@ export function generateWorkflowCode(
 	// Clear the module-level alias map after generation
 	_activeAliasMap = new Map();
 	_hoistedNodeIds = new Set();
+	_startNodeAlias = "";
 
 	return { code, warnings };
 }

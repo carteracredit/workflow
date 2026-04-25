@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { Search, ChevronDown, ChevronUp } from "lucide-react";
 import type {
 	WorkflowNode,
 	WorkflowEdge,
@@ -442,6 +443,10 @@ export function PropertiesPanel({
 		useState<SignatureTemplateSummary[]>([]);
 	const [signatureTemplatesLoading, setSignatureTemplatesLoading] =
 		useState(false);
+	const [customFieldsSearch, setCustomFieldsSearch] = useState("");
+	const [expandedCustomFieldIndices, setExpandedCustomFieldIndices] = useState<
+		Set<number>
+	>(new Set());
 
 	// Limpiar estado mock cuando cambia el nodo seleccionado
 	useEffect(() => {
@@ -3568,6 +3573,8 @@ export function PropertiesPanel({
 																	source: "discovered" as const,
 																})),
 															});
+															setCustomFieldsSearch("");
+															setExpandedCustomFieldIndices(new Set());
 														})
 														.catch(() => {
 															/* silent fail */
@@ -3877,16 +3884,25 @@ export function PropertiesPanel({
 
 									{/* Custom fields */}
 									<div className="space-y-2">
-										<div className="flex items-center justify-between">
-											<Label className="text-xs font-semibold">
+										{/* Header */}
+										<div className="flex items-center gap-1">
+											<Label className="text-xs font-semibold shrink-0">
 												Custom fields
 											</Label>
+											{(signatureConfig.customFields ?? []).length > 0 && (
+												<span className="text-[10px] text-muted-foreground">
+													({(signatureConfig.customFields ?? []).length})
+												</span>
+											)}
+											<div className="flex-1" />
 											<Button
 												type="button"
 												variant="ghost"
 												size="sm"
 												className="h-6 text-xs"
-												onClick={() =>
+												onClick={() => {
+													const newIdx = (signatureConfig.customFields ?? [])
+														.length;
 													setSignatureConfig({
 														customFields: [
 															...(signatureConfig.customFields ?? []),
@@ -3897,95 +3913,200 @@ export function PropertiesPanel({
 																source: "manual",
 															},
 														],
-													})
-												}
+													});
+													setExpandedCustomFieldIndices(
+														(prev) => new Set([...prev, newIdx]),
+													);
+												}}
 											>
 												+ Manual
 											</Button>
 										</div>
-										{(signatureConfig.customFields ?? []).map((cf, idx) => (
-											<div
-												key={idx}
-												className={cn(
-													"rounded border p-2 space-y-1",
-													cf.source === "discovered"
-														? "border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/20"
-														: "border-border/40",
-												)}
-											>
-												<div className="flex items-center gap-1">
-													<span className="text-[10px] text-muted-foreground flex-1 truncate font-mono">
-														{cf.apiId || cf.name || "campo sin nombre"}
-														{cf.source === "discovered" && (
-															<span className="ml-1 text-blue-500">(auto)</span>
-														)}
-													</span>
-													<Button
-														type="button"
-														variant="ghost"
-														size="sm"
-														className="h-5 w-5 p-0 text-destructive"
-														onClick={() => {
-															const next = (
-																signatureConfig.customFields ?? []
-															).filter((_, i) => i !== idx);
-															setSignatureConfig({ customFields: next });
-														}}
-													>
-														×
-													</Button>
-												</div>
-												{cf.source === "manual" && (
-													<div className="grid grid-cols-2 gap-1">
-														<Input
-															className="text-xs font-mono"
-															placeholder="api_id"
-															value={cf.apiId}
-															onChange={(e) => {
-																const next = [
-																	...(signatureConfig.customFields ?? []),
-																];
-																next[idx] = {
-																	...next[idx],
-																	apiId: e.target.value,
-																};
-																setSignatureConfig({ customFields: next });
-															}}
-														/>
-														<Input
-															className="text-xs"
-															placeholder="nombre"
-															value={cf.name}
-															onChange={(e) => {
-																const next = [
-																	...(signatureConfig.customFields ?? []),
-																];
-																next[idx] = {
-																	...next[idx],
-																	name: e.target.value,
-																};
-																setSignatureConfig({ customFields: next });
-															}}
-														/>
-													</div>
-												)}
-												<VariableTemplateInput
-													nodes={upstreamVariableNodes}
-													value={parseTemplateStringToSegments(cf.value)}
-													placeholder="valor o expresión"
-													onChange={(segs) => {
-														const next = [
-															...(signatureConfig.customFields ?? []),
-														];
-														next[idx] = {
-															...next[idx],
-															value: segmentsToTemplateString(segs),
-														};
-														setSignatureConfig({ customFields: next });
-													}}
+
+										{/* Buscador — visible cuando hay más de 3 campos */}
+										{(signatureConfig.customFields ?? []).length > 3 && (
+											<div className="relative">
+												<Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+												<Input
+													className="text-xs pl-6 h-7"
+													placeholder="Buscar campo…"
+													value={customFieldsSearch}
+													onChange={(e) =>
+														setCustomFieldsSearch(e.target.value)
+													}
 												/>
 											</div>
-										))}
+										)}
+
+										{/* Lista de campos — cada uno individualmente colapsable */}
+										{(signatureConfig.customFields ?? [])
+											.map((cf, realIdx) => ({ cf, realIdx }))
+											.filter(({ cf }) => {
+												if (!customFieldsSearch) return true;
+												const q = customFieldsSearch.toLowerCase();
+												return (
+													cf.apiId.toLowerCase().includes(q) ||
+													cf.name.toLowerCase().includes(q)
+												);
+											})
+											.map(({ cf, realIdx }) => {
+												const isExpanded =
+													expandedCustomFieldIndices.has(realIdx);
+												const toggleExpanded = () =>
+													setExpandedCustomFieldIndices((prev) => {
+														const next = new Set(prev);
+														if (next.has(realIdx)) next.delete(realIdx);
+														else next.add(realIdx);
+														return next;
+													});
+
+												return (
+													<div
+														key={realIdx}
+														className={cn(
+															"rounded border",
+															cf.source === "discovered"
+																? "border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/20"
+																: "border-border/40",
+														)}
+													>
+														{/* Cabecera siempre visible */}
+														<div className="flex items-center gap-1 px-2 py-1.5">
+															<span
+																className={cn(
+																	"flex-1 truncate font-mono font-medium",
+																	isExpanded ? "text-xs" : "text-sm",
+																)}
+															>
+																{cf.apiId || cf.name || "campo sin nombre"}
+															</span>
+															{cf.source === "discovered" && (
+																<span className="text-[10px] text-blue-500 shrink-0">
+																	auto
+																</span>
+															)}
+															{cf.value && !isExpanded && (
+																<span className="text-[10px] text-muted-foreground shrink-0 max-w-[80px] truncate">
+																	= {cf.value}
+																</span>
+															)}
+															<Button
+																type="button"
+																variant="ghost"
+																size="sm"
+																className="h-5 w-5 p-0 shrink-0"
+																title={isExpanded ? "Colapsar" : "Expandir"}
+																onClick={toggleExpanded}
+															>
+																{isExpanded ? (
+																	<ChevronUp className="h-3 w-3" />
+																) : (
+																	<ChevronDown className="h-3 w-3" />
+																)}
+															</Button>
+															<Button
+																type="button"
+																variant="ghost"
+																size="sm"
+																className="h-5 w-5 p-0 text-destructive shrink-0"
+																onClick={() => {
+																	const next = (
+																		signatureConfig.customFields ?? []
+																	).filter((_, i) => i !== realIdx);
+																	setSignatureConfig({ customFields: next });
+																	setExpandedCustomFieldIndices((prev) => {
+																		const next2 = new Set<number>();
+																		prev.forEach((i) => {
+																			if (i < realIdx) next2.add(i);
+																			else if (i > realIdx) next2.add(i - 1);
+																		});
+																		return next2;
+																	});
+																}}
+															>
+																×
+															</Button>
+														</div>
+
+														{/* Contenido expandido */}
+														{isExpanded && (
+															<div className="border-t border-border/30 px-2 pb-2 pt-1.5 space-y-1">
+																{cf.source === "manual" && (
+																	<div className="grid grid-cols-2 gap-1">
+																		<Input
+																			className="text-xs font-mono"
+																			placeholder="api_id"
+																			value={cf.apiId}
+																			onChange={(e) => {
+																				const next = [
+																					...(signatureConfig.customFields ??
+																						[]),
+																				];
+																				next[realIdx] = {
+																					...next[realIdx],
+																					apiId: e.target.value,
+																				};
+																				setSignatureConfig({
+																					customFields: next,
+																				});
+																			}}
+																		/>
+																		<Input
+																			className="text-xs"
+																			placeholder="nombre"
+																			value={cf.name}
+																			onChange={(e) => {
+																				const next = [
+																					...(signatureConfig.customFields ??
+																						[]),
+																				];
+																				next[realIdx] = {
+																					...next[realIdx],
+																					name: e.target.value,
+																				};
+																				setSignatureConfig({
+																					customFields: next,
+																				});
+																			}}
+																		/>
+																	</div>
+																)}
+																<VariableTemplateInput
+																	nodes={upstreamVariableNodes}
+																	value={parseTemplateStringToSegments(
+																		cf.value,
+																	)}
+																	placeholder="valor o expresión"
+																	onChange={(segs) => {
+																		const next = [
+																			...(signatureConfig.customFields ?? []),
+																		];
+																		next[realIdx] = {
+																			...next[realIdx],
+																			value: segmentsToTemplateString(segs),
+																		};
+																		setSignatureConfig({ customFields: next });
+																	}}
+																/>
+															</div>
+														)}
+													</div>
+												);
+											})}
+
+										{/* Sin resultados de búsqueda */}
+										{customFieldsSearch &&
+											(signatureConfig.customFields ?? []).filter((cf) => {
+												const q = customFieldsSearch.toLowerCase();
+												return (
+													cf.apiId.toLowerCase().includes(q) ||
+													cf.name.toLowerCase().includes(q)
+												);
+											}).length === 0 && (
+												<p className="text-[10px] text-muted-foreground text-center py-1">
+													No hay campos que coincidan con "{customFieldsSearch}"
+												</p>
+											)}
 									</div>
 
 									<p className="text-[10px] text-muted-foreground">
