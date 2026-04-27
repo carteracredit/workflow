@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import type {
 	WorkflowNode,
 	WorkflowEdge,
@@ -444,6 +444,7 @@ export function PropertiesPanel({
 	const [signatureTemplatesLoading, setSignatureTemplatesLoading] =
 		useState(false);
 	const [customFieldsSearch, setCustomFieldsSearch] = useState("");
+	const [isRefreshingTemplates, setIsRefreshingTemplates] = useState(false);
 	const [expandedCustomFieldIndices, setExpandedCustomFieldIndices] = useState<
 		Set<number>
 	>(new Set());
@@ -1217,30 +1218,17 @@ export function PropertiesPanel({
 		if (!signatureConfig?.templateId) return;
 		setIsLoadingTemplate(true);
 		try {
-			const resp = await fetch(
-				`/api/signatures/templates/${encodeURIComponent(signatureConfig.templateId)}`,
-			);
-			if (!resp.ok) throw new Error("Failed to fetch template");
-			const data = (await resp.json()) as {
-				result: {
-					signerRoles: Array<{ name: string; order: number | null }>;
-					customFields: Array<{
-						name: string;
-						apiId: string;
-						type: string;
-						required: boolean;
-					}>;
-				};
-			};
-			const discoveredSigners: SignatureSignerConfig[] =
-				data.result.signerRoles.map((sr) => ({
+			const tpl = await getSignatureTemplateAction(signatureConfig.templateId);
+			const discoveredSigners: SignatureSignerConfig[] = tpl.signerRoles.map(
+				(sr) => ({
 					role: sr.name,
 					source: "variable" as const,
 					email: "",
 					name: "",
-				}));
+				}),
+			);
 			const discoveredFields: SignatureCustomFieldConfig[] =
-				data.result.customFields.map((cf) => ({
+				tpl.customFields.map((cf) => ({
 					apiId: cf.apiId,
 					name: cf.name,
 					type: cf.type,
@@ -1252,10 +1240,63 @@ export function PropertiesPanel({
 				signers: discoveredSigners,
 				customFields: discoveredFields,
 			});
+			setCustomFieldsSearch("");
+			setExpandedCustomFieldIndices(new Set());
 		} catch {
 			// silent fail — user can retry
 		} finally {
 			setIsLoadingTemplate(false);
+		}
+	};
+
+	/**
+	 * Recarga la lista de templates desde Dropbox Sign.
+	 * Si hay un template seleccionado, también recarga sus custom fields / signers.
+	 */
+	const handleRefreshAll = async () => {
+		setIsRefreshingTemplates(true);
+		try {
+			const templates = await listSignatureTemplatesAction();
+			setAvailableSignatureTemplates(templates);
+			// Si hay template seleccionado, recargar sus campos también
+			if (signatureConfig?.templateId) {
+				setIsLoadingTemplate(true);
+				try {
+					const tpl = await getSignatureTemplateAction(
+						signatureConfig.templateId,
+					);
+					const discoveredSigners: SignatureSignerConfig[] =
+						tpl.signerRoles.map((sr) => ({
+							role: sr.name,
+							source: "variable" as const,
+							email: "",
+							name: "",
+						}));
+					const discoveredFields: SignatureCustomFieldConfig[] =
+						tpl.customFields.map((cf) => ({
+							apiId: cf.apiId,
+							name: cf.name,
+							type: cf.type,
+							value: "",
+							required: cf.required,
+							source: "discovered" as const,
+						}));
+					setSignatureConfig({
+						signers: discoveredSigners,
+						customFields: discoveredFields,
+					});
+					setCustomFieldsSearch("");
+					setExpandedCustomFieldIndices(new Set());
+				} catch {
+					// silent fail
+				} finally {
+					setIsLoadingTemplate(false);
+				}
+			}
+		} catch {
+			// silent fail
+		} finally {
+			setIsRefreshingTemplates(false);
 		}
 	};
 
@@ -3538,9 +3579,23 @@ export function PropertiesPanel({
 							{/* ── Signature Config ─────────────────────────────── */}
 							{signatureConfig && (
 								<div className="space-y-4 rounded-md border border-amber-200 bg-amber-50/40 p-3 dark:border-amber-800 dark:bg-amber-950/20">
-									<p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-										Configuración Dropbox Sign
-									</p>
+									<div className="flex items-center justify-between">
+										<p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+											Configuración Dropbox Sign
+										</p>
+										<button
+											type="button"
+											onClick={handleRefreshAll}
+											disabled={isRefreshingTemplates || isLoadingTemplate}
+											title="Recargar templates y campos desde Dropbox Sign"
+											className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-600 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-900/40"
+										>
+											<RefreshCw
+												className={`h-3 w-3 ${isRefreshingTemplates ? "animate-spin" : ""}`}
+											/>
+											Actualizar
+										</button>
+									</div>
 
 									{/* Template */}
 									<div className="space-y-1">
@@ -3681,6 +3736,29 @@ export function PropertiesPanel({
 												</p>
 											) : null;
 										})()}
+									</div>
+
+									{/* Title / Document name */}
+									<div className="space-y-1">
+										<Label htmlFor="sig-title" className="text-xs">
+											Nombre del documento (opcional)
+										</Label>
+										<Input
+											id="sig-title"
+											className="text-xs"
+											placeholder={`Case \${caseId}`}
+											value={signatureConfig.title ?? ""}
+											onChange={(e) =>
+												setSignatureConfig({
+													title: e.target.value || undefined,
+												})
+											}
+										/>
+										<p className="text-[10px] text-muted-foreground">
+											Título que verán los firmantes en Dropbox Sign. Admite
+											expresiones{" "}
+											<code className="font-mono">${"{caseId}"}</code>.
+										</p>
 									</div>
 
 									{/* Subject / Message */}
