@@ -1321,7 +1321,10 @@ function generateSignatureChallengeStep(
 	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
 
-	// Step 2: wait for "signature_signed" event sent by webhook handler
+	// Step 2: wait for "signature_signed" event sent by webhook handler.
+	// The same event type is used for both positive (all_signed) and negative
+	// (declined / canceled / errored) outcomes — the payload.signed field
+	// discriminates between them so we only need a single waitForEvent call.
 	code += generateProgressCall(
 		node,
 		indent,
@@ -1329,7 +1332,7 @@ function generateSignatureChallengeStep(
 		"signature_signed",
 		retryVarName,
 	);
-	code += `${indent}${rawVar} = await step.waitForEvent<{ signatureRequestId: string; documentId?: string }>(\n`;
+	code += `${indent}${rawVar} = await step.waitForEvent<{ signed?: boolean; reason?: string; signatureRequestId: string; documentId?: string }>(\n`;
 	code += `${indent}\t${stepNameExpr},\n`;
 	code += `${indent}\t{\n`;
 	code += `${indent}\t\ttype: "signature_signed",\n`;
@@ -1338,15 +1341,37 @@ function generateSignatureChallengeStep(
 	code += `${indent});\n`;
 	code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
 
-	// Normalize output
-	code += `${indent}${outputVar} = (${rawVar} === null)\n`;
-	code += `${indent}\t? { signed: false, timedOut: true, signatureRequestId: null, documentId: null }\n`;
-	code += `${indent}\t: {\n`;
-	code += `${indent}\t\tsigned: true,\n`;
-	code += `${indent}\t\ttimedOut: false,\n`;
-	code += `${indent}\t\tsignatureRequestId: (${rawVar} as { payload: { signatureRequestId?: string } }).payload?.signatureRequestId ?? null,\n`;
-	code += `${indent}\t\tdocumentId: (${rawVar} as { payload: { documentId?: string } }).payload?.documentId ?? null,\n`;
-	code += `${indent}\t};\n`;
+	// Normalize output.
+	// rawVar === null  → timed out (waitForEvent returned null after timeout).
+	// payload.signed === false → negative outcome (declined / canceled / errored).
+	// anything else   → positive outcome (all_signed, or legacy events without the field).
+	code += `${indent}{\n`;
+	code += `${indent}\tconst _sigEvtPayload = (${rawVar} as { payload?: { signed?: boolean; reason?: string; signatureRequestId?: string; documentId?: string } } | null)?.payload;\n`;
+	code += `${indent}\tconst _sigFailed = _sigEvtPayload?.signed === false;\n`;
+	code += `${indent}\t${outputVar} = (${rawVar} === null)\n`;
+	code += `${indent}\t\t? { signed: false, timedOut: true, declined: false, canceled: false, errored: false, reason: "timedOut", signatureRequestId: null, documentId: null }\n`;
+	code += `${indent}\t\t: _sigFailed\n`;
+	code += `${indent}\t\t\t? {\n`;
+	code += `${indent}\t\t\t\tsigned: false,\n`;
+	code += `${indent}\t\t\t\ttimedOut: false,\n`;
+	code += `${indent}\t\t\t\tdeclined: _sigEvtPayload?.reason === "declined",\n`;
+	code += `${indent}\t\t\t\tcanceled: _sigEvtPayload?.reason === "canceled",\n`;
+	code += `${indent}\t\t\t\terrored: _sigEvtPayload?.reason === "errored",\n`;
+	code += `${indent}\t\t\t\treason: _sigEvtPayload?.reason ?? null,\n`;
+	code += `${indent}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
+	code += `${indent}\t\t\t\tdocumentId: null,\n`;
+	code += `${indent}\t\t\t}\n`;
+	code += `${indent}\t\t\t: {\n`;
+	code += `${indent}\t\t\t\tsigned: true,\n`;
+	code += `${indent}\t\t\t\ttimedOut: false,\n`;
+	code += `${indent}\t\t\t\tdeclined: false,\n`;
+	code += `${indent}\t\t\t\tcanceled: false,\n`;
+	code += `${indent}\t\t\t\terrored: false,\n`;
+	code += `${indent}\t\t\t\treason: null,\n`;
+	code += `${indent}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
+	code += `${indent}\t\t\t\tdocumentId: _sigEvtPayload?.documentId ?? null,\n`;
+	code += `${indent}\t\t\t};\n`;
+	code += `${indent}}\n`;
 
 	code += generateProgressCall(
 		node,
@@ -2010,7 +2035,7 @@ function traverseBranch(
 				break;
 			}
 		}
-		// Handle Challenge nodes (branching based on acceptance)
+		// Handle Challenge nodes (branching based on acceptance/signature)
 		else if (node.type === "Challenge" && forwardOutgoing.length === 2) {
 			const outputVar = getVarName(node.id);
 			const topEdge = forwardOutgoing.find(
@@ -2037,7 +2062,17 @@ function traverseBranch(
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			code += `${indent}if (${outputVar}.accepted) {\n`;
+			// Signature challenges use `signed` as the positive-branch discriminator;
+			// acceptance challenges use `accepted`. Both share the same top/bottom
+			// edge convention: top = positive outcome, bottom = negative.
+			const isSignature =
+				(node.config as { challengeType?: string }).challengeType ===
+				"signature";
+			const branchCondition = isSignature
+				? `${outputVar}.signed`
+				: `${outputVar}.accepted`;
+
+			code += `${indent}if (${branchCondition}) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(

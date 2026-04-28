@@ -6,7 +6,7 @@ import type {
 	SchemaPropertyType,
 } from "./types";
 import { cloneCaseVariables } from "./case-variables";
-import { cloneChallengeOutputSchema } from "./challenge-output";
+import { cloneChallengeOutputSchemaForType } from "./challenge-output";
 import { clonePromotionOutputSchema } from "./promotion-output";
 import { buildAliasMap } from "./node-alias";
 
@@ -328,7 +328,9 @@ export function buildVariableSourceNodes(
 		let properties: OutputSchemaProperty[];
 		if (node.type === "Challenge") {
 			properties = mergePropertiesByName(
-				cloneChallengeOutputSchema(),
+				cloneChallengeOutputSchemaForType(
+					(node.config as { challengeType?: string }).challengeType,
+				),
 				customProps,
 			);
 		} else if (node.type === "Promotion") {

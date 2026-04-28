@@ -4773,3 +4773,91 @@ describe("generateWorkflowCode — Signature Challenge", () => {
 		expect(result.code).toContain("accepted");
 	});
 });
+
+// ─── Signature Challenge branching (2 outgoing edges) ─────────────────────────
+
+describe("generateWorkflowCode — Signature Challenge branching", () => {
+	function makeSignatureBranchWorkflow() {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "sig",
+				type: "Challenge",
+				title: "Firma",
+				roles: ["client"],
+				config: {
+					challengeType: "signature",
+					challengeTimeout: { value: 72, unit: "hours" },
+					templateId: "tpl-branch",
+					flow: "email_only",
+					signers: [],
+					customFields: [],
+				},
+			}),
+			createNode({ id: "ok", type: "End", title: "Aprobado" }),
+			createNode({ id: "reject", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "sig"),
+			createEdge("sig", "ok", { fromPort: "top" }),
+			createEdge("sig", "reject", { fromPort: "bottom" }),
+		];
+		return { nodes, edges };
+	}
+
+	it("uses if (outputVar.signed) for the top branch", () => {
+		const { nodes, edges } = makeSignatureBranchWorkflow();
+		const result = generateWorkflowCode(nodes, edges);
+		// The positive branch discriminator must use .signed, NOT .accepted
+		expect(result.code).toMatch(/if\s*\(\S+\.signed\)/);
+		expect(result.code).not.toMatch(/if\s*\(\S+\.accepted\)/);
+	});
+
+	it("normalizes timed-out event to signed: false, timedOut: true", () => {
+		const { nodes, edges } = makeSignatureBranchWorkflow();
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("timedOut: true");
+		expect(result.code).toContain("timedOut: false");
+	});
+
+	it("normalizes negative payload to declined/canceled/errored fields", () => {
+		const { nodes, edges } = makeSignatureBranchWorkflow();
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain(
+			'declined: _sigEvtPayload?.reason === "declined"',
+		);
+		expect(result.code).toContain(
+			'canceled: _sigEvtPayload?.reason === "canceled"',
+		);
+		expect(result.code).toContain(
+			'errored: _sigEvtPayload?.reason === "errored"',
+		);
+	});
+
+	it("acceptance challenge with 2 branches still uses .accepted", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "acc",
+				type: "Challenge",
+				title: "Aceptar",
+				roles: ["client"],
+				config: {
+					challengeType: "acceptance",
+					challengeTimeout: { value: 5, unit: "minutes" },
+					deliveryMethod: "none",
+				},
+			}),
+			createNode({ id: "ok", type: "End", title: "Aprobado" }),
+			createNode({ id: "reject", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "acc"),
+			createEdge("acc", "ok", { fromPort: "top" }),
+			createEdge("acc", "reject", { fromPort: "bottom" }),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toMatch(/if\s*\(\S+\.accepted\)/);
+		expect(result.code).not.toMatch(/if\s*\(\S+\.signed\)/);
+	});
+});
