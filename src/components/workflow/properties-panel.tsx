@@ -1218,7 +1218,9 @@ export function PropertiesPanel({
 		if (!signatureConfig?.templateId) return;
 		setIsLoadingTemplate(true);
 		try {
-			const tpl = await getSignatureTemplateAction(signatureConfig.templateId);
+			const tpl = await getSignatureTemplateAction(signatureConfig.templateId, {
+				bypassCache: true,
+			});
 
 			// Merge: keep existing values, add any new roles/fields from template
 			const existingSigners = signatureConfig.signers ?? [];
@@ -1274,7 +1276,9 @@ export function PropertiesPanel({
 	const handleRefreshAll = async () => {
 		setIsRefreshingTemplates(true);
 		try {
-			const templates = await listSignatureTemplatesAction();
+			const templates = await listSignatureTemplatesAction({
+				bypassCache: true,
+			});
 			setAvailableSignatureTemplates(templates);
 			// Si hay template seleccionado, recargar sus campos también
 			if (signatureConfig?.templateId) {
@@ -1282,6 +1286,7 @@ export function PropertiesPanel({
 				try {
 					const tpl = await getSignatureTemplateAction(
 						signatureConfig.templateId,
+						{ bypassCache: true },
 					);
 
 					// Merge signers: keep existing values, add any new roles from template

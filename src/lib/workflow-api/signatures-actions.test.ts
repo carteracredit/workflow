@@ -81,6 +81,14 @@ describe("signatures server actions", () => {
 				"cases-svc unavailable",
 			);
 		});
+
+		it("passes bypassCache: true when provided", async () => {
+			await listSignatureTemplatesAction({ bypassCache: true });
+
+			expect(listSignatureTemplates).toHaveBeenCalledWith(
+				expect.objectContaining({ bypassCache: true }),
+			);
+		});
 	});
 
 	describe("getSignatureTemplateAction", () => {
@@ -121,6 +129,15 @@ describe("signatures server actions", () => {
 
 			await expect(getSignatureTemplateAction("bad-id")).rejects.toThrow(
 				"Template not found",
+			);
+		});
+
+		it("passes bypassCache: true when provided", async () => {
+			await getSignatureTemplateAction("tpl-abc123", { bypassCache: true });
+
+			expect(getSignatureTemplate).toHaveBeenCalledWith(
+				"tpl-abc123",
+				expect.objectContaining({ bypassCache: true }),
 			);
 		});
 	});
