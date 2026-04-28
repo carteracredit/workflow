@@ -1,3 +1,13 @@
+# [1.3.0-rc.13](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.12...v1.3.0-rc.13) (2026-04-28)
+
+
+### Features
+
+* add bypassCache option to signature template actions ([53ed45b](https://github.com/carteracredit/workflow/commit/53ed45b9a057d37f653b3f81a49fe544d5674cbf))
+* add refresh functionality for Dropbox Sign templates in PropertiesPanel ([2bc7bc0](https://github.com/carteracredit/workflow/commit/2bc7bc0142895dabba2aca8c2a28fb6bd0823236))
+* merge existing signers and custom fields when refreshing templates in PropertiesPanel ([a2f616c](https://github.com/carteracredit/workflow/commit/a2f616c392debac728b66a0e0e6b40923154d2ed))
+* replace input fields with VariableTemplateInput in PropertiesPanel ([2d07e10](https://github.com/carteracredit/workflow/commit/2d07e10f65ea518c8a280b38d0cd3a17295db367))
+
 # [1.3.0-rc.12](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.11...v1.3.0-rc.12) (2026-04-25)
 
 
