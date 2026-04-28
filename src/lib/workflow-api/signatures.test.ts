@@ -140,6 +140,30 @@ describe("signatures API functions", () => {
 
 			expect(result).toEqual([]);
 		});
+
+		it("appends bypass_cache=true when bypassCache option is set", async () => {
+			mockFetch({
+				success: true,
+				result: { templates: [], page: 1, numPages: 0, numResults: 0 },
+			});
+
+			await listSignatureTemplates({ bypassCache: true });
+
+			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect(url).toContain("bypass_cache=true");
+		});
+
+		it("does not append bypass_cache when bypassCache is not set", async () => {
+			mockFetch({
+				success: true,
+				result: { templates: [], page: 1, numPages: 0, numResults: 0 },
+			});
+
+			await listSignatureTemplates();
+
+			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect(url).not.toContain("bypass_cache");
+		});
 	});
 
 	describe("getSignatureTemplate", () => {
@@ -194,6 +218,24 @@ describe("signatures API functions", () => {
 			mockFetch({ success: false, error: "Template not found" }, 404);
 
 			await expect(getSignatureTemplate("nonexistent")).rejects.toThrow();
+		});
+
+		it("appends bypass_cache=true when bypassCache option is set", async () => {
+			mockFetch({ success: true, result: mockTemplateDetail });
+
+			await getSignatureTemplate("tpl-abc123", { bypassCache: true });
+
+			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect(url).toContain("bypass_cache=true");
+		});
+
+		it("does not append bypass_cache when bypassCache is not set", async () => {
+			mockFetch({ success: true, result: mockTemplateDetail });
+
+			await getSignatureTemplate("tpl-abc123");
+
+			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect(url).not.toContain("bypass_cache");
 		});
 	});
 });

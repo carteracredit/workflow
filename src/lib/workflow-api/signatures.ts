@@ -51,13 +51,18 @@ interface ListTemplatesResult {
  * Calls GET /signatures/templates on cases-svc.
  */
 export async function listSignatureTemplates(
-	options?: ApiCallOptions & { page?: number; pageSize?: number },
+	options?: ApiCallOptions & {
+		page?: number;
+		pageSize?: number;
+		bypassCache?: boolean;
+	},
 ): Promise<SignatureTemplateSummary[]> {
 	const base = getCasesServiceUrl();
 	const url = new URL(`${base}/signatures/templates`);
 	if (options?.page) url.searchParams.set("page", String(options.page));
 	if (options?.pageSize)
 		url.searchParams.set("page_size", String(options.pageSize));
+	if (options?.bypassCache) url.searchParams.set("bypass_cache", "true");
 
 	const { json } = await fetchJson<{
 		success: boolean;
@@ -73,16 +78,18 @@ export async function listSignatureTemplates(
  */
 export async function getSignatureTemplate(
 	templateId: string,
-	options?: ApiCallOptions,
+	options?: ApiCallOptions & { bypassCache?: boolean },
 ): Promise<SignatureTemplateDetail> {
 	const base = getCasesServiceUrl();
+	const url = new URL(
+		`${base}/signatures/templates/${encodeURIComponent(templateId)}`,
+	);
+	if (options?.bypassCache) url.searchParams.set("bypass_cache", "true");
 
 	const { json } = await fetchJson<{
 		success: boolean;
 		result: SignatureTemplateDetail;
-	}>(`${base}/signatures/templates/${encodeURIComponent(templateId)}`, {
-		jwt: options?.jwt,
-	});
+	}>(url.toString(), { jwt: options?.jwt });
 
 	return json.result;
 }

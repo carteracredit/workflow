@@ -12,11 +12,14 @@ export type { SignatureTemplateSummary, SignatureTemplateDetail };
 /**
  * Server action: list all Dropbox Sign templates from cases-svc.
  */
-export async function listSignatureTemplatesAction(): Promise<
-	SignatureTemplateSummary[]
-> {
+export async function listSignatureTemplatesAction(options?: {
+	bypassCache?: boolean;
+}): Promise<SignatureTemplateSummary[]> {
 	const jwt = await getJwt();
-	return listSignatureTemplates({ jwt: jwt ?? undefined });
+	return listSignatureTemplates({
+		jwt: jwt ?? undefined,
+		bypassCache: options?.bypassCache,
+	});
 }
 
 /**
@@ -24,7 +27,11 @@ export async function listSignatureTemplatesAction(): Promise<
  */
 export async function getSignatureTemplateAction(
 	templateId: string,
+	options?: { bypassCache?: boolean },
 ): Promise<SignatureTemplateDetail> {
 	const jwt = await getJwt();
-	return getSignatureTemplate(templateId, { jwt: jwt ?? undefined });
+	return getSignatureTemplate(templateId, {
+		jwt: jwt ?? undefined,
+		bypassCache: options?.bypassCache,
+	});
 }
