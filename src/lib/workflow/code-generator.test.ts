@@ -4712,6 +4712,41 @@ describe("generateWorkflowCode — Signature Challenge", () => {
 		expect(result.code).toContain("timedOut: true");
 	});
 
+	it("uses this.env.CASES_SVC (not bare env) and event-scoped vars for caseId and instanceId", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			challengeTimeout: { value: 24, unit: "hours" },
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		// Must use this.env - bare `env` is not in scope inside the run method
+		expect(result.code).toContain("this.env.CASES_SVC.createSignatureRequest");
+		expect(result.code).not.toMatch(
+			/(?<!\.)env\.CASES_SVC\.createSignatureRequest/,
+		);
+		// caseId must come from event.payload, not a bare `caseId` variable
+		expect(result.code).toContain("event.payload.caseId");
+		expect(result.code).not.toMatch(/caseId,\s*\n/);
+		// instanceId must come from event, not a bare `instanceId` variable
+		expect(result.code).toContain("event.instanceId");
+		expect(result.code).not.toMatch(/workflowInstanceId: instanceId,/);
+	});
+
+	it("includes createSignatureRequest in WorkflowEnv interface when signature challenge present", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("createSignatureRequest");
+	});
+
 	it("uses acceptance flow for challengeType === 'acceptance'", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
