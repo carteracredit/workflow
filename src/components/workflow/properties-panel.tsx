@@ -3781,57 +3781,58 @@ export function PropertiesPanel({
 
 									{/* Title / Document name */}
 									<div className="space-y-1">
-										<Label htmlFor="sig-title" className="text-xs">
+										<Label className="text-xs">
 											Nombre del documento (opcional)
 										</Label>
-										<Input
-											id="sig-title"
-											className="text-xs"
-											placeholder={`Case \${caseId}`}
-											value={signatureConfig.title ?? ""}
-											onChange={(e) =>
+										<VariableTemplateInput
+											nodes={upstreamVariableNodes}
+											value={parseTemplateStringToSegments(
+												signatureConfig.title ?? "",
+											)}
+											onChange={(segs) =>
 												setSignatureConfig({
-													title: e.target.value || undefined,
+													title: segmentsToTemplateString(segs) || undefined,
 												})
 											}
+											placeholder={`Case \${caseId}`}
 										/>
 										<p className="text-[10px] text-muted-foreground">
-											Título que verán los firmantes en Dropbox Sign. Admite
-											expresiones{" "}
-											<code className="font-mono">${"{caseId}"}</code>.
+											Título que verán los firmantes en Dropbox Sign.
 										</p>
 									</div>
 
 									{/* Subject / Message */}
 									<div className="grid grid-cols-2 gap-2">
 										<div className="space-y-1">
-											<Label htmlFor="sig-subject" className="text-xs">
-												Asunto (opcional)
-											</Label>
-											<Input
-												id="sig-subject"
-												className="text-xs"
-												value={signatureConfig.subject ?? ""}
-												onChange={(e) =>
+											<Label className="text-xs">Asunto (opcional)</Label>
+											<VariableTemplateInput
+												nodes={upstreamVariableNodes}
+												value={parseTemplateStringToSegments(
+													signatureConfig.subject ?? "",
+												)}
+												onChange={(segs) =>
 													setSignatureConfig({
-														subject: e.target.value || undefined,
+														subject:
+															segmentsToTemplateString(segs) || undefined,
 													})
 												}
+												placeholder="Asunto del correo"
 											/>
 										</div>
 										<div className="space-y-1">
-											<Label htmlFor="sig-message" className="text-xs">
-												Mensaje (opcional)
-											</Label>
-											<Input
-												id="sig-message"
-												className="text-xs"
-												value={signatureConfig.message ?? ""}
-												onChange={(e) =>
+											<Label className="text-xs">Mensaje (opcional)</Label>
+											<VariableTemplateInput
+												nodes={upstreamVariableNodes}
+												value={parseTemplateStringToSegments(
+													signatureConfig.message ?? "",
+												)}
+												onChange={(segs) =>
 													setSignatureConfig({
-														message: e.target.value || undefined,
+														message:
+															segmentsToTemplateString(segs) || undefined,
 													})
 												}
+												placeholder="Mensaje del correo"
 											/>
 										</div>
 									</div>
