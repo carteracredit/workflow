@@ -1219,26 +1219,43 @@ export function PropertiesPanel({
 		setIsLoadingTemplate(true);
 		try {
 			const tpl = await getSignatureTemplateAction(signatureConfig.templateId);
-			const discoveredSigners: SignatureSignerConfig[] = tpl.signerRoles.map(
-				(sr) => ({
-					role: sr.name,
-					source: "variable" as const,
-					email: "",
-					name: "",
-				}),
+
+			// Merge: keep existing values, add any new roles/fields from template
+			const existingSigners = signatureConfig.signers ?? [];
+			const mergedSigners: SignatureSignerConfig[] = tpl.signerRoles.map(
+				(sr) => {
+					const existing = existingSigners.find((s) => s.role === sr.name);
+					return (
+						existing ?? {
+							role: sr.name,
+							source: "variable" as const,
+							email: "",
+							name: "",
+						}
+					);
+				},
 			);
-			const discoveredFields: SignatureCustomFieldConfig[] =
-				tpl.customFields.map((cf) => ({
-					apiId: cf.apiId,
-					name: cf.name,
-					type: cf.type,
-					value: "",
-					required: cf.required,
-					source: "discovered" as const,
-				}));
+
+			const existingFields = signatureConfig.customFields ?? [];
+			const mergedFields: SignatureCustomFieldConfig[] = tpl.customFields.map(
+				(cf) => {
+					const existing = existingFields.find((f) => f.apiId === cf.apiId);
+					return (
+						existing ?? {
+							apiId: cf.apiId,
+							name: cf.name,
+							type: cf.type,
+							value: "",
+							required: cf.required,
+							source: "discovered" as const,
+						}
+					);
+				},
+			);
+
 			setSignatureConfig({
-				signers: discoveredSigners,
-				customFields: discoveredFields,
+				signers: mergedSigners,
+				customFields: mergedFields,
 			});
 			setCustomFieldsSearch("");
 			setExpandedCustomFieldIndices(new Set());
@@ -1251,7 +1268,8 @@ export function PropertiesPanel({
 
 	/**
 	 * Recarga la lista de templates desde Dropbox Sign.
-	 * Si hay un template seleccionado, también recarga sus custom fields / signers.
+	 * Si hay un template seleccionado, también recarga sus firmantes y custom fields,
+	 * mergeando con los valores existentes (no borra lo configurado).
 	 */
 	const handleRefreshAll = async () => {
 		setIsRefreshingTemplates(true);
@@ -1265,25 +1283,43 @@ export function PropertiesPanel({
 					const tpl = await getSignatureTemplateAction(
 						signatureConfig.templateId,
 					);
-					const discoveredSigners: SignatureSignerConfig[] =
-						tpl.signerRoles.map((sr) => ({
-							role: sr.name,
-							source: "variable" as const,
-							email: "",
-							name: "",
-						}));
-					const discoveredFields: SignatureCustomFieldConfig[] =
-						tpl.customFields.map((cf) => ({
-							apiId: cf.apiId,
-							name: cf.name,
-							type: cf.type,
-							value: "",
-							required: cf.required,
-							source: "discovered" as const,
-						}));
+
+					// Merge signers: keep existing values, add any new roles from template
+					const existingSigners = signatureConfig.signers ?? [];
+					const mergedSigners: SignatureSignerConfig[] = tpl.signerRoles.map(
+						(sr) => {
+							const existing = existingSigners.find((s) => s.role === sr.name);
+							return (
+								existing ?? {
+									role: sr.name,
+									source: "variable" as const,
+									email: "",
+									name: "",
+								}
+							);
+						},
+					);
+
+					// Merge custom fields: keep existing values, add any new fields
+					const existingFields = signatureConfig.customFields ?? [];
+					const mergedFields: SignatureCustomFieldConfig[] =
+						tpl.customFields.map((cf) => {
+							const existing = existingFields.find((f) => f.apiId === cf.apiId);
+							return (
+								existing ?? {
+									apiId: cf.apiId,
+									name: cf.name,
+									type: cf.type,
+									value: "",
+									required: cf.required,
+									source: "discovered" as const,
+								}
+							);
+						});
+
 					setSignatureConfig({
-						signers: discoveredSigners,
-						customFields: discoveredFields,
+						signers: mergedSigners,
+						customFields: mergedFields,
 					});
 					setCustomFieldsSearch("");
 					setExpandedCustomFieldIndices(new Set());
