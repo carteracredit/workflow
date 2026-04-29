@@ -1,3 +1,11 @@
+# [1.3.0-rc.15](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.14...v1.3.0-rc.15) (2026-04-29)
+
+
+### Features
+
+* add translations for Dropbox Sign configuration in PropertiesPanel ([7f6a57a](https://github.com/carteracredit/workflow/commit/7f6a57a605581e290422db804b1e8d1aec4e6c78))
+* enhance challenge output schema and code generation for signature challenges ([0ca491c](https://github.com/carteracredit/workflow/commit/0ca491c879de749c7ff1c511d6d39dcdfd1559e8))
+
 # [1.3.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.13...v1.3.0-rc.14) (2026-04-28)
 
 
