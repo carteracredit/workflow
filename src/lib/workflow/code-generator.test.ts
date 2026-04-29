@@ -4772,6 +4772,105 @@ describe("generateWorkflowCode — Signature Challenge", () => {
 		expect(result.code).not.toContain("CASES_SVC.createSignatureRequest");
 		expect(result.code).toContain("accepted");
 	});
+
+	it("generates waitForEvent(signature_acceptance) BEFORE createSignatureRequest", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			challengeTimeout: { value: 24, unit: "hours" },
+			templateId: "tpl-accept-test",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain('type: "signature_acceptance"');
+		expect(result.code).toContain('type: "signature_signed"');
+
+		// signature_acceptance wait must appear before createSignatureRequest
+		const acceptIdx = result.code.indexOf('"signature_acceptance"');
+		const createIdx = result.code.indexOf("CASES_SVC.createSignatureRequest");
+		expect(acceptIdx).toBeGreaterThanOrEqual(0);
+		expect(createIdx).toBeGreaterThanOrEqual(0);
+		expect(acceptIdx).toBeLessThan(createIdx);
+	});
+
+	it("wraps createSignatureRequest and signature_signed inside if (_accepted)", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+
+		// The accepted guard variable must be present and the create step must be
+		// inside the if block (after the accepted check)
+		expect(result.code).toContain("Accepted");
+		const acceptedCheckIdx = result.code.indexOf("Accepted");
+		const createIdx = result.code.indexOf("CASES_SVC.createSignatureRequest");
+		expect(acceptedCheckIdx).toBeLessThan(createIdx);
+	});
+
+	it("generates rejected: true output in the else (rejection) branch", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("rejected: true");
+		expect(result.code).toContain("rejected: false");
+	});
+
+	it("hoists acceptVar (_AcceptEvt) for signature challenge nodes", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		// The accept event variable must be declared with let at the top of run()
+		expect(result.code).toMatch(/let _\w+AcceptEvt.*=.*null/);
+	});
+
+	it("hoists outputVar with signed type (not accepted type) for signature challenges", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		// Output var type must use `signed` field, not `accepted`
+		expect(result.code).toContain("signed: boolean");
+		expect(result.code).toContain("rejected: boolean");
+		// The acceptance-type challenge has `accepted: boolean` in its type, but
+		// since we have no acceptance challenge node here, it must not appear in
+		// a `let` declaration
+		expect(result.code).not.toMatch(/let \w+: \{ accepted: boolean/);
+	});
+
+	it("uses distinct step.do names for accept and sig progress calls", () => {
+		const { nodes, edges } = makeSignatureWorkflow({
+			challengeType: "signature",
+			templateId: "tpl",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		});
+		const result = generateWorkflowCode(nodes, edges);
+		// The accept progress step must use the "-accept" suffix to avoid
+		// collision with the signature_signed waiting_event progress step
+		expect(result.code).toContain("waiting_event-accept");
+		expect(result.code).toContain("waiting_event-sig");
+	});
 });
 
 // ─── Signature Challenge branching (2 outgoing edges) ─────────────────────────

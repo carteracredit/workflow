@@ -563,13 +563,19 @@ function generateProgressCall(
 	eventType?: string,
 	retryVarName?: string,
 	innerRetryVarName?: string,
+	/**
+	 * Optional suffix appended to the step.do cache key to disambiguate
+	 * multiple waiting_event calls for the same node (e.g. "-accept" vs "-sig"
+	 * in a signature challenge that has both an acceptance and a signing phase).
+	 */
+	stepNameSuffix?: string,
 ): string {
 	const stepName = createStepName(node);
 	const nodeType = node.type;
 	const nodeId = node.id;
 
-	// Build a unique step.do cache key: _prog-<nodeId>-<status>[retry suffix]
-	const baseProgName = `_prog-${nodeId}-${status}`;
+	// Build a unique step.do cache key: _prog-<nodeId>-<status>[suffix][retry suffix]
+	const baseProgName = `_prog-${nodeId}-${status}${stepNameSuffix ? `-${stepNameSuffix}` : ""}`;
 	let stepDoNameExpr: string;
 	if (retryVarName && innerRetryVarName) {
 		stepDoNameExpr =
@@ -1209,9 +1215,11 @@ function generateCheckpointStep(
  * Generate code for a Challenge node with challengeType === "signature".
  *
  * The generated workflow step:
- * 1. Calls `CASES_SVC.createSignatureRequest(...)` with the node config and
- *    resolved variable values — this triggers the Dropbox Sign API call.
- * 2. Waits for the "signature_signed" event forwarded by the webhook handler
+ * 1. Waits for operator acceptance (`signature_acceptance` event). If rejected
+ *    or timed-out the node resolves with `signed: false, rejected: true`.
+ * 2. Only if accepted: calls `CASES_SVC.createSignatureRequest(...)` — this
+ *    triggers the Dropbox Sign API call.
+ * 3. Waits for the "signature_signed" event forwarded by the webhook handler
  *    (webhook → cases-svc → WORKFLOW_SVC.sendEvent).
  *
  * Template expressions in templateId, signers.email/name, and customField.value
@@ -1227,13 +1235,22 @@ function generateSignatureChallengeStep(
 	const stepName = createStepName(node);
 	const outputVar = getVarName(node.id);
 	const rawVar = `_${outputVar}Evt`;
+	const acceptVar = `_${outputVar}AcceptEvt`;
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const timeout = config?.challengeTimeout;
 	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "72 hours";
 
+	const acceptStepName = `${stepName}-accept`;
+	const acceptStepNameExpr = retryVarName
+		? retryStepNameExpr(acceptStepName, retryVarName)
+		: `"${acceptStepName}"`;
+
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
+
+	const i1 = indent + "\t";
+	const i2 = indent + "\t\t";
 
 	// Build signers JSON
 	const signersLines: string[] = [];
@@ -1277,100 +1294,137 @@ function generateSignatureChallengeStep(
 
 	let code = `${indent}// Signature Challenge: ${node.title} (flow: ${config?.flow ?? "email_only"} | roles: ${roles})\n`;
 
-	// Step 1: create the signature request via cases-svc RPC
-	code += `${indent}await step.do(\`${stepName}-create\`, async () => {\n`;
-	code += `${indent}\tconst _sigTemplateId = ${templateIdExpr};\n`;
-	code += `${indent}\tconst _sigSigners = [\n`;
-	for (const line of signersLines) {
-		code += `${indent}\t\t${line},\n`;
-	}
-	code += `${indent}\t];\n`;
-	code += `${indent}\tconst _sigCustomFields = [\n`;
-	for (const line of cfLines) {
-		code += `${indent}\t\t${line},\n`;
-	}
-	code += `${indent}\t];\n`;
-	code += `${indent}\tawait this.env.CASES_SVC.createSignatureRequest({\n`;
-	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
-	code += `${indent}\t\tworkflowInstanceId: event.instanceId,\n`;
-	code += `${indent}\t\tworkflowNodeId: ${JSON.stringify(node.id)},\n`;
-	code += `${indent}\t\tnodeConfig: {\n`;
-	code += `${indent}\t\t\ttemplateId: _sigTemplateId,\n`;
-	code += `${indent}\t\t\tflow: ${JSON.stringify(config?.flow ?? "email_only")},\n`;
-	if (config?.title) {
-		code += `${indent}\t\t\ttitle: ${emitInterpolatedString(config.title)},\n`;
-	}
-	if (config?.subject) {
-		code += `${indent}\t\t\tsubject: ${emitInterpolatedString(config.subject)},\n`;
-	}
-	if (config?.message) {
-		code += `${indent}\t\t\tmessage: ${emitInterpolatedString(config.message)},\n`;
-	}
-	if (config?.testMode !== undefined) {
-		code += `${indent}\t\t\ttestMode: ${config.testMode},\n`;
-	}
-	if (config?.smsAuthentication) {
-		code += `${indent}\t\t\tsmsAuthentication: true,\n`;
-	}
-	if ((config?.ccEmailAddresses ?? []).length > 0) {
-		code += `${indent}\t\t\tccEmailAddresses: ${JSON.stringify(config!.ccEmailAddresses)},\n`;
-	}
-	code += `${indent}\t\t\tsigners: _sigSigners,\n`;
-	code += `${indent}\t\t\tcustomFields: _sigCustomFields,\n`;
-	code += `${indent}\t\t},\n`;
-	code += `${indent}\t});\n`;
-	code += `${indent}});\n`;
-
-	// Step 2: wait for "signature_signed" event sent by webhook handler.
-	// The same event type is used for both positive (all_signed) and negative
-	// (declined / canceled / errored) outcomes — the payload.signed field
-	// discriminates between them so we only need a single waitForEvent call.
+	// Phase 1: wait for operator acceptance before creating the contract.
+	// Uses suffix "accept" in the progress step.do name to avoid collision with
+	// the subsequent "waiting_event" for the signature itself (suffix "sig").
 	code += generateProgressCall(
 		node,
 		indent,
 		"waiting_event",
-		"signature_signed",
+		"signature_acceptance",
 		retryVarName,
+		undefined,
+		"accept",
 	);
-	code += `${indent}${rawVar} = await step.waitForEvent<{ signed?: boolean; reason?: string; signatureRequestId: string; documentId?: string }>(\n`;
-	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}${acceptVar} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+	code += `${indent}\t${acceptStepNameExpr},\n`;
 	code += `${indent}\t{\n`;
-	code += `${indent}\t\ttype: "signature_signed",\n`;
+	code += `${indent}\t\ttype: "signature_acceptance",\n`;
 	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
 	code += `${indent}\t},\n`;
 	code += `${indent});\n`;
-	code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
 
-	// Normalize output.
-	// rawVar === null  → timed out (waitForEvent returned null after timeout).
+	// Determine if the operator accepted
+	code += `${indent}const _${outputVar}Accepted = ${acceptVar} !== null && !!(${acceptVar} as { payload: { accepted?: boolean } }).payload?.accepted;\n`;
+
+	// Phase 2 (only if accepted): create signature request and wait for signatures.
+	code += `${indent}if (_${outputVar}Accepted) {\n`;
+
+	// Step: create the signature request via cases-svc RPC
+	code += `${i1}await step.do(\`${stepName}-create\`, async () => {\n`;
+	code += `${i2}const _sigTemplateId = ${templateIdExpr};\n`;
+	code += `${i2}const _sigSigners = [\n`;
+	for (const line of signersLines) {
+		code += `${i2}\t${line},\n`;
+	}
+	code += `${i2}];\n`;
+	code += `${i2}const _sigCustomFields = [\n`;
+	for (const line of cfLines) {
+		code += `${i2}\t${line},\n`;
+	}
+	code += `${i2}];\n`;
+	code += `${i2}await this.env.CASES_SVC.createSignatureRequest({\n`;
+	code += `${i2}\tcaseId: event.payload.caseId as string,\n`;
+	code += `${i2}\tworkflowInstanceId: event.instanceId,\n`;
+	code += `${i2}\tworkflowNodeId: ${JSON.stringify(node.id)},\n`;
+	code += `${i2}\tnodeConfig: {\n`;
+	code += `${i2}\t\ttemplateId: _sigTemplateId,\n`;
+	code += `${i2}\t\tflow: ${JSON.stringify(config?.flow ?? "email_only")},\n`;
+	if (config?.title) {
+		code += `${i2}\t\ttitle: ${emitInterpolatedString(config.title)},\n`;
+	}
+	if (config?.subject) {
+		code += `${i2}\t\tsubject: ${emitInterpolatedString(config.subject)},\n`;
+	}
+	if (config?.message) {
+		code += `${i2}\t\tmessage: ${emitInterpolatedString(config.message)},\n`;
+	}
+	if (config?.testMode !== undefined) {
+		code += `${i2}\t\ttestMode: ${config.testMode},\n`;
+	}
+	if (config?.smsAuthentication) {
+		code += `${i2}\t\tsmsAuthentication: true,\n`;
+	}
+	if ((config?.ccEmailAddresses ?? []).length > 0) {
+		code += `${i2}\t\tccEmailAddresses: ${JSON.stringify(config!.ccEmailAddresses)},\n`;
+	}
+	code += `${i2}\t\tsigners: _sigSigners,\n`;
+	code += `${i2}\t\tcustomFields: _sigCustomFields,\n`;
+	code += `${i2}\t},\n`;
+	code += `${i2}});\n`;
+	code += `${i1}});\n`;
+
+	// Wait for "signature_signed" event sent by webhook handler.
+	// Uses suffix "sig" to give this progress step a unique step.do name,
+	// since the acceptance phase already claimed "_prog-{nodeId}-waiting_event-accept".
+	code += generateProgressCall(
+		node,
+		i1,
+		"waiting_event",
+		"signature_signed",
+		retryVarName,
+		undefined,
+		"sig",
+	);
+	code += `${i1}${rawVar} = await step.waitForEvent<{ signed?: boolean; reason?: string; signatureRequestId: string; documentId?: string }>(\n`;
+	code += `${i1}\t${stepNameExpr},\n`;
+	code += `${i1}\t{\n`;
+	code += `${i1}\t\ttype: "signature_signed",\n`;
+	code += `${i1}\t\ttimeout: "${timeoutStr}",\n`;
+	code += `${i1}\t},\n`;
+	code += `${i1});\n`;
+	code += generateCaseObjectCall(node, i1, rawVar, retryVarName);
+
+	// Normalize output inside the accepted branch.
+	// rawVar === null  → timed out waiting for signatures.
 	// payload.signed === false → negative outcome (declined / canceled / errored).
-	// anything else   → positive outcome (all_signed, or legacy events without the field).
-	code += `${indent}{\n`;
-	code += `${indent}\tconst _sigEvtPayload = (${rawVar} as { payload?: { signed?: boolean; reason?: string; signatureRequestId?: string; documentId?: string } } | null)?.payload;\n`;
-	code += `${indent}\tconst _sigFailed = _sigEvtPayload?.signed === false;\n`;
-	code += `${indent}\t${outputVar} = (${rawVar} === null)\n`;
-	code += `${indent}\t\t? { signed: false, timedOut: true, declined: false, canceled: false, errored: false, reason: "timedOut", signatureRequestId: null, documentId: null }\n`;
-	code += `${indent}\t\t: _sigFailed\n`;
-	code += `${indent}\t\t\t? {\n`;
-	code += `${indent}\t\t\t\tsigned: false,\n`;
-	code += `${indent}\t\t\t\ttimedOut: false,\n`;
-	code += `${indent}\t\t\t\tdeclined: _sigEvtPayload?.reason === "declined",\n`;
-	code += `${indent}\t\t\t\tcanceled: _sigEvtPayload?.reason === "canceled",\n`;
-	code += `${indent}\t\t\t\terrored: _sigEvtPayload?.reason === "errored",\n`;
-	code += `${indent}\t\t\t\treason: _sigEvtPayload?.reason ?? null,\n`;
-	code += `${indent}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
-	code += `${indent}\t\t\t\tdocumentId: null,\n`;
-	code += `${indent}\t\t\t}\n`;
-	code += `${indent}\t\t\t: {\n`;
-	code += `${indent}\t\t\t\tsigned: true,\n`;
-	code += `${indent}\t\t\t\ttimedOut: false,\n`;
-	code += `${indent}\t\t\t\tdeclined: false,\n`;
-	code += `${indent}\t\t\t\tcanceled: false,\n`;
-	code += `${indent}\t\t\t\terrored: false,\n`;
-	code += `${indent}\t\t\t\treason: null,\n`;
-	code += `${indent}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
-	code += `${indent}\t\t\t\tdocumentId: _sigEvtPayload?.documentId ?? null,\n`;
-	code += `${indent}\t\t\t};\n`;
+	// anything else   → positive outcome (all_signed).
+	code += `${i1}{\n`;
+	code += `${i1}\tconst _sigEvtPayload = (${rawVar} as { payload?: { signed?: boolean; reason?: string; signatureRequestId?: string; documentId?: string } } | null)?.payload;\n`;
+	code += `${i1}\tconst _sigFailed = _sigEvtPayload?.signed === false;\n`;
+	code += `${i1}\t${outputVar} = (${rawVar} === null)\n`;
+	code += `${i1}\t\t? { signed: false, timedOut: true, rejected: false, declined: false, canceled: false, errored: false, reason: "timedOut", signatureRequestId: null, documentId: null }\n`;
+	code += `${i1}\t\t: _sigFailed\n`;
+	code += `${i1}\t\t\t? {\n`;
+	code += `${i1}\t\t\t\tsigned: false,\n`;
+	code += `${i1}\t\t\t\ttimedOut: false,\n`;
+	code += `${i1}\t\t\t\trejected: false,\n`;
+	code += `${i1}\t\t\t\tdeclined: _sigEvtPayload?.reason === "declined",\n`;
+	code += `${i1}\t\t\t\tcanceled: _sigEvtPayload?.reason === "canceled",\n`;
+	code += `${i1}\t\t\t\terrored: _sigEvtPayload?.reason === "errored",\n`;
+	code += `${i1}\t\t\t\treason: _sigEvtPayload?.reason ?? null,\n`;
+	code += `${i1}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
+	code += `${i1}\t\t\t\tdocumentId: null,\n`;
+	code += `${i1}\t\t\t}\n`;
+	code += `${i1}\t\t\t: {\n`;
+	code += `${i1}\t\t\t\tsigned: true,\n`;
+	code += `${i1}\t\t\t\ttimedOut: false,\n`;
+	code += `${i1}\t\t\t\trejected: false,\n`;
+	code += `${i1}\t\t\t\tdeclined: false,\n`;
+	code += `${i1}\t\t\t\tcanceled: false,\n`;
+	code += `${i1}\t\t\t\terrored: false,\n`;
+	code += `${i1}\t\t\t\treason: null,\n`;
+	code += `${i1}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
+	code += `${i1}\t\t\t\tdocumentId: _sigEvtPayload?.documentId ?? null,\n`;
+	code += `${i1}\t\t\t};\n`;
+	code += `${i1}}\n`;
+
+	// Else branch: operator rejected or timed-out at the acceptance phase.
+	code += `${indent}} else {\n`;
+	code += generateCaseObjectCall(node, i1, acceptVar, retryVarName);
+	code += `${i1}${outputVar} = (${acceptVar} === null)\n`;
+	code += `${i1}\t? { signed: false, timedOut: true, rejected: false, declined: false, canceled: false, errored: false, reason: "timedOut", signatureRequestId: null, documentId: null }\n`;
+	code += `${i1}\t: { signed: false, timedOut: false, rejected: true, declined: false, canceled: false, errored: false, reason: "rejected", signatureRequestId: null, documentId: null };\n`;
 	code += `${indent}}\n`;
 
 	code += generateProgressCall(
@@ -2489,11 +2543,26 @@ export function generateWorkflowCode(
 		for (const node of challengeNodes) {
 			const outputVar = getVarName(node.id);
 			const rawVar = `_${outputVar}Evt`;
-			code += `\t\tlet ${rawVar}: unknown = null;\n`;
-			// Exposed output object referenced from downstream nodes via
-			// `${alias.accepted}`, `${alias.timedOut}`, etc. Hoisted so branches
-			// and the convergence path can reference it safely.
-			code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
+			const isSignature =
+				(node.config as { challengeType?: string } | undefined)
+					?.challengeType === "signature";
+			if (isSignature) {
+				// Signature challenges have two waitForEvent calls: one for operator
+				// acceptance and one for the actual signature event. Both variables
+				// must be hoisted so they are visible across if/else branches.
+				const acceptVar = `_${outputVar}AcceptEvt`;
+				code += `\t\tlet ${acceptVar}: unknown = null;\n`;
+				code += `\t\tlet ${rawVar}: unknown = null;\n`;
+				// The signature challenge output has different fields from a plain
+				// acceptance challenge (signed, rejected, declined, etc.).
+				code += `\t\tlet ${outputVar}: { signed: boolean; timedOut: boolean; rejected: boolean; declined: boolean; canceled: boolean; errored: boolean; reason: string | null; signatureRequestId: string | null; documentId: string | null } = { signed: false, timedOut: false, rejected: false, declined: false, canceled: false, errored: false, reason: null, signatureRequestId: null, documentId: null };\n`;
+			} else {
+				code += `\t\tlet ${rawVar}: unknown = null;\n`;
+				// Exposed output object referenced from downstream nodes via
+				// `${alias.accepted}`, `${alias.timedOut}`, etc. Hoisted so branches
+				// and the convergence path can reference it safely.
+				code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
+			}
 		}
 		code += `\n`;
 	}
