@@ -791,6 +791,9 @@ export const translations = {
 			edgeShortcutClick: "• Click: Select arrow",
 			edgeShortcutShiftClick: "• Shift + Click: Delete arrow",
 			edgeShortcutDelete: "• Delete: Delete selected",
+			dropboxSignConfigTitle: "Dropbox Sign Configuration",
+			dropboxSignRefreshTooltip:
+				"Reload templates and fields from Dropbox Sign",
 		},
 		publishModal: {
 			title: "Publish Workflow",
@@ -1755,6 +1758,9 @@ export const translations = {
 			edgeShortcutClick: "• Click: Seleccionar flecha",
 			edgeShortcutShiftClick: "• Shift + Click: Eliminar flecha",
 			edgeShortcutDelete: "• Delete: Eliminar seleccionada",
+			dropboxSignConfigTitle: "Configuración Dropbox Sign",
+			dropboxSignRefreshTooltip:
+				"Recargar templates y campos desde Dropbox Sign",
 		},
 
 		// Publish Modal
