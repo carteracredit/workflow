@@ -1,3 +1,10 @@
+# [1.3.0-rc.16](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.15...v1.3.0-rc.16) (2026-04-29)
+
+
+### Features
+
+* enhance signature challenge workflow code generation ([9f2b454](https://github.com/carteracredit/workflow/commit/9f2b45493fb927bb66cd2a55ba20c651eeb7ea74))
+
 # [1.3.0-rc.15](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.14...v1.3.0-rc.15) (2026-04-29)
 
 
