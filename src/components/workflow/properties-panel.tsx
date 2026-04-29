@@ -3622,13 +3622,13 @@ export function PropertiesPanel({
 								<div className="space-y-4 rounded-md border border-amber-200 bg-amber-50/40 p-3 dark:border-amber-800 dark:bg-amber-950/20">
 									<div className="flex items-center justify-between">
 										<p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-											Configuración Dropbox Sign
+											{t("propertiesPanel.dropboxSignConfigTitle")}
 										</p>
 										<button
 											type="button"
 											onClick={handleRefreshAll}
 											disabled={isRefreshingTemplates || isLoadingTemplate}
-											title="Recargar templates y campos desde Dropbox Sign"
+											title={t("propertiesPanel.dropboxSignRefreshTooltip")}
 											className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-600 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-900/40"
 										>
 											<RefreshCw
