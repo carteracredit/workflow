@@ -101,6 +101,7 @@ function makeHooksReturn(
 	opts: {
 		isLoading?: boolean;
 		error?: Error;
+		totalCountMode?: "filtered" | "global";
 	} = {},
 ) {
 	mockUseWorkflows.mockImplementation(
@@ -143,15 +144,17 @@ function makeHooksReturn(
 				);
 			}
 			const count = filtered.length;
+			const globalTotal = workflows.length;
+			const totalCount = opts.totalCountMode === "global" ? globalTotal : count;
 			const perPage = params?.per_page ?? 20;
 			const ri = {
 				page: params?.page ?? 1,
 				per_page: perPage,
 				count,
-				total_count: count,
+				total_count: totalCount,
 			};
-			// For per_page: 1 stat calls, just return count/resultInfo
-			const page = perPage === 1 ? [] : filtered.slice(0, perPage);
+			// Stat calls only rely on resultInfo in this test suite.
+			const page = filtered.slice(0, perPage);
 			return {
 				workflows: page,
 				resultInfo: ri,
@@ -335,6 +338,29 @@ describe("WorkflowList – chips de estadísticas", () => {
 		expect(screen.getByText("Publicados")).toBeInTheDocument();
 		expect(screen.getByText("Borradores")).toBeInTheDocument();
 		expect(screen.getByText("Archivados")).toBeInTheDocument();
+	});
+
+	it("usa conteos por estado aunque total_count sea global", () => {
+		makeHooksReturn(
+			[
+				makeWorkflow({ id: "wf-uuid-001", status: "published" }),
+				makeWorkflow({ id: "wf-uuid-002", status: "published" }),
+				makeWorkflow({ id: "wf-uuid-003", status: "draft" }),
+				makeWorkflow({ id: "wf-uuid-004", status: "archived" }),
+			],
+			{ totalCountMode: "global" },
+		);
+		render(<WorkflowList />);
+
+		const totalChip = screen.getByRole("button", { name: /Total/ });
+		const publishedChip = screen.getByRole("button", { name: /Publicados/ });
+		const draftsChip = screen.getByRole("button", { name: /Borradores/ });
+		const archivedChip = screen.getByRole("button", { name: /Archivados/ });
+
+		expect(within(totalChip).getByText("4")).toBeInTheDocument();
+		expect(within(publishedChip).getByText("2")).toBeInTheDocument();
+		expect(within(draftsChip).getByText("1")).toBeInTheDocument();
+		expect(within(archivedChip).getByText("1")).toBeInTheDocument();
 	});
 
 	it("los chips son clicables y actúan como filtro de estado", () => {

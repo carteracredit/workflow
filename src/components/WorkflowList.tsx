@@ -531,6 +531,7 @@ function CreateWorkflowDialog({
 
 type SearchScope = "all" | "name" | "description";
 type VersionFilter = "all" | "unpublished" | number;
+const STATS_PER_PAGE = 1000;
 
 export function WorkflowList() {
 	const router = useRouter();
@@ -553,19 +554,21 @@ export function WorkflowList() {
 		per_page: perPage,
 	});
 
-	// Lightweight stat calls (per_page=1) to get real total counts per status
-	const { resultInfo: statsAll } = useWorkflows({ per_page: 1 });
+	// Lightweight stat calls to derive counts per status for the chips.
+	// Some backends return `total_count` as global total regardless of status,
+	// so we intentionally read `count` from a large first page.
+	const { resultInfo: statsAll } = useWorkflows({ per_page: STATS_PER_PAGE });
 	const { resultInfo: statsPublished } = useWorkflows({
 		status: "published",
-		per_page: 1,
+		per_page: STATS_PER_PAGE,
 	});
 	const { resultInfo: statsDraft } = useWorkflows({
 		status: "draft",
-		per_page: 1,
+		per_page: STATS_PER_PAGE,
 	});
 	const { resultInfo: statsArchived } = useWorkflows({
 		status: "archived",
-		per_page: 1,
+		per_page: STATS_PER_PAGE,
 	});
 
 	// Client-side filter: only versionFilter applies (search/status handled server-side)
@@ -585,9 +588,9 @@ export function WorkflowList() {
 	const stats = useMemo(() => {
 		return {
 			total: statsAll?.total_count ?? 0,
-			published: statsPublished?.total_count ?? 0,
-			draft: statsDraft?.total_count ?? 0,
-			archived: statsArchived?.total_count ?? 0,
+			published: statsPublished?.count ?? 0,
+			draft: statsDraft?.count ?? 0,
+			archived: statsArchived?.count ?? 0,
 		};
 	}, [statsAll, statsPublished, statsDraft, statsArchived]);
 
