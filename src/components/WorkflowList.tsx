@@ -55,7 +55,10 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useWorkflows } from "@/lib/workflow-api/hooks";
+import {
+	useWorkflows,
+	useWorkflowStatusCounts,
+} from "@/lib/workflow-api/hooks";
 import {
 	createWorkflow,
 	deleteWorkflow,
@@ -531,7 +534,6 @@ function CreateWorkflowDialog({
 
 type SearchScope = "all" | "name" | "description";
 type VersionFilter = "all" | "unpublished" | number;
-const STATS_PER_PAGE = 1000;
 
 export function WorkflowList() {
 	const router = useRouter();
@@ -554,22 +556,12 @@ export function WorkflowList() {
 		per_page: perPage,
 	});
 
-	// Lightweight stat calls to derive counts per status for the chips.
-	// Some backends return `total_count` as global total regardless of status,
-	// so we intentionally read `count` from a large first page.
-	const { resultInfo: statsAll } = useWorkflows({ per_page: STATS_PER_PAGE });
-	const { resultInfo: statsPublished } = useWorkflows({
-		status: "published",
-		per_page: STATS_PER_PAGE,
-	});
-	const { resultInfo: statsDraft } = useWorkflows({
-		status: "draft",
-		per_page: STATS_PER_PAGE,
-	});
-	const { resultInfo: statsArchived } = useWorkflows({
-		status: "archived",
-		per_page: STATS_PER_PAGE,
-	});
+	const {
+		counts: stats,
+		isLoading: isStatsLoading,
+		error: statsError,
+		mutate: mutateStats,
+	} = useWorkflowStatusCounts();
 
 	// Client-side filter: only versionFilter applies (search/status handled server-side)
 	const filtered = useMemo(() => {
@@ -583,16 +575,6 @@ export function WorkflowList() {
 			return matchesVersion;
 		});
 	}, [workflows, versionFilter]);
-
-	// Stats
-	const stats = useMemo(() => {
-		return {
-			total: statsAll?.total_count ?? 0,
-			published: statsPublished?.count ?? 0,
-			draft: statsDraft?.count ?? 0,
-			archived: statsArchived?.count ?? 0,
-		};
-	}, [statsAll, statsPublished, statsDraft, statsArchived]);
 
 	// Pagination helpers
 	const totalPages = resultInfo
@@ -639,6 +621,7 @@ export function WorkflowList() {
 					: t("workflowList.toastRestored").replace("{name}", wf.name),
 			);
 			mutate();
+			mutateStats();
 		} catch (err) {
 			toast.error(t("workflowList.toastArchiveError"), {
 				description: extractApiErrorMessage(err),
@@ -654,6 +637,7 @@ export function WorkflowList() {
 			await deleteWorkflow(wf.id);
 			toast.success(t("workflowList.toastDeleted").replace("{name}", wf.name));
 			mutate();
+			mutateStats();
 		} catch (err) {
 			toast.error(t("workflowList.toastDeleteError"), {
 				description: extractApiErrorMessage(err),
@@ -669,6 +653,7 @@ export function WorkflowList() {
 			const cloned = await cloneWorkflow(wf.id);
 			toast.success(t("workflowList.toastCloned").replace("{name}", wf.name));
 			mutate();
+			mutateStats();
 			router.push(`/editor/${cloned.id}`);
 		} catch (err) {
 			toast.error(t("workflowList.toastCloneError"), {
@@ -681,7 +666,8 @@ export function WorkflowList() {
 
 	// Skeleton until we have received a response (data defined) or error. Show empty
 	// state only when loading is done and data is available (possibly empty array).
-	const showSkeleton = !error && resultInfo === null && isLoading;
+	const showSkeleton =
+		!error && !statsError && resultInfo === null && isLoading && isStatsLoading;
 
 	if (showSkeleton) {
 		return <WorkflowListSkeleton />;
@@ -891,7 +877,14 @@ export function WorkflowList() {
 						<div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
 							<AlertCircle className="h-8 w-8 text-destructive" />
 							<p className="text-sm">{t("workflowList.errorLoading")}</p>
-							<Button variant="outline" size="sm" onClick={() => mutate()}>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									mutate();
+									mutateStats();
+								}}
+							>
 								{t("common.retry")}
 							</Button>
 						</div>

@@ -12,6 +12,13 @@ import type {
 	WorkflowFlag,
 } from "./types";
 
+export interface WorkflowStatusCounts {
+	total: number;
+	published: number;
+	draft: number;
+	archived: number;
+}
+
 // ---------------------------------------------------------------------------
 // SWR key builders
 // ---------------------------------------------------------------------------
@@ -66,6 +73,35 @@ async function apiListFetcher<T>(
 	};
 }
 
+async function workflowStatusCountsFetcher(): Promise<WorkflowStatusCounts> {
+	const allWorkflows: Workflow[] = [];
+	let page = 1;
+	let totalPages = 1;
+
+	while (page <= totalPages) {
+		const { result, resultInfo } = await apiListFetcher<Workflow>(
+			workflowsKey({ page }),
+		);
+		if (page === 1) {
+			const safePerPage = Math.max(1, resultInfo.per_page);
+			totalPages = Math.max(1, Math.ceil(resultInfo.total_count / safePerPage));
+		}
+		allWorkflows.push(...result);
+		page += 1;
+	}
+
+	return allWorkflows.reduce<WorkflowStatusCounts>(
+		(acc, wf) => {
+			acc.total += 1;
+			if (wf.status === "published") acc.published += 1;
+			else if (wf.status === "draft") acc.draft += 1;
+			else if (wf.status === "archived") acc.archived += 1;
+			return acc;
+		},
+		{ total: 0, published: 0, draft: 0, archived: 0 },
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Hooks
 // ---------------------------------------------------------------------------
@@ -90,6 +126,27 @@ export function useWorkflows(params?: {
 	return {
 		workflows: data?.result ?? [],
 		resultInfo: data?.resultInfo ?? null,
+		isLoading,
+		error,
+		mutate,
+	};
+}
+
+/**
+ * Hook to compute global workflow counts per status.
+ * It fetches all pages from `/workflows` and derives counts from records,
+ * avoiding reliance on backend-specific `total_count` semantics for filtered queries.
+ */
+export function useWorkflowStatusCounts() {
+	const key = `${getWorkflowServiceUrl()}/workflows::__status_counts`;
+
+	const { data, error, isLoading, mutate } = useSWR<WorkflowStatusCounts>(
+		key,
+		workflowStatusCountsFetcher,
+	);
+
+	return {
+		counts: data ?? { total: 0, published: 0, draft: 0, archived: 0 },
 		isLoading,
 		error,
 		mutate,

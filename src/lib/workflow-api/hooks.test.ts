@@ -24,6 +24,7 @@ vi.mock("@/lib/workflow-api/http", () => ({
 import useSWR from "swr";
 import {
 	useWorkflows,
+	useWorkflowStatusCounts,
 	useWorkflow,
 	useWorkflowVersions,
 	useWorkflowFlags,
@@ -134,6 +135,61 @@ describe("useWorkflows", () => {
 
 		const { result } = renderHook(() => useWorkflows());
 
+		expect(result.current.mutate).toBe(mockMutate);
+	});
+});
+
+describe("useWorkflowStatusCounts", () => {
+	it("passes status-count key to SWR", () => {
+		mockSWRReturn<
+			| { total: number; published: number; draft: number; archived: number }
+			| undefined
+		>(undefined);
+
+		renderHook(() => useWorkflowStatusCounts());
+
+		const key = mockUseSWR.mock.calls[0][0];
+		expect(key).toBe(`${BASE}/workflows::__status_counts`);
+	});
+
+	it("returns zero counts when data is undefined", () => {
+		mockSWRReturn<
+			| { total: number; published: number; draft: number; archived: number }
+			| undefined
+		>(undefined);
+
+		const { result } = renderHook(() => useWorkflowStatusCounts());
+
+		expect(result.current.counts).toEqual({
+			total: 0,
+			published: 0,
+			draft: 0,
+			archived: 0,
+		});
+	});
+
+	it("returns provided counts and forwards mutate/error/loading", () => {
+		const err = new Error("stats failed");
+		mockSWRReturn(
+			{
+				total: 8,
+				published: 3,
+				draft: 4,
+				archived: 1,
+			},
+			{ error: err, isLoading: true },
+		);
+
+		const { result } = renderHook(() => useWorkflowStatusCounts());
+
+		expect(result.current.counts).toEqual({
+			total: 8,
+			published: 3,
+			draft: 4,
+			archived: 1,
+		});
+		expect(result.current.error).toBe(err);
+		expect(result.current.isLoading).toBe(true);
 		expect(result.current.mutate).toBe(mockMutate);
 	});
 });

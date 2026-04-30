@@ -55,8 +55,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockUseWorkflows = vi.fn();
+const mockUseWorkflowStatusCounts = vi.fn();
 vi.mock("@/lib/workflow-api/hooks", () => ({
 	useWorkflows: (...args: unknown[]) => mockUseWorkflows(...args),
+	useWorkflowStatusCounts: (...args: unknown[]) =>
+		mockUseWorkflowStatusCounts(...args),
 }));
 
 const mockCreateWorkflow = vi.fn();
@@ -91,6 +94,13 @@ const DEFAULT_RI = (count: number) => ({
 	total_count: count,
 });
 
+const DEFAULT_COUNTS = {
+	total: 0,
+	published: 0,
+	draft: 0,
+	archived: 0,
+};
+
 /**
  * Configure `useWorkflows` mock to simulate server-side filtering.
  * The mock inspects `status` and `search` params and filters `workflows`
@@ -102,8 +112,26 @@ function makeHooksReturn(
 		isLoading?: boolean;
 		error?: Error;
 		totalCountMode?: "filtered" | "global";
+		stats?: {
+			counts?: typeof DEFAULT_COUNTS;
+			isLoading?: boolean;
+			error?: Error;
+		};
 	} = {},
 ) {
+	const counts = opts.stats?.counts ?? {
+		total: workflows.length,
+		published: workflows.filter((w) => w.status === "published").length,
+		draft: workflows.filter((w) => w.status === "draft").length,
+		archived: workflows.filter((w) => w.status === "archived").length,
+	};
+	mockUseWorkflowStatusCounts.mockReturnValue({
+		counts,
+		isLoading: opts.stats?.isLoading ?? false,
+		error: opts.stats?.error,
+		mutate: mockMutate,
+	});
+
 	mockUseWorkflows.mockImplementation(
 		(params?: {
 			status?: string;
@@ -154,7 +182,9 @@ function makeHooksReturn(
 				total_count: totalCount,
 			};
 			// Stat calls only rely on resultInfo in this test suite.
-			const page = filtered.slice(0, perPage);
+			const pageNumber = params?.page ?? 1;
+			const start = (pageNumber - 1) * perPage;
+			const page = filtered.slice(start, start + perPage);
 			return {
 				workflows: page,
 				resultInfo: ri,
@@ -204,7 +234,7 @@ afterEach(() => {
 
 describe("WorkflowList – estados de carga y error", () => {
 	it("muestra skeleton mientras carga", () => {
-		makeHooksReturn([], { isLoading: true });
+		makeHooksReturn([], { isLoading: true, stats: { isLoading: true } });
 		render(<WorkflowList />);
 		expect(
 			screen.getByRole("status", { name: "Cargando workflows" }),
@@ -227,7 +257,7 @@ describe("WorkflowList – estados de carga y error", () => {
 		makeHooksReturn([], { error: new Error("network error") });
 		render(<WorkflowList />);
 		fireEvent.click(screen.getByText("Reintentar"));
-		expect(mockMutate).toHaveBeenCalledTimes(1);
+		expect(mockMutate).toHaveBeenCalledTimes(2);
 	});
 
 	it("muestra estado vacío cuando no hay workflows", () => {
