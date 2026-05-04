@@ -199,3 +199,78 @@ export const SignatureChallengeEmpty: Story = {
 		selectedEdges: [],
 	},
 };
+
+// ─── API Node Stories ──────────────────────────────────────────────────────────
+
+const apiNodeBase: WorkflowNode = {
+	id: "api-1",
+	type: "API",
+	title: "Llamada API Externa",
+	description: "Consulta a servicio externo",
+	roles: [],
+	config: {
+		url: "https://api.example.com/resource",
+		method: "POST",
+	},
+	staleTimeout: null,
+	position: { x: 150, y: 150 },
+	groupId: null,
+};
+
+export const ApiNodeXmlTemplateValid: Story = {
+	name: "API — Body: XML Template (válido)",
+	args: {
+		selectedNodes: [
+			{
+				...apiNodeBase,
+				config: {
+					...apiNodeBase.config,
+					bodyConfig: {
+						mode: "raw-xml",
+						rawXml:
+							"<request>\n  <loanId>${node-form.loanId}</loanId>\n  <amount>1000</amount>\n</request>",
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const ApiNodeXmlTemplateMalformed: Story = {
+	name: "API — Body: XML Template (mal formado)",
+	args: {
+		selectedNodes: [
+			{
+				...apiNodeBase,
+				config: {
+					...apiNodeBase.config,
+					bodyConfig: {
+						mode: "raw-xml",
+						rawXml: "<request><loanId>123</loanId>",
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const ApiNodeJsonTemplateInvalid: Story = {
+	name: "API — Body: JSON Template (inválido)",
+	args: {
+		selectedNodes: [
+			{
+				...apiNodeBase,
+				config: {
+					...apiNodeBase.config,
+					bodyConfig: {
+						mode: "raw-json",
+						rawJson: '{"loanId": }',
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};

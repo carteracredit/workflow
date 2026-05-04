@@ -104,6 +104,7 @@ import {
 	findTokenOccurrences,
 	type TokenOccurrence,
 } from "@/lib/workflow/migrate-tokens";
+import { isValidJson, isWellFormedXml } from "@/lib/workflow/xml-validation";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -2735,6 +2736,7 @@ export function PropertiesPanel({
 														["none", "apiBodyModeNone"],
 														["field-mapping", "apiBodyModeFieldMapping"],
 														["raw-json", "apiBodyModeRawJson"],
+														["raw-xml", "apiBodyModeRawXml"],
 													] as const
 												).map(([mode, labelKey]) => (
 													<Button
@@ -2782,13 +2784,16 @@ export function PropertiesPanel({
 													});
 
 												if (bc.mode === "raw-json") {
+													const jsonValue = bc.rawJson ?? "";
+													const jsonInvalid =
+														jsonValue.trim() !== "" && !isValidJson(jsonValue);
 													return (
 														<div className="space-y-1">
 															<Label>
 																{t("propertiesPanel.apiBodyRawJsonLabel")}
 															</Label>
 															<Textarea
-																value={bc.rawJson ?? ""}
+																value={jsonValue}
 																onChange={(e) =>
 																	updateBody({ rawJson: e.target.value })
 																}
@@ -2796,11 +2801,60 @@ export function PropertiesPanel({
 																	"propertiesPanel.apiBodyRawJsonPlaceholder",
 																)}
 																rows={4}
-																className="font-mono text-xs resize-none"
+																aria-invalid={jsonInvalid}
+																className={cn(
+																	"font-mono text-xs resize-none",
+																	jsonInvalid &&
+																		"border-destructive focus-visible:ring-destructive",
+																)}
 															/>
-															<p className="text-xs text-muted-foreground">
-																{t("propertiesPanel.apiBodyRawJsonDesc")}
-															</p>
+															{jsonInvalid ? (
+																<p className="text-xs text-destructive">
+																	{t("propertiesPanel.apiBodyRawJsonError")}
+																</p>
+															) : (
+																<p className="text-xs text-muted-foreground">
+																	{t("propertiesPanel.apiBodyRawJsonDesc")}
+																</p>
+															)}
+														</div>
+													);
+												}
+												if (bc.mode === "raw-xml") {
+													const xmlValue = bc.rawXml ?? "";
+													const xmlInvalid =
+														xmlValue.trim() !== "" &&
+														!isWellFormedXml(xmlValue);
+													return (
+														<div className="space-y-1">
+															<Label>
+																{t("propertiesPanel.apiBodyRawXmlLabel")}
+															</Label>
+															<Textarea
+																value={xmlValue}
+																onChange={(e) =>
+																	updateBody({ rawXml: e.target.value })
+																}
+																placeholder={t(
+																	"propertiesPanel.apiBodyRawXmlPlaceholder",
+																)}
+																rows={4}
+																aria-invalid={xmlInvalid}
+																className={cn(
+																	"font-mono text-xs resize-none",
+																	xmlInvalid &&
+																		"border-destructive focus-visible:ring-destructive",
+																)}
+															/>
+															{xmlInvalid ? (
+																<p className="text-xs text-destructive">
+																	{t("propertiesPanel.apiBodyRawXmlError")}
+																</p>
+															) : (
+																<p className="text-xs text-muted-foreground">
+																	{t("propertiesPanel.apiBodyRawXmlDesc")}
+																</p>
+															)}
 														</div>
 													);
 												}

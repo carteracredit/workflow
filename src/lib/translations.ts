@@ -647,12 +647,20 @@ export const translations = {
 			apiBodyTitle: "Request Body",
 			apiBodyModeNone: "No Body",
 			apiBodyModeRawJson: "JSON Template",
+			apiBodyModeRawXml: "XML Template",
 			apiBodyModeFieldMapping: "Field Mapping",
 			apiBodyRawJsonLabel: "JSON Template",
 			apiBodyRawJsonPlaceholder:
 				'{"loanId": "${node-123.loanId}", "amount": 1000}',
 			apiBodyRawJsonDesc:
 				"Use ${nodeId.property} to reference upstream node data.",
+			apiBodyRawJsonError: "Invalid JSON",
+			apiBodyRawXmlLabel: "XML Template",
+			apiBodyRawXmlPlaceholder:
+				"<request><loanId>${node-123.loanId}</loanId></request>",
+			apiBodyRawXmlDesc:
+				"Use ${nodeId.property} to reference upstream node data.",
+			apiBodyRawXmlError: "Malformed XML",
 			apiBodyFieldMappingLabel: "Field Mappings",
 			apiBodyAddMappingBtn: "Add Field",
 			apiBodySourceLabel: "Source",
@@ -1616,12 +1624,20 @@ export const translations = {
 			apiBodyTitle: "Cuerpo de la Solicitud",
 			apiBodyModeNone: "Sin Body",
 			apiBodyModeRawJson: "Template JSON",
+			apiBodyModeRawXml: "Plantilla XML",
 			apiBodyModeFieldMapping: "Mapeo de Campos",
 			apiBodyRawJsonLabel: "Template JSON",
 			apiBodyRawJsonPlaceholder:
 				'{"loanId": "${node-123.loanId}", "amount": 1000}',
 			apiBodyRawJsonDesc:
 				"Usa ${nodeId.property} para referenciar datos de nodos anteriores.",
+			apiBodyRawJsonError: "JSON inválido",
+			apiBodyRawXmlLabel: "Plantilla XML",
+			apiBodyRawXmlPlaceholder:
+				"<request><loanId>${node-123.loanId}</loanId></request>",
+			apiBodyRawXmlDesc:
+				"Usa ${nodeId.property} para referenciar datos de nodos anteriores.",
+			apiBodyRawXmlError: "XML mal formado",
 			apiBodyFieldMappingLabel: "Mapeo de Campos",
 			apiBodyAddMappingBtn: "Agregar Campo",
 			apiBodySourceLabel: "Origen",
