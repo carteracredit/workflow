@@ -75,7 +75,7 @@ export interface APIHeaderEntry {
 }
 
 // Request body configuration
-export type APIBodyMode = "none" | "raw-json" | "field-mapping";
+export type APIBodyMode = "none" | "raw-json" | "raw-xml" | "field-mapping";
 
 export interface APIBodyFieldMapping {
 	sourceExpression: string; // ${nodeId.prop} or literal
@@ -85,6 +85,7 @@ export interface APIBodyFieldMapping {
 export interface APIBodyConfig {
 	mode: APIBodyMode;
 	rawJson?: string;
+	rawXml?: string;
 	fieldMappings?: APIBodyFieldMapping[];
 }
 

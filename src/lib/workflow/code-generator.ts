@@ -20,6 +20,7 @@ import {
 	validateConditionExpression,
 } from "./validate-code";
 import { buildAliasMap, isLegacyNodeId } from "./node-alias";
+import { isValidJson, isWellFormedXml } from "./xml-validation";
 
 /**
  * Configuration for code generation
@@ -788,6 +789,25 @@ function generateAPIStep(
 
 	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
 
+	// Validate body content at code-generation time (build-time check)
+	if (hasBody && bodyConfig) {
+		const bodyMode = bodyConfig.mode ?? "none";
+		if (bodyMode === "raw-json" && bodyConfig.rawJson) {
+			if (!isValidJson(bodyConfig.rawJson)) {
+				throw new Error(
+					`API node "${node.config.label ?? node.id}": invalid JSON in request body`,
+				);
+			}
+		}
+		if (bodyMode === "raw-xml" && bodyConfig.rawXml) {
+			if (!isWellFormedXml(bodyConfig.rawXml)) {
+				throw new Error(
+					`API node "${node.config.label ?? node.id}": malformed XML in request body`,
+				);
+			}
+		}
+	}
+
 	// Build headers
 	const hasCustomHeaders = customHeaders.length > 0;
 	const hasAuthHeader =
@@ -795,7 +815,10 @@ function generateAPIStep(
 	if (hasAuthHeader || hasCustomHeaders || hasBody) {
 		code += `${indent}\tconst headers: Record<string, string> = {};\n`;
 		if (hasBody) {
-			code += `${indent}\theaders["Content-Type"] = "application/json";\n`;
+			const bodyMode = bodyConfig?.mode ?? "none";
+			const contentType =
+				bodyMode === "raw-xml" ? "application/xml" : "application/json";
+			code += `${indent}\theaders["Content-Type"] = "${contentType}";\n`;
 		}
 		// Auth header
 		if (authConfig?.type === "bearer" && authConfig.bearerToken) {
@@ -844,6 +867,15 @@ function generateAPIStep(
 			// ${nodeId.prop} and ${secret.VAR} refs (both mapped via
 			// expandVariablePath so secrets resolve to this.env.VAR).
 			const dehyphenated = bodyConfig.rawJson.replace(
+				/\$\{([^}]+)\}/g,
+				(_, path: string) => `\${${expandVariablePath(path)}}`,
+			);
+			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
+		} else if (mode === "raw-xml" && bodyConfig?.rawXml) {
+			// Same backtick strategy as raw-json: preserves XML angle brackets and
+			// allows ${nodeId.prop} / ${secret.VAR} interpolation.
+			const dehyphenated = bodyConfig.rawXml.replace(
 				/\$\{([^}]+)\}/g,
 				(_, path: string) => `\${${expandVariablePath(path)}}`,
 			);

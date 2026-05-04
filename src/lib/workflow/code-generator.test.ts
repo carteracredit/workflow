@@ -4960,3 +4960,130 @@ describe("generateWorkflowCode — Signature Challenge branching", () => {
 		expect(result.code).not.toMatch(/if\s*\(\S+\.signed\)/);
 	});
 });
+
+describe("generateWorkflowCode – API body: raw-xml", () => {
+	it("generates raw XML body with Content-Type: application/xml", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "raw-xml",
+				rawXml: "<request><loanId>12345</loanId></request>",
+			},
+		});
+		expect(result.code).toContain(
+			'headers["Content-Type"] = "application/xml"',
+		);
+		expect(result.code).toContain("body:");
+		expect(result.code).toContain("<loanId>12345</loanId>");
+	});
+
+	it("does not set application/json when mode is raw-xml", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "raw-xml",
+				rawXml: "<root/>",
+			},
+		});
+		expect(result.code).not.toContain("application/json");
+		expect(result.code).toContain("application/xml");
+	});
+
+	it("expands ${node-X.prop} tokens inside raw XML body", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "raw-xml",
+				rawXml: "<request><id>${node-123.id}</id></request>",
+			},
+		});
+		expect(result.code).toContain("${node_123.id}");
+		expect(result.code).not.toContain("${node-123.id}");
+	});
+
+	it("expands ${secret.VAR} tokens inside raw XML body", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "raw-xml",
+				rawXml: "<auth><key>${secret.API_KEY}</key></auth>",
+			},
+		});
+		expect(result.code).toContain("${this.env.API_KEY}");
+		expect(result.code).not.toContain("secret.API_KEY");
+	});
+
+	it("throws at code-generation time for malformed XML", () => {
+		expect(() =>
+			genApi({
+				method: "POST",
+				bodyConfig: {
+					mode: "raw-xml",
+					rawXml: "<unclosed>",
+				},
+			}),
+		).toThrow(/malformed XML/i);
+	});
+
+	it("throws at code-generation time for invalid JSON in raw-json mode", () => {
+		expect(() =>
+			genApi({
+				method: "POST",
+				bodyConfig: {
+					mode: "raw-json",
+					rawJson: '{"broken": }',
+				},
+			}),
+		).toThrow(/invalid JSON/i);
+	});
+
+	it("does not throw for raw-json with workflow tokens that become valid after substitution", () => {
+		expect(() =>
+			genApi({
+				method: "POST",
+				bodyConfig: {
+					mode: "raw-json",
+					rawJson: '{"loanId": "${node-1.loanId}", "amount": 100}',
+				},
+			}),
+		).not.toThrow();
+	});
+
+	it("does not throw for raw-xml with workflow tokens", () => {
+		expect(() =>
+			genApi({
+				method: "POST",
+				bodyConfig: {
+					mode: "raw-xml",
+					rawXml: "<req><id>${node-1.id}</id></req>",
+				},
+			}),
+		).not.toThrow();
+	});
+
+	it("uses application/json for raw-json mode", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "raw-json",
+				rawJson: '{"a": 1}',
+			},
+		});
+		expect(result.code).toContain(
+			'headers["Content-Type"] = "application/json"',
+		);
+	});
+
+	it("uses application/json for field-mapping mode", () => {
+		const result = genApi({
+			method: "POST",
+			bodyConfig: {
+				mode: "field-mapping",
+				fieldMappings: [{ sourceExpression: "${node-1.x}", targetKey: "x" }],
+			},
+		});
+		expect(result.code).toContain(
+			'headers["Content-Type"] = "application/json"',
+		);
+	});
+});

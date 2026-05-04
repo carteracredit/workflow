@@ -137,6 +137,12 @@ function migrateNodeConfig(
 		) {
 			dirty = true;
 		}
+		if (
+			typeof bodyConfig.rawXml === "string" &&
+			rewriteField(bodyConfig, "rawXml", aliasMap, reverseMap)
+		) {
+			dirty = true;
+		}
 	}
 
 	// API: auth config fields that may contain ${secret.*} refs (no-op for secrets
