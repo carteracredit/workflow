@@ -1,3 +1,10 @@
+# [1.3.0-rc.17](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.16...v1.3.0-rc.17) (2026-05-04)
+
+
+### Features
+
+* add XML body support in PropertiesPanel and validation logic ([b60d635](https://github.com/carteracredit/workflow/commit/b60d6359c5d93a4583ee3fdb8fe675697f77f502))
+
 # [1.3.0-rc.16](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.15...v1.3.0-rc.16) (2026-04-29)
 
 
