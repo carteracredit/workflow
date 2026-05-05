@@ -251,4 +251,33 @@ describe("PropertiesPanel – API body XML mode", () => {
 		renderPanel(node);
 		expect(screen.queryByText(/json inválido/i)).toBeNull();
 	});
+
+	it("shows variable picker toggle button for raw-json mode", () => {
+		const node = makeNode({
+			config: {
+				url: "https://api.example.com",
+				method: "POST",
+				bodyConfig: { mode: "raw-json", rawJson: '{"a": 1}' },
+			},
+		});
+		renderPanel(node);
+		// Multiple "Variables disponibles" toggles can appear (description + body sections)
+		expect(
+			screen.getAllByText(/variables disponibles/i).length,
+		).toBeGreaterThan(0);
+	});
+
+	it("shows variable picker toggle button for raw-xml mode", () => {
+		const node = makeNode({
+			config: {
+				url: "https://api.example.com",
+				method: "POST",
+				bodyConfig: { mode: "raw-xml", rawXml: "<root/>" },
+			},
+		});
+		renderPanel(node);
+		expect(
+			screen.getAllByText(/variables disponibles/i).length,
+		).toBeGreaterThan(0);
+	});
 });

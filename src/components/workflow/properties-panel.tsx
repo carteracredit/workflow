@@ -333,6 +333,12 @@ export function PropertiesPanel({
 	const [showDescVarPicker, setShowDescVarPicker] = useState(false);
 	const [showDescEsVarPicker, setShowDescEsVarPicker] = useState(false);
 
+	// Refs and state for variable insertion in API body templates
+	const rawJsonTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const rawXmlTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const [showRawJsonVarPicker, setShowRawJsonVarPicker] = useState(false);
+	const [showRawXmlVarPicker, setShowRawXmlVarPicker] = useState(false);
+
 	// Estado local para el input de maxRetries del nodo API
 	const [apiMaxRetriesInput, setApiMaxRetriesInput] = useState<string>("");
 
@@ -669,6 +675,38 @@ export function PropertiesPanel({
 			const token = `\${${path}}`;
 			const next = current.slice(0, start) + token + current.slice(end);
 			onUpdateNode(selectedNode.id, { [field]: next || undefined });
+			requestAnimationFrame(() => {
+				el.focus();
+				const pos = start + token.length;
+				el.setSelectionRange(pos, pos);
+			});
+		},
+		[selectedNode, onUpdateNode],
+	);
+
+	// ── Variable insertion for API body fields (rawJson / rawXml) ──────────
+	const insertVariableIntoBodyConfig = useCallback(
+		(
+			ref: React.RefObject<HTMLTextAreaElement | null>,
+			path: string,
+			field: "rawJson" | "rawXml",
+		) => {
+			if (!selectedNode || !ref.current) return;
+			const el = ref.current;
+			const start = el.selectionStart ?? 0;
+			const end = el.selectionEnd ?? 0;
+			const bc = (selectedNode.config.bodyConfig as
+				| APIBodyConfig
+				| undefined) ?? { mode: "none" };
+			const current = (bc[field] as string | undefined) ?? "";
+			const token = `\${${path}}`;
+			const next = current.slice(0, start) + token + current.slice(end);
+			onUpdateNode(selectedNode.id, {
+				config: {
+					...selectedNode.config,
+					bodyConfig: { ...bc, [field]: next },
+				},
+			});
 			requestAnimationFrame(() => {
 				el.focus();
 				const pos = start + token.length;
@@ -2793,6 +2831,7 @@ export function PropertiesPanel({
 																{t("propertiesPanel.apiBodyRawJsonLabel")}
 															</Label>
 															<Textarea
+																ref={rawJsonTextareaRef}
 																value={jsonValue}
 																onChange={(e) =>
 																	updateBody({ rawJson: e.target.value })
@@ -2817,6 +2856,42 @@ export function PropertiesPanel({
 																	{t("propertiesPanel.apiBodyRawJsonDesc")}
 																</p>
 															)}
+															<div className="rounded-md border border-border/60 overflow-hidden">
+																<button
+																	type="button"
+																	onClick={() =>
+																		setShowRawJsonVarPicker(
+																			!showRawJsonVarPicker,
+																		)
+																	}
+																	className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+																>
+																	<span className="font-medium">
+																		{t("propertiesPanel.availableVarsLabel")}
+																	</span>
+																	<span>
+																		{showRawJsonVarPicker ? "▲" : "▼"}
+																	</span>
+																</button>
+																{showRawJsonVarPicker &&
+																	(upstreamVariableNodes.length > 0 ? (
+																		<VariablePicker
+																			nodes={upstreamVariableNodes}
+																			onSelect={(variable) =>
+																				insertVariableIntoBodyConfig(
+																					rawJsonTextareaRef,
+																					variable.path,
+																					"rawJson",
+																				)
+																			}
+																			className="rounded-none border-0 shadow-none"
+																		/>
+																	) : (
+																		<div className="px-3 py-2 text-xs text-muted-foreground">
+																			{t("propertiesPanel.noVarsAvailable")}
+																		</div>
+																	))}
+															</div>
 														</div>
 													);
 												}
@@ -2831,6 +2906,7 @@ export function PropertiesPanel({
 																{t("propertiesPanel.apiBodyRawXmlLabel")}
 															</Label>
 															<Textarea
+																ref={rawXmlTextareaRef}
 																value={xmlValue}
 																onChange={(e) =>
 																	updateBody({ rawXml: e.target.value })
@@ -2855,6 +2931,38 @@ export function PropertiesPanel({
 																	{t("propertiesPanel.apiBodyRawXmlDesc")}
 																</p>
 															)}
+															<div className="rounded-md border border-border/60 overflow-hidden">
+																<button
+																	type="button"
+																	onClick={() =>
+																		setShowRawXmlVarPicker(!showRawXmlVarPicker)
+																	}
+																	className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+																>
+																	<span className="font-medium">
+																		{t("propertiesPanel.availableVarsLabel")}
+																	</span>
+																	<span>{showRawXmlVarPicker ? "▲" : "▼"}</span>
+																</button>
+																{showRawXmlVarPicker &&
+																	(upstreamVariableNodes.length > 0 ? (
+																		<VariablePicker
+																			nodes={upstreamVariableNodes}
+																			onSelect={(variable) =>
+																				insertVariableIntoBodyConfig(
+																					rawXmlTextareaRef,
+																					variable.path,
+																					"rawXml",
+																				)
+																			}
+																			className="rounded-none border-0 shadow-none"
+																		/>
+																	) : (
+																		<div className="px-3 py-2 text-xs text-muted-foreground">
+																			{t("propertiesPanel.noVarsAvailable")}
+																		</div>
+																	))}
+															</div>
 														</div>
 													);
 												}
