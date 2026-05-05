@@ -1,3 +1,10 @@
+# [1.3.0-rc.18](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.17...v1.3.0-rc.18) (2026-05-05)
+
+
+### Features
+
+* add variable picker for raw JSON and XML modes in PropertiesPanel ([73ebec7](https://github.com/carteracredit/workflow/commit/73ebec7e26810ee7dcf5c38c9e6607c1e7f1dee7))
+
 # [1.3.0-rc.17](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.16...v1.3.0-rc.17) (2026-05-04)
 
 
