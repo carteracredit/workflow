@@ -1,3 +1,10 @@
+# [1.3.0-rc.19](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.18...v1.3.0-rc.19) (2026-05-12)
+
+
+### Features
+
+* integrate Sentry for error tracking and performance monitoring ([33d484d](https://github.com/carteracredit/workflow/commit/33d484ddc9d682f73daec39eb4070e8bc366713c))
+
 # [1.3.0-rc.18](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.17...v1.3.0-rc.18) (2026-05-05)
 
 
