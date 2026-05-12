@@ -42,3 +42,16 @@ export const getEnvironment = (): "dev" | "prod" => {
 	}
 	return "dev";
 };
+
+/**
+ * Gets the Sentry DSN URL from environment variables.
+ * Build-time env var: NEXT_PUBLIC_SENTRY_DSN
+ * @throws Error if NEXT_PUBLIC_SENTRY_DSN is not set
+ */
+export const getSentryDsn = (): string => {
+	const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+	if (!dsn) {
+		throw new Error("NEXT_PUBLIC_SENTRY_DSN is not set");
+	}
+	return dsn;
+};
