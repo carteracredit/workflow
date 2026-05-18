@@ -10,6 +10,7 @@ import type {
 	ChallengeNodeConfig,
 	ChallengeType,
 	PromotionNodeConfig,
+	NLSNodeConfig,
 } from "@/lib/workflow/types";
 import {
 	Play,
@@ -28,6 +29,7 @@ import {
 	ShieldCheck,
 	Shield,
 	BadgePercent,
+	Banknote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
@@ -64,6 +66,7 @@ const NODE_ICONS = {
 	Checkpoint: FlagIcon,
 	Join: Merge,
 	FlagChange: Tag,
+	NLS: Banknote,
 };
 
 export const NODE_BG_COLORS = {
@@ -80,6 +83,7 @@ export const NODE_BG_COLORS = {
 	Checkpoint: "var(--node-bg-checkpoint)",
 	Join: "var(--node-bg-join)",
 	FlagChange: "var(--node-bg-status)",
+	NLS: "var(--node-bg-nls)",
 };
 
 export const NODE_ICON_COLORS = {
@@ -96,6 +100,7 @@ export const NODE_ICON_COLORS = {
 	Checkpoint: "var(--node-icon-checkpoint)",
 	Join: "var(--node-icon-join)",
 	FlagChange: "var(--node-icon-status)",
+	NLS: "var(--node-icon-nls)",
 };
 
 export function NodeRenderer({
@@ -133,6 +138,10 @@ export function NodeRenderer({
 	const promotionConfig = isPromotionNode
 		? (node.config as PromotionNodeConfig | undefined)
 		: undefined;
+	const isNLSNode = node.type === "NLS";
+	const nlsConfig = isNLSNode
+		? (node.config as NLSNodeConfig | undefined)
+		: undefined;
 	const iconBackgroundColor = isSafeCheckpoint
 		? "var(--node-safe-icon-bg)"
 		: baseIconBackground;
@@ -144,7 +153,7 @@ export function NodeRenderer({
 	// Solo iluminar si el nodo está seleccionado
 	const isAPIWithCheckpoint =
 		selected &&
-		node.type === "API" &&
+		(node.type === "API" || node.type === "NLS") &&
 		(
 			node.config.failureHandling as
 				| (APIFailureHandling & { checkpointId?: string })
@@ -186,7 +195,7 @@ export function NodeRenderer({
 		node.type === "Reject" && (node.config.allowRetry as boolean) === true;
 	// Un nodo API es terminal si onFailure='stop'
 	const isAPITerminal =
-		node.type === "API" &&
+		(node.type === "API" || node.type === "NLS") &&
 		(
 			node.config.failureHandling as
 				| (APIFailureHandling & { checkpointId?: string })
@@ -267,10 +276,12 @@ export function NodeRenderer({
 	const hasSpecialBadges =
 		(allowRetry && node.type === "Reject") ||
 		flagChangesCount > 0 ||
-		(node.type === "API" && node.config.failureHandling) ||
+		((node.type === "API" || node.type === "NLS") &&
+			node.config.failureHandling) ||
 		isSafeCheckpoint ||
 		(isChallengeNode && challengeConfig) ||
-		(isPromotionNode && promotionConfig);
+		(isPromotionNode && promotionConfig) ||
+		(isNLSNode && nlsConfig?.functionId);
 
 	let estimatedHeight = MIN_NODE_HEIGHT;
 	if (hasDescription) estimatedHeight += 22;
@@ -550,6 +561,15 @@ export function NodeRenderer({
 							</div>
 						)}
 
+						{isNLSNode && nlsConfig?.functionId && (
+							<div className="mt-2">
+								<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+									<Banknote className="h-3 w-3" />
+									{nlsConfig.functionId}
+								</span>
+							</div>
+						)}
+
 						{/* Contador de reintentos para nodos Reject con allowRetry */}
 						{allowRetry && node.type === "Reject" && (
 							<div className="mt-2">
@@ -601,8 +621,9 @@ export function NodeRenderer({
 							</div>
 						) : null}
 
-						{/* Badge de manejo de fallos para nodos API */}
-						{node.type === "API" && node.config.failureHandling
+						{/* Badge de manejo de fallos para nodos API/NLS */}
+						{(node.type === "API" || node.type === "NLS") &&
+						node.config.failureHandling
 							? (() => {
 									const fh = node.config.failureHandling as
 										| (APIFailureHandling & { checkpointId?: string })

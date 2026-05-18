@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import { validateWorkflow, validateWorkflowWithSyntax } from "./validation";
 import {
 	createDefaultChallengeConfig,
+	createDefaultNLSConfig,
 	type WorkflowNode,
 	type WorkflowEdge,
+	type NLSNodeConfig,
 } from "./types";
 
 describe("validateWorkflow", () => {
@@ -1473,5 +1475,210 @@ describe("node title validation", () => {
 		expect(
 			errors.some((e) => e.message.includes("número o carácter especial")),
 		).toBe(false);
+	});
+});
+
+describe("NLS node validation", () => {
+	function makeNlsWorkflow(
+		nlsConfig: NLSNodeConfig,
+		extraNodes: WorkflowNode[] = [],
+		extraEdges: WorkflowEdge[] = [],
+	) {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "nls-1",
+				type: "NLS",
+				title: "NLS Node",
+				description: "",
+				roles: [],
+				config: nlsConfig as unknown as Record<string, unknown>,
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 200, y: 0 },
+				groupId: null,
+			},
+			...extraNodes,
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "nls-1", label: null },
+			{ id: "e2", from: "nls-1", to: "end", label: null },
+			...extraEdges,
+		];
+		return { nodes, edges };
+	}
+
+	it("should error when NLS node has no functionId", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: undefined,
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("función NLS seleccionada"),
+			),
+		).toBe(true);
+	});
+
+	it("should not error when NLS node has a valid functionId", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("función NLS seleccionada"),
+			),
+		).toBe(false);
+	});
+
+	it("should error when maxRetries exceeds 2", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "cancelLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				maxRetries: 5,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("máximo de reintentos es 2"),
+			),
+		).toBe(true);
+	});
+
+	it("should warn when timeout is out of bounds", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "getAmortization",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				timeout: 1000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.severity === "warning" &&
+					e.message.includes("timeout"),
+			),
+		).toBe(true);
+	});
+
+	it("should error when onFailure=stop and node has outgoing edges", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				onFailure: "stop",
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("no puede tener conexiones salientes"),
+			),
+		).toBe(true);
+	});
+
+	it("should not error when onFailure=stop and no outgoing edges", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				onFailure: "stop",
+			},
+		};
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "nls-1",
+				type: "NLS",
+				title: "NLS Node",
+				description: "",
+				roles: [],
+				config: cfg as unknown as Record<string, unknown>,
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "nls-1", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("no puede tener conexiones salientes"),
+			),
+		).toBe(false);
+	});
+
+	it("should error when return-to-checkpoint has no prior checkpoint", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				onFailure: "return-to-checkpoint",
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("No hay checkpoint anterior"),
+			),
+		).toBe(true);
 	});
 });

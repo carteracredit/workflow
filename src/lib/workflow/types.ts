@@ -11,7 +11,8 @@ export type NodeType =
 	| "Promotion"
 	| "Checkpoint"
 	| "Join" // Added Join node type for merging multiple flows
-	| "FlagChange"; // Nodo para cambiar flags del workflow
+	| "FlagChange" // Nodo para cambiar flags del workflow
+	| "NLS"; // NLS integration node (createLoan, cancelLoan, getAmortization)
 
 export type CheckpointType = "normal" | "safe";
 
@@ -280,6 +281,7 @@ export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"Message",
 	"Challenge",
 	"Promotion",
+	"NLS",
 ];
 
 export interface StaleTimeoutConfig {
@@ -408,6 +410,42 @@ export interface OutputSchemaProperty {
 export interface OutputSchema {
 	name: string;
 	properties: OutputSchemaProperty[];
+}
+
+// ─── NLS Node Config ────────────────────────────────────────────────────────
+
+export type NLSFunctionId = "createLoan" | "cancelLoan" | "getAmortization";
+
+export interface NLSFieldConfig {
+	fieldId: string;
+	value: string;
+	source: "discovered" | "manual";
+}
+
+export interface NLSNodeConfig extends Record<string, unknown> {
+	functionId?: NLSFunctionId;
+	fields: NLSFieldConfig[];
+	failureHandling: APIFailureHandling;
+}
+
+export function isNLSNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "NLS"; config: NLSNodeConfig } {
+	return node.type === "NLS";
+}
+
+export function createDefaultNLSConfig(): NLSNodeConfig {
+	return {
+		functionId: undefined,
+		fields: [],
+		failureHandling: {
+			onFailure: "stop",
+			maxRetries: 0,
+			retryCount: 0,
+			cacheStrategy: "always-execute",
+			timeout: 30000,
+		},
+	};
 }
 
 export interface WorkflowState {

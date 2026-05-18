@@ -3,7 +3,12 @@ import {
 	generateWorkflowCode,
 	validateForCodeGeneration,
 } from "./code-generator";
-import type { WorkflowNode, WorkflowEdge, WorkflowMetadata } from "./types";
+import type {
+	WorkflowNode,
+	WorkflowEdge,
+	WorkflowMetadata,
+	NLSNodeConfig,
+} from "./types";
 
 // Helper to create a basic node
 const createNode = (
@@ -5084,6 +5089,151 @@ describe("generateWorkflowCode – API body: raw-xml", () => {
 		});
 		expect(result.code).toContain(
 			'headers["Content-Type"] = "application/json"',
+		);
+	});
+});
+
+describe("NLS node code generation", () => {
+	function makeNlsWorkflow(nlsConfig: NLSNodeConfig) {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "nls-1",
+				type: "NLS",
+				title: "Create Loan",
+				config: nlsConfig as unknown as Record<string, unknown>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "nls-1"),
+			createEdge("nls-1", "end"),
+		];
+		return { nodes, edges };
+	}
+
+	it("should generate PROXY_SVC binding in WorkflowEnv when NLS node present", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("PROXY_SVC");
+		expect(result.code).toContain("nlsCreateLoan");
+		expect(result.code).toContain("nlsCancelLoan");
+		expect(result.code).toContain("nlsGetAmortization");
+	});
+
+	it("should NOT include PROXY_SVC when no NLS nodes exist", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain("PROXY_SVC");
+	});
+
+	it("should generate RPC call for createLoan with field interpolation", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [
+				{
+					fieldId: "loanNumber",
+					value: "${start.loanNum}",
+					source: "discovered",
+				},
+				{ fieldId: "source", value: "PORTAL", source: "discovered" },
+			],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("nlsCreateLoan");
+		expect(result.code).toContain("bearerToken");
+		expect(result.code).toContain("_nlsBody");
+		expect(result.code).toContain('"loanNumber"');
+		expect(result.code).toContain('"source"');
+	});
+
+	it("should generate RPC call for getAmortization", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "getAmortization",
+			fields: [{ fieldId: "loanNumber", value: "12345", source: "discovered" }],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 1,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 60000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("nlsGetAmortization");
+		expect(result.code).toContain("retries");
+		expect(result.code).toContain("limit: 1");
+	});
+
+	it("should generate try/catch for return-to-checkpoint", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "cancelLoan",
+			fields: [{ fieldId: "loanNumber", value: "99", source: "discovered" }],
+			failureHandling: {
+				onFailure: "return-to-checkpoint",
+				maxRetries: 2,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "cp-1",
+				type: "Checkpoint",
+				title: "Checkpoint",
+				config: { checkpointType: "normal" },
+			}),
+			createNode({
+				id: "nls-1",
+				type: "NLS",
+				title: "Cancel Loan",
+				config: cfg as unknown as Record<string, unknown>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({
+				id: "rej",
+				type: "Reject",
+				title: "Rechazado",
+				config: { allowRetry: true, maxRetries: 2 },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp-1"),
+			createEdge("cp-1", "nls-1"),
+			createEdge("nls-1", "end"),
+			createEdge("rej", "cp-1"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("nlsCancelLoan");
+		expect(result.code).toContain("catch (_nlsErr)");
+		expect(result.code).toContain(
+			"continue; // Return to checkpoint and retry",
 		);
 	});
 });

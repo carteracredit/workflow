@@ -6,6 +6,7 @@ import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
 import {
 	createDefaultChallengeConfig,
 	createDefaultPromotionConfig,
+	createDefaultNLSConfig,
 } from "@/lib/workflow/types";
 import {
 	XCircle,
@@ -21,6 +22,7 @@ import {
 	Play,
 	Shield,
 	BadgePercent,
+	Banknote,
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -128,6 +130,19 @@ const NODE_CATEGORIES = [
 		],
 	},
 	{
+		id: "integrations",
+		labelKey: "palette.categoryIntegrations",
+		nodes: [
+			{
+				type: "NLS" as NodeType,
+				labelKey: "palette.nodeNLS",
+				icon: <Banknote className="h-4 w-4" />,
+				bgColor: "var(--node-bg-nls)",
+				iconColorVar: "--node-icon-nls",
+			},
+		],
+	},
+	{
 		id: "terminal",
 		labelKey: "palette.categoryTerminal",
 		nodes: [
@@ -158,6 +173,9 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	}
 	if (type === "Message") {
 		return { channel: "email", mergeVars: [] };
+	}
+	if (type === "NLS") {
+		return createDefaultNLSConfig();
 	}
 	return {};
 };

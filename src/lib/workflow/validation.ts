@@ -6,6 +6,7 @@ import type {
 	ChallengeNodeConfig,
 	Flag,
 	MessageNodeConfig,
+	NLSNodeConfig,
 } from "./types";
 import { MAX_CHALLENGE_RETRIES } from "./types";
 import { findNearestPreviousCheckpoint } from "./graph-utils";
@@ -328,6 +329,69 @@ export function validateWorkflow(
 							nodeId: node.id,
 							message: `"${node.title}": No debe tener conexiones visuales. La conexión al checkpoint es automática.`,
 							severity: "warning",
+						});
+					}
+				}
+			}
+		}
+
+		if (node.type === "NLS") {
+			const nlsCfg = node.config as NLSNodeConfig | undefined;
+
+			if (!nlsCfg?.functionId) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener una función NLS seleccionada`,
+					severity: "error",
+				});
+			}
+
+			const fh = nlsCfg?.failureHandling as
+				| (APIFailureHandling & { checkpointId?: string })
+				| undefined;
+			if (fh) {
+				if (fh.maxRetries > 2) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": El número máximo de reintentos es 2`,
+						severity: "error",
+					});
+				}
+				if (fh.maxRetries < 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": El número de reintentos no puede ser negativo`,
+						severity: "error",
+					});
+				}
+				if (fh.onFailure === "return-to-checkpoint") {
+					const checkpointId = findNearestPreviousCheckpoint(
+						node.id,
+						nodes,
+						edges,
+					);
+					if (!checkpointId) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}": No hay checkpoint anterior para regresar en caso de fallo`,
+							severity: "error",
+						});
+					}
+				}
+				if (fh.timeout < 5000 || fh.timeout > 300000) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": El timeout debe estar entre 5 y 300 segundos`,
+						severity: "warning",
+					});
+				}
+				if (fh.onFailure === "stop") {
+					const outgoingEdges = edges.filter((e) => e.from === node.id);
+					if (outgoingEdges.length > 0) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}": Un nodo NLS con "Detener Workflow" no puede tener conexiones salientes`,
+							severity: "error",
 						});
 					}
 				}
