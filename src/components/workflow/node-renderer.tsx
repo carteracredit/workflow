@@ -199,9 +199,9 @@ export function NodeRenderer({
 	// Un nodo Reject es terminal solo si allowRetry es false o no está configurado
 	const isRejectWithRetry =
 		node.type === "Reject" && (node.config.allowRetry as boolean) === true;
-	// Un nodo API es terminal si onFailure='stop'
+	// Un nodo API es terminal si onFailure='stop' (pero NO para NLS, que siempre tiene salida para el flujo exitoso)
 	const isAPITerminal =
-		(node.type === "API" || node.type === "NLS") &&
+		node.type === "API" &&
 		(
 			node.config.failureHandling as
 				| (APIFailureHandling & { checkpointId?: string })
