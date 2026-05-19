@@ -97,6 +97,15 @@ import {
 	getSignatureTemplateAction,
 } from "@/lib/workflow-api/signatures-actions";
 import type { SignatureTemplateSummary } from "@/lib/workflow-api/signatures-actions";
+import {
+	listNlsFunctionsAction,
+	getNlsFunctionAction,
+} from "@/lib/workflow-api/nls-actions";
+import type {
+	NlsFunctionSummary,
+	NlsFunctionDetail,
+} from "@/lib/workflow-api/nls-actions";
+import type { NLSNodeConfig, NLSFunctionId } from "@/lib/workflow/types";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
 import { useLanguage } from "@/components/LanguageProvider";
 import { buildAliasMap, titleToCamelCase } from "@/lib/workflow/node-alias";
@@ -394,6 +403,38 @@ export function PropertiesPanel({
 			?.challengeType,
 	]);
 
+	// Cargar funciones NLS cuando hay un nodo NLS seleccionado
+	useEffect(() => {
+		if (selectedNode?.type !== "NLS") return;
+		setNlsFunctionsLoading(true);
+		listNlsFunctionsAction()
+			.then((fns) => setNlsFunctions(fns))
+			.catch(() => setNlsFunctions([]))
+			.finally(() => setNlsFunctionsLoading(false));
+	}, [selectedNode?.type]);
+
+	// Cargar detalle de función NLS cuando cambia la función seleccionada
+	useEffect(() => {
+		if (selectedNode?.type !== "NLS") return;
+		const functionId = (selectedNode.config as NLSNodeConfig | undefined)
+			?.functionId;
+		if (!functionId) {
+			setNlsFunctionDetail(null);
+			return;
+		}
+		setNlsDetailLoading(true);
+		getNlsFunctionAction(functionId)
+			.then((detail) => {
+				setNlsFunctionDetail(detail);
+				setNlsExpandedSections(new Set(detail.sections.map((s) => s.id)));
+			})
+			.catch(() => setNlsFunctionDetail(null))
+			.finally(() => setNlsDetailLoading(false));
+	}, [
+		selectedNode?.type,
+		(selectedNode?.config as NLSNodeConfig | undefined)?.functionId,
+	]);
+
 	// Cargar el formulario completo (con versiones) cuando ya hay un formId en el config
 	useEffect(() => {
 		if (selectedNode?.type !== "Form") {
@@ -455,6 +496,16 @@ export function PropertiesPanel({
 	const [expandedCustomFieldIndices, setExpandedCustomFieldIndices] = useState<
 		Set<number>
 	>(new Set());
+
+	// ── NLS state ────────────────────────────────────────────────────
+	const [nlsFunctions, setNlsFunctions] = useState<NlsFunctionSummary[]>([]);
+	const [nlsFunctionsLoading, setNlsFunctionsLoading] = useState(false);
+	const [nlsFunctionDetail, setNlsFunctionDetail] =
+		useState<NlsFunctionDetail | null>(null);
+	const [nlsDetailLoading, setNlsDetailLoading] = useState(false);
+	const [nlsExpandedSections, setNlsExpandedSections] = useState<Set<string>>(
+		new Set(),
+	);
 
 	// Limpiar estado mock cuando cambia el nodo seleccionado
 	useEffect(() => {
@@ -5081,6 +5132,327 @@ export function PropertiesPanel({
 								</p>
 								<p>{t("propertiesPanel.flagChangesInfoBody")}</p>
 							</div>
+						</div>
+					)}
+
+					{/* ── NLS Node ──────────────────────────────────────────── */}
+					{selectedNode.type === "NLS" && (
+						<div className="space-y-4">
+							{/* Function selector */}
+							<div className="space-y-2">
+								<Label htmlFor="nls-function">NLS Function</Label>
+								<Select
+									value={
+										(selectedNode.config as NLSNodeConfig).functionId ?? ""
+									}
+									onValueChange={(v) => {
+										const functionId = v as NLSFunctionId;
+										getNlsFunctionAction(functionId)
+											.then((detail) => {
+												const discoveredFields = detail.sections.flatMap((s) =>
+													s.fields.map((f) => ({
+														fieldId: f.id,
+														value: "",
+														source: "discovered" as const,
+													})),
+												);
+												onUpdateNode(selectedNode.id, {
+													config: {
+														...selectedNode.config,
+														functionId,
+														fields: discoveredFields,
+													},
+												});
+												setNlsFunctionDetail(detail);
+												setNlsExpandedSections(
+													new Set(detail.sections.map((s) => s.id)),
+												);
+											})
+											.catch(() => {
+												onUpdateNode(selectedNode.id, {
+													config: {
+														...selectedNode.config,
+														functionId,
+														fields: [],
+													},
+												});
+											});
+									}}
+								>
+									<SelectTrigger id="nls-function">
+										<SelectValue
+											placeholder={
+												nlsFunctionsLoading
+													? "Loading functions…"
+													: "Select a function"
+											}
+										/>
+									</SelectTrigger>
+									<SelectContent>
+										{nlsFunctions.map((fn) => (
+											<SelectItem key={fn.id} value={fn.id}>
+												{fn.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								{(selectedNode.config as NLSNodeConfig).functionId && (
+									<p className="text-xs text-muted-foreground">
+										{
+											nlsFunctions.find(
+												(f) =>
+													f.id ===
+													(selectedNode.config as NLSNodeConfig).functionId,
+											)?.description
+										}
+									</p>
+								)}
+							</div>
+
+							{/* Fields by section */}
+							{nlsDetailLoading && (
+								<p className="text-xs text-muted-foreground">Loading fields…</p>
+							)}
+							{nlsFunctionDetail &&
+								!nlsDetailLoading &&
+								nlsFunctionDetail.sections.map((section) => {
+									const isExpanded = nlsExpandedSections.has(section.id);
+									return (
+										<div
+											key={section.id}
+											className="rounded border border-border/40"
+										>
+											<button
+												type="button"
+												className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-accent/50"
+												onClick={() =>
+													setNlsExpandedSections((prev) => {
+														const next = new Set(prev);
+														if (next.has(section.id)) next.delete(section.id);
+														else next.add(section.id);
+														return next;
+													})
+												}
+											>
+												{isExpanded ? (
+													<ChevronUp className="h-3 w-3" />
+												) : (
+													<ChevronDown className="h-3 w-3" />
+												)}
+												{section.label}
+												<span className="text-[10px] text-muted-foreground font-normal">
+													({section.fields.length})
+												</span>
+											</button>
+											{isExpanded && (
+												<div className="space-y-2 px-3 pb-3">
+													{section.fields.map((field) => {
+														const nlsConfig =
+															selectedNode.config as NLSNodeConfig;
+														const fieldConfig = nlsConfig.fields.find(
+															(f) => f.fieldId === field.id,
+														);
+														return (
+															<div key={field.id} className="space-y-1">
+																<Label className="text-xs">
+																	{field.label}
+																	{field.required && (
+																		<span className="text-destructive ml-0.5">
+																			*
+																		</span>
+																	)}
+																</Label>
+																<VariableTemplateInput
+																	nodes={upstreamVariableNodes}
+																	value={parseTemplateStringToSegments(
+																		fieldConfig?.value ?? "",
+																	)}
+																	placeholder={
+																		field.defaultValue ||
+																		`${field.type}${field.required ? " (required)" : ""}`
+																	}
+																	onChange={(segs) => {
+																		const val = segmentsToTemplateString(segs);
+																		const fields = [
+																			...(nlsConfig.fields ?? []),
+																		];
+																		const idx = fields.findIndex(
+																			(f) => f.fieldId === field.id,
+																		);
+																		if (idx >= 0) {
+																			fields[idx] = {
+																				...fields[idx],
+																				value: val,
+																			};
+																		} else {
+																			fields.push({
+																				fieldId: field.id,
+																				value: val,
+																				source: "discovered",
+																			});
+																		}
+																		onUpdateNode(selectedNode.id, {
+																			config: {
+																				...selectedNode.config,
+																				fields,
+																			},
+																		});
+																	}}
+																/>
+															</div>
+														);
+													})}
+												</div>
+											)}
+										</div>
+									);
+								})}
+
+							{/* Failure handling — reuses same pattern as API node */}
+							{(() => {
+								const nlsCfg = selectedNode.config as NLSNodeConfig;
+								const failureHandling: APIFailureHandling =
+									nlsCfg.failureHandling ?? {
+										onFailure: "stop",
+										maxRetries: 0,
+										retryCount: 0,
+										cacheStrategy: "always-execute",
+										timeout: 30000,
+									};
+								const allCheckpoints = nodes
+									.filter((n) => n.type === "Checkpoint")
+									.map((n) => n.id);
+								const hasCheckpoint = allCheckpoints.length > 0;
+								const selectedCheckpointId = (
+									failureHandling as APIFailureHandling & {
+										checkpointId?: string;
+									}
+								).checkpointId;
+
+								return (
+									<div className="border-t border-border pt-4">
+										<h3 className="mb-3 font-semibold">
+											{t("propertiesPanel.apiFailureTitle")}
+										</h3>
+
+										<div className="space-y-2">
+											<Label htmlFor="nls-on-failure">
+												{t("propertiesPanel.apiOnFailureLabel")}
+											</Label>
+											<Select
+												value={failureHandling.onFailure}
+												onValueChange={(value) => {
+													const outgoingEdges = edges.filter(
+														(e) => e.from === selectedNode.id,
+													);
+													if (value === "stop") {
+														outgoingEdges.forEach((edge) =>
+															onDeleteEdge(edge.id),
+														);
+													}
+													onUpdateNode(selectedNode.id, {
+														config: {
+															...selectedNode.config,
+															failureHandling: {
+																...failureHandling,
+																onFailure: value,
+																...(value !== "return-to-checkpoint"
+																	? { checkpointId: undefined }
+																	: hasCheckpoint
+																		? {
+																				checkpointId:
+																					selectedCheckpointId ||
+																					allCheckpoints[0],
+																			}
+																		: {}),
+															},
+														},
+													});
+												}}
+											>
+												<SelectTrigger id="nls-on-failure">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="stop">
+														{t("propertiesPanel.apiOnFailureStop")}
+													</SelectItem>
+													<SelectItem value="continue">
+														{t("propertiesPanel.apiOnFailureContinue")}
+													</SelectItem>
+													<SelectItem value="retry">
+														{t("propertiesPanel.apiOnFailureRetry")}
+													</SelectItem>
+													<SelectItem
+														value="return-to-checkpoint"
+														disabled={!hasCheckpoint}
+													>
+														{t("propertiesPanel.apiOnFailureCheckpoint")}
+													</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+
+										{failureHandling.onFailure === "retry" && (
+											<div className="mt-3 space-y-2">
+												<Label htmlFor="nls-max-retries">
+													{t("propertiesPanel.apiRetriesLabel")}
+												</Label>
+												<Input
+													id="nls-max-retries"
+													type="number"
+													min={1}
+													max={2}
+													value={failureHandling.maxRetries || 1}
+													onChange={(e) => {
+														const val = Math.min(
+															2,
+															Math.max(1, Number.parseInt(e.target.value) || 1),
+														);
+														onUpdateNode(selectedNode.id, {
+															config: {
+																...selectedNode.config,
+																failureHandling: {
+																	...failureHandling,
+																	maxRetries: val,
+																},
+															},
+														});
+													}}
+												/>
+											</div>
+										)}
+
+										<div className="mt-3 space-y-2">
+											<Label htmlFor="nls-timeout">
+												{t("propertiesPanel.apiTimeoutLabel")}
+											</Label>
+											<Input
+												id="nls-timeout"
+												type="number"
+												min={5}
+												max={300}
+												value={failureHandling.timeout / 1000}
+												onChange={(e) => {
+													const seconds = Math.min(
+														300,
+														Math.max(5, Number.parseInt(e.target.value) || 30),
+													);
+													onUpdateNode(selectedNode.id, {
+														config: {
+															...selectedNode.config,
+															failureHandling: {
+																...failureHandling,
+																timeout: seconds * 1000,
+															},
+														},
+													});
+												}}
+											/>
+										</div>
+									</div>
+								);
+							})()}
 						</div>
 					)}
 

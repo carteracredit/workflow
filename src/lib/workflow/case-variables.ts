@@ -171,6 +171,174 @@ export const CASE_VARIABLES: OutputSchemaProperty[] = [
 		readOnly: true,
 	},
 	{
+		id: "case-var-prequalification",
+		name: "prequalification",
+		type: "object",
+		description:
+			"Pre-qualification data captured before the workflow started. Present for all instances created with bureau mode enabled; bureau sub-object is null in hashed/development mode.",
+		readOnly: true,
+		properties: [
+			{
+				id: "case-var-prequal-preApprovalResult",
+				name: "preApprovalResult",
+				type: "number",
+				description:
+					"Pre-approval result bucket (0–6; lower = less credit risk)",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-preApprovalDate",
+				name: "preApprovalDate",
+				type: "string",
+				description: "ISO 8601 date of when the pre-approval was run",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-passesValidation",
+				name: "passesValidation",
+				type: "boolean",
+				description: "Whether the client passed all pre-qualification rules",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-runId",
+				name: "runId",
+				type: "string",
+				description:
+					"UUID of the last pre-qualification run. Null in hashed/dev mode.",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-scoreCardV3",
+				name: "scoreCardV3",
+				type: "number",
+				description:
+					"SageMaker V3 score bucket. Null when model was unavailable.",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-scoreCardV4",
+				name: "scoreCardV4",
+				type: "number",
+				description:
+					"SageMaker V4 score bucket. Null when model was unavailable.",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-requestedPullType",
+				name: "requestedPullType",
+				type: "string",
+				description:
+					"Credit bureau pull type that was requested: soft, hard, or new. Null in hashed mode.",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-actualPullType",
+				name: "actualPullType",
+				type: "string",
+				description:
+					"Credit bureau pull type actually executed. Null in hashed mode.",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-cifNumber",
+				name: "cifNumber",
+				type: "string",
+				description:
+					"NLS CIF number assigned to the client. Null in hashed/dev mode.",
+				readOnly: true,
+			},
+			{
+				id: "case-var-prequal-bureau",
+				name: "bureau",
+				type: "object",
+				description:
+					"Credit bureau snapshot. Null in hashed/development mode (CREDIT_BUREAU_MODE !== real).",
+				readOnly: true,
+				properties: [
+					{
+						id: "case-var-prequal-bureau-fico",
+						name: "fico",
+						type: "number",
+						description: "FICO score from credit bureau. Null if unavailable.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-scoreFactor1",
+						name: "scoreFactor1",
+						type: "string",
+						description: "Top adverse score factor code from bureau.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-scoreFactor2",
+						name: "scoreFactor2",
+						type: "string",
+						description: "Second adverse score factor code from bureau.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-scoreFactor3",
+						name: "scoreFactor3",
+						type: "string",
+						description: "Third adverse score factor code from bureau.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-scoreFactor4",
+						name: "scoreFactor4",
+						type: "string",
+						description: "Fourth adverse score factor code from bureau.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-bankruptcyColor",
+						name: "bankruptcyColor",
+						type: "string",
+						description: "Bankruptcy risk indicator: green, yellow, or red.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-mortgageColor",
+						name: "mortgageColor",
+						type: "string",
+						description: "Mortgage risk indicator: green, yellow, or red.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-adjudication",
+						name: "adjudication",
+						type: "string",
+						description:
+							"Overall adjudication color from bureau: green, yellow, or red.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-defaults",
+						name: "defaults",
+						type: "number",
+						description: "Total defaults amount reported by bureau.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-hasMortgage",
+						name: "hasMortgage",
+						type: "boolean",
+						description: "Whether the client has an active mortgage on record.",
+						readOnly: true,
+					},
+					{
+						id: "case-var-prequal-bureau-hasBankruptcy",
+						name: "hasBankruptcy",
+						type: "boolean",
+						description: "Whether the client has a bankruptcy on record.",
+						readOnly: true,
+					},
+				],
+			},
+		],
+	},
+	{
 		id: "case-var-roleContacts",
 		name: "roleContacts",
 		type: "object",

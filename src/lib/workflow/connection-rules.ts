@@ -116,6 +116,16 @@ export function canNodeHaveOutgoingConnections(node: WorkflowNode): boolean {
 		}
 	}
 
+	// Nodo NLS con onFailure='stop': es terminal (mismas reglas que API)
+	if (node.type === "NLS") {
+		const fh = node.config.failureHandling as
+			| { onFailure?: string }
+			| undefined;
+		if (fh?.onFailure === "stop") {
+			return false;
+		}
+	}
+
 	return true;
 }
 

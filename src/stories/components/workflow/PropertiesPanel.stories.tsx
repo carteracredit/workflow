@@ -274,3 +274,95 @@ export const ApiNodeJsonTemplateInvalid: Story = {
 		selectedEdges: [],
 	},
 };
+
+// ─── NLS Node Stories ──────────────────────────────────────────────────────────
+
+const nlsNodeBase: WorkflowNode = {
+	id: "nls-1",
+	type: "NLS",
+	title: "NLS Operation",
+	description: "Operación NLS",
+	roles: [],
+	config: {
+		functionId: undefined,
+		fields: [],
+		failureHandling: {
+			onFailure: "stop",
+			maxRetries: 0,
+			retryCount: 0,
+			cacheStrategy: "always-execute",
+			timeout: 30000,
+		},
+	},
+	staleTimeout: null,
+	position: { x: 150, y: 400 },
+	groupId: null,
+};
+
+export const NlsNodeEmpty: Story = {
+	name: "NLS — Sin función seleccionada",
+	args: {
+		selectedNodes: [nlsNodeBase],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodeCreateLoan: Story = {
+	name: "NLS — createLoan",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Crear Préstamo",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "createLoan",
+					fields: [
+						{
+							fieldId: "loanNumber",
+							value: "${start.loanNumber}",
+							source: "discovered",
+						},
+						{
+							fieldId: "source",
+							value: "PORTAL",
+							source: "discovered",
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodeGetAmortization: Story = {
+	name: "NLS — getAmortization",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Tabla de Amortización",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "getAmortization",
+					fields: [
+						{
+							fieldId: "loanNumber",
+							value: "${start.loanNumber}",
+							source: "discovered",
+						},
+					],
+					failureHandling: {
+						onFailure: "continue",
+						maxRetries: 1,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 60000,
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
