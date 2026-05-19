@@ -998,3 +998,101 @@ describe("graph-utils", () => {
 		});
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Pre-qualification variables in buildVariableSourceNodes
+// ---------------------------------------------------------------------------
+
+describe("buildVariableSourceNodes — prequalification variables", () => {
+	const startNode: WorkflowNode = {
+		id: "start-1",
+		type: "Start",
+		title: "Start",
+		description: "",
+		roles: [],
+		config: {},
+		position: { x: 0, y: 0 },
+		groupId: null,
+	};
+
+	it("exposes start.prequalification as a variable source node", () => {
+		const result = buildVariableSourceNodes([startNode], {
+			allNodes: [startNode],
+		});
+		expect(result).toHaveLength(1);
+		const startSource = result[0];
+		const prequal = startSource.variables.find(
+			(v) => v.name === "prequalification",
+		);
+		expect(prequal).toBeDefined();
+		expect(prequal?.path).toBe("start.prequalification");
+	});
+
+	it("exposes start.prequalification.preApprovalResult as a leaf variable", () => {
+		const result = buildVariableSourceNodes([startNode], {
+			allNodes: [startNode],
+		});
+		const startSource = result[0];
+		const prequal = startSource.variables.find(
+			(v) => v.name === "prequalification",
+		);
+		const preApprovalResult = prequal?.children?.find(
+			(c) => c.name === "preApprovalResult",
+		);
+		expect(preApprovalResult).toBeDefined();
+		expect(preApprovalResult?.path).toBe(
+			"start.prequalification.preApprovalResult",
+		);
+		expect(preApprovalResult?.type).toBe("number");
+	});
+
+	it("exposes start.prequalification.bureau as a nested object with leaf children", () => {
+		const result = buildVariableSourceNodes([startNode], {
+			allNodes: [startNode],
+		});
+		const startSource = result[0];
+		const prequal = startSource.variables.find(
+			(v) => v.name === "prequalification",
+		);
+		const bureau = prequal?.children?.find((c) => c.name === "bureau");
+		expect(bureau).toBeDefined();
+		expect(bureau?.path).toBe("start.prequalification.bureau");
+
+		const fico = bureau?.children?.find((c) => c.name === "fico");
+		expect(fico).toBeDefined();
+		expect(fico?.path).toBe("start.prequalification.bureau.fico");
+		expect(fico?.type).toBe("number");
+
+		const bankruptcyColor = bureau?.children?.find(
+			(c) => c.name === "bankruptcyColor",
+		);
+		expect(bankruptcyColor).toBeDefined();
+		expect(bankruptcyColor?.path).toBe(
+			"start.prequalification.bureau.bankruptcyColor",
+		);
+	});
+
+	it("exposes all 11 bureau leaf variables", () => {
+		const result = buildVariableSourceNodes([startNode], {
+			allNodes: [startNode],
+		});
+		const startSource = result[0];
+		const prequal = startSource.variables.find(
+			(v) => v.name === "prequalification",
+		);
+		const bureau = prequal?.children?.find((c) => c.name === "bureau");
+		expect(bureau?.children).toHaveLength(11);
+	});
+
+	it("exposes all 9 top-level prequalification fields plus the bureau object", () => {
+		const result = buildVariableSourceNodes([startNode], {
+			allNodes: [startNode],
+		});
+		const startSource = result[0];
+		const prequal = startSource.variables.find(
+			(v) => v.name === "prequalification",
+		);
+		// 9 scalar + 1 bureau object = 10 children
+		expect(prequal?.children).toHaveLength(10);
+	});
+});

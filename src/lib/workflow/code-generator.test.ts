@@ -5237,3 +5237,91 @@ describe("NLS node code generation", () => {
 		);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Pre-qualification variable rewriting
+// Verifies that tokens under start.prequalification.* resolve to
+// event.payload.prequalification.* in the generated TypeScript.
+// ---------------------------------------------------------------------------
+
+describe("prequalification variable token rewriting", () => {
+	// Use SMS channel (body field) so both token assertions resolve to a single
+	// processed field. Email channel only processes `subject`; SMS processes `body`.
+
+	it("rewrites start.prequalification.preApprovalResult to event.payload.prequalification.preApprovalResult", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({
+				id: "msg",
+				type: "Message",
+				title: "Result",
+				config: {
+					channel: "sms",
+					body: "Bucket: ${start.prequalification.preApprovalResult} / V4: ${start.prequalification.scoreCardV4}",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "msg"),
+			createEdge("msg", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain(
+			"event.payload.prequalification.preApprovalResult",
+		);
+		expect(result.code).toContain("event.payload.prequalification.scoreCardV4");
+	});
+
+	it("rewrites start.prequalification.bureau.fico to event.payload.prequalification.bureau.fico", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({
+				id: "msg",
+				type: "Message",
+				title: "Bureau",
+				config: {
+					channel: "sms",
+					body: "FICO: ${start.prequalification.bureau.fico} / Bankruptcy: ${start.prequalification.bureau.bankruptcyColor}",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "msg"),
+			createEdge("msg", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("event.payload.prequalification.bureau.fico");
+		expect(result.code).toContain(
+			"event.payload.prequalification.bureau.bankruptcyColor",
+		);
+	});
+
+	it("rewrites mixed prequalification and regular case variables", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Start" }),
+			createNode({
+				id: "msg",
+				type: "Message",
+				title: "Mix",
+				config: {
+					channel: "sms",
+					body: "${start.clientName} bucket:${start.prequalification.preApprovalResult} fico:${start.prequalification.bureau.fico} city:${start.clientAddress.city}",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "End" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "msg"),
+			createEdge("msg", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("event.payload.clientName");
+		expect(result.code).toContain(
+			"event.payload.prequalification.preApprovalResult",
+		);
+		expect(result.code).toContain("event.payload.prequalification.bureau.fico");
+		expect(result.code).toContain("event.payload.clientAddress.city");
+	});
+});
