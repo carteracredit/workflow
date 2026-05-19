@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Palette } from "./palette";
+
+const renderWithTooltip = (ui: React.ReactElement) =>
+	render(<TooltipProvider>{ui}</TooltipProvider>);
 
 vi.mock("@/components/LanguageProvider", async () => {
 	const { translations } = await import("@/lib/translations");
@@ -29,7 +33,9 @@ vi.mock("@/components/LanguageProvider", async () => {
 
 describe("Palette", () => {
 	it("renders add buttons for node types", () => {
-		render(<Palette onAddNode={vi.fn()} zoom={1} pan={{ x: 0, y: 0 }} />);
+		renderWithTooltip(
+			<Palette onAddNode={vi.fn()} zoom={1} pan={{ x: 0, y: 0 }} />,
+		);
 		expect(
 			screen.getByRole("button", { name: "Agregar Inicio" }),
 		).toBeInTheDocument();
@@ -43,7 +49,9 @@ describe("Palette", () => {
 
 	it("calls onAddNode with new node when Start is clicked", async () => {
 		const onAddNode = vi.fn();
-		render(<Palette onAddNode={onAddNode} zoom={1} pan={{ x: 0, y: 0 }} />);
+		renderWithTooltip(
+			<Palette onAddNode={onAddNode} zoom={1} pan={{ x: 0, y: 0 }} />,
+		);
 		const startBtn = screen.getByRole("button", { name: "Agregar Inicio" });
 		fireEvent.click(startBtn);
 		expect(onAddNode).toHaveBeenCalledTimes(1);
@@ -63,7 +71,9 @@ describe("Palette", () => {
 
 	it("calls onAddNode with Challenge config when Challenge is clicked", async () => {
 		const onAddNode = vi.fn();
-		render(<Palette onAddNode={onAddNode} zoom={1} pan={{ x: 0, y: 0 }} />);
+		renderWithTooltip(
+			<Palette onAddNode={onAddNode} zoom={1} pan={{ x: 0, y: 0 }} />,
+		);
 		const challengeBtn = screen.getByRole("button", {
 			name: "Agregar Challenge",
 		});
@@ -78,7 +88,9 @@ describe("Palette", () => {
 
 	it("calls onAddNode with checkpointType when Checkpoint is clicked", async () => {
 		const onAddNode = vi.fn();
-		render(<Palette onAddNode={onAddNode} zoom={1} pan={{ x: 0, y: 0 }} />);
+		renderWithTooltip(
+			<Palette onAddNode={onAddNode} zoom={1} pan={{ x: 0, y: 0 }} />,
+		);
 		const checkpointBtn = screen.getByRole("button", {
 			name: "Agregar Checkpoint",
 		});
@@ -89,7 +101,7 @@ describe("Palette", () => {
 	});
 
 	it("applies className to container when provided", () => {
-		const { container } = render(
+		const { container } = renderWithTooltip(
 			<Palette
 				onAddNode={vi.fn()}
 				zoom={1}

@@ -34,6 +34,11 @@ import {
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
 import { useLanguage } from "@/components/LanguageProvider";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface NodeRendererProps {
 	node: WorkflowNode;
@@ -121,6 +126,7 @@ export function NodeRenderer({
 	const [hoveredConnector, setHoveredConnector] = useState<string | null>(null);
 	const [actualNodeHeight, setActualNodeHeight] = useState<number>(0);
 	const [isNodeHovered, setIsNodeHovered] = useState(false);
+	const [isDragging, setIsDragging] = useState(false);
 	const rightConnectorRef = useRef<HTMLDivElement>(null);
 	const Icon = NODE_ICONS[node.type];
 	const baseIconBackground = NODE_BG_COLORS[node.type];
@@ -193,9 +199,9 @@ export function NodeRenderer({
 	// Un nodo Reject es terminal solo si allowRetry es false o no está configurado
 	const isRejectWithRetry =
 		node.type === "Reject" && (node.config.allowRetry as boolean) === true;
-	// Un nodo API es terminal si onFailure='stop'
+	// Un nodo API es terminal si onFailure='stop' (pero NO para NLS, que siempre tiene salida para el flujo exitoso)
 	const isAPITerminal =
-		(node.type === "API" || node.type === "NLS") &&
+		node.type === "API" &&
 		(
 			node.config.failureHandling as
 				| (APIFailureHandling & { checkpointId?: string })
@@ -385,405 +391,487 @@ export function NodeRenderer({
 	const showConnectors =
 		selected || isNodeHovered || connecting || isAnyConnectionInProgress;
 
-	return (
-		<div
-			ref={nodeRef}
-			className="pointer-events-auto absolute"
-			style={{
-				left: node.position.x,
-				top: node.position.y,
-				width: NODE_WIDTH,
-				pointerEvents: "auto",
-			}}
-			onMouseDown={onMouseDown}
-			onMouseEnter={() => setIsNodeHovered(true)}
-			onMouseLeave={() => setIsNodeHovered(false)}
-		>
-			<div
-				className={cn(
-					"workflow-node relative cursor-pointer select-none rounded-lg border bg-card shadow-md transition-all",
-					selected && "selected ring-2 ring-ring ring-offset-1",
-					hasErrors && "border-destructive",
-					connecting && "ring-2 ring-primary",
-					shouldHighlight && "ring-2 ring-orange-500 animate-pulse",
+	const handleMouseDown = (e: React.MouseEvent) => {
+		setIsDragging(true);
+		onMouseDown(e);
+	};
+
+	const handleMouseUp = () => {
+		setIsDragging(false);
+	};
+
+	useEffect(() => {
+		window.addEventListener("mouseup", handleMouseUp);
+		return () => window.removeEventListener("mouseup", handleMouseUp);
+	}, []);
+
+	const tooltipContent = (() => {
+		const displayTitle = getFieldLabel(node.title, node.titleEs);
+		const displayDesc = getFieldLabel(node.description, node.descriptionEs);
+		const nlsFunctionId = isNLSNode ? nlsConfig?.functionId : null;
+		return (
+			<div className="max-w-xs">
+				<p className="font-semibold">{displayTitle}</p>
+				<p className="text-xs text-muted-foreground">{node.type}</p>
+				{nlsFunctionId && (
+					<p className="text-xs text-muted-foreground">
+						{t("canvas.nlsFunctionLabel")}: {nlsFunctionId}
+					</p>
 				)}
-				data-safe-checkpoint={isSafeCheckpoint ? "true" : undefined}
-				style={{
-					width: NODE_WIDTH,
-					borderColor,
-					boxShadow: nodeBoxShadow,
-					background: safeBackground,
-				}}
-			>
-				{(hasStaleTimeout || (isSafeCheckpoint && !hasStaleTimeout)) && (
+				{displayDesc && <p className="mt-1 text-xs">{displayDesc}</p>}
+			</div>
+		);
+	})();
+
+	return (
+		<Tooltip delayDuration={600} open={isDragging ? false : undefined}>
+			<TooltipTrigger asChild>
+				<div
+					ref={nodeRef}
+					className="pointer-events-auto absolute"
+					style={{
+						left: node.position.x,
+						top: node.position.y,
+						width: NODE_WIDTH,
+						pointerEvents: "auto",
+					}}
+					onMouseDown={handleMouseDown}
+					onMouseEnter={() => setIsNodeHovered(true)}
+					onMouseLeave={() => setIsNodeHovered(false)}
+				>
 					<div
 						className={cn(
-							"absolute -right-1 -top-1 z-20 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none shadow-md ring-1 backdrop-blur-sm",
-							hasStaleTimeout &&
-								"bg-amber-500/90 text-white ring-amber-600/50 dark:bg-amber-500 dark:ring-amber-400/50",
-							!hasStaleTimeout &&
-								isSafeCheckpoint &&
-								"bg-emerald-500/90 text-white ring-emerald-600/50 dark:bg-emerald-500 dark:ring-emerald-400/50",
+							"workflow-node relative cursor-pointer select-none rounded-lg border bg-card shadow-md transition-all",
+							selected && "selected ring-2 ring-ring ring-offset-1",
+							hasErrors && "border-destructive",
+							connecting && "ring-2 ring-primary",
+							shouldHighlight && "ring-2 ring-orange-500 animate-pulse",
 						)}
-						data-testid={hasStaleTimeout ? "stale-indicator" : "safe-indicator"}
-						title={
-							hasStaleTimeout
-								? t("canvas.nodeStaleCheckpointTitle")
-										.replace("{value}", String(node.staleTimeout?.value ?? ""))
-										.replace(
-											"{unit}",
-											node.staleTimeout?.unit === "hours"
-												? t("canvas.staleUnitHours")
-												: node.staleTimeout?.unit === "days"
-													? t("canvas.staleUnitDays")
-													: (node.staleTimeout?.unit ?? ""),
-										)
-								: t("canvas.nodeSafeCheckpointTitle")
-						}
-						aria-label={
-							hasStaleTimeout
-								? t("canvas.nodeStaleAriaLabel")
-								: t("canvas.nodeSafeAriaLabel")
-						}
-					>
-						{hasStaleTimeout ? (
-							<>
-								<Clock3
-									className="h-2.5 w-2.5 shrink-0 text-white"
-									aria-hidden="true"
-								/>
-								<span>STALE</span>
-							</>
-						) : (
-							<>
-								<ShieldCheck
-									className="h-2.5 w-2.5 shrink-0 text-white"
-									aria-hidden="true"
-								/>
-								<span>SAFE</span>
-							</>
-						)}
-					</div>
-				)}
-				<div
-					ref={contentRef}
-					className="flex items-start gap-3"
-					style={{
-						padding: `${PADDING_Y}px ${PADDING_X}px`,
-					}}
-				>
-					{/* Icono dentro del nodo - estilo Figma */}
-					<div
-						className="node-icon-container flex shrink-0 items-center justify-center rounded-md"
+						data-safe-checkpoint={isSafeCheckpoint ? "true" : undefined}
 						style={{
-							width: ICON_CONTAINER_SIZE,
-							height: ICON_CONTAINER_SIZE,
-							backgroundColor: iconBackgroundColor,
-							color: iconColor, // Icon color: dark in light theme, white in dark theme (via CSS variable)
+							width: NODE_WIDTH,
+							borderColor,
+							boxShadow: nodeBoxShadow,
+							background: safeBackground,
 						}}
 					>
-						<Icon size={ICON_SIZE} />
-					</div>
+						{(hasStaleTimeout || (isSafeCheckpoint && !hasStaleTimeout)) && (
+							<div
+								className={cn(
+									"absolute -right-1 -top-1 z-20 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none shadow-md ring-1 backdrop-blur-sm",
+									hasStaleTimeout &&
+										"bg-amber-500/90 text-white ring-amber-600/50 dark:bg-amber-500 dark:ring-amber-400/50",
+									!hasStaleTimeout &&
+										isSafeCheckpoint &&
+										"bg-emerald-500/90 text-white ring-emerald-600/50 dark:bg-emerald-500 dark:ring-emerald-400/50",
+								)}
+								data-testid={
+									hasStaleTimeout ? "stale-indicator" : "safe-indicator"
+								}
+								title={
+									hasStaleTimeout
+										? t("canvas.nodeStaleCheckpointTitle")
+												.replace(
+													"{value}",
+													String(node.staleTimeout?.value ?? ""),
+												)
+												.replace(
+													"{unit}",
+													node.staleTimeout?.unit === "hours"
+														? t("canvas.staleUnitHours")
+														: node.staleTimeout?.unit === "days"
+															? t("canvas.staleUnitDays")
+															: (node.staleTimeout?.unit ?? ""),
+												)
+										: t("canvas.nodeSafeCheckpointTitle")
+								}
+								aria-label={
+									hasStaleTimeout
+										? t("canvas.nodeStaleAriaLabel")
+										: t("canvas.nodeSafeAriaLabel")
+								}
+							>
+								{hasStaleTimeout ? (
+									<>
+										<Clock3
+											className="h-2.5 w-2.5 shrink-0 text-white"
+											aria-hidden="true"
+										/>
+										<span>STALE</span>
+									</>
+								) : (
+									<>
+										<ShieldCheck
+											className="h-2.5 w-2.5 shrink-0 text-white"
+											aria-hidden="true"
+										/>
+										<span>SAFE</span>
+									</>
+								)}
+							</div>
+						)}
+						<div
+							ref={contentRef}
+							className="flex items-start gap-3"
+							style={{
+								padding: `${PADDING_Y}px ${PADDING_X}px`,
+							}}
+						>
+							{/* Icono dentro del nodo - estilo Figma */}
+							<div
+								className="node-icon-container flex shrink-0 items-center justify-center rounded-md"
+								style={{
+									width: ICON_CONTAINER_SIZE,
+									height: ICON_CONTAINER_SIZE,
+									backgroundColor: iconBackgroundColor,
+									color: iconColor, // Icon color: dark in light theme, white in dark theme (via CSS variable)
+								}}
+							>
+								<Icon size={ICON_SIZE} />
+							</div>
 
-					{/* Contenido principal */}
-					<div className="min-w-0 flex-1">
-						<div className="flex items-start justify-between gap-2">
+							{/* Contenido principal */}
 							<div className="min-w-0 flex-1">
-								<div className="text-base font-semibold leading-tight text-foreground">
-									{getFieldLabel(node.title, node.titleEs)}
+								<div className="flex items-start justify-between gap-2">
+									<div className="min-w-0 flex-1">
+										<div className="text-base font-semibold leading-tight text-foreground">
+											{getFieldLabel(node.title, node.titleEs)}
+										</div>
+										{(node.description || node.descriptionEs) && (
+											<div className="mt-1 text-sm leading-relaxed text-muted-foreground line-clamp-2">
+												{getFieldLabel(node.description, node.descriptionEs)}
+											</div>
+										)}
+									</div>
+									{hasErrors && (
+										<AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+									)}
 								</div>
-								{(node.description || node.descriptionEs) && (
-									<div className="mt-1 text-sm leading-relaxed text-muted-foreground line-clamp-2">
-										{getFieldLabel(node.description, node.descriptionEs)}
+								{/* Roles */}
+								{node.roles.length > 0 && (
+									<div className="mt-2 flex flex-wrap gap-1">
+										{node.roles.slice(0, 2).map((role) => (
+											<span
+												key={role}
+												className="rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
+											>
+												{t(`propertiesPanel.roleNames.${role}`)}
+											</span>
+										))}
+										{node.roles.length > 2 && (
+											<span className="rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
+												+{node.roles.length - 2}
+											</span>
+										)}
 									</div>
 								)}
-							</div>
-							{hasErrors && (
-								<AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
-							)}
-						</div>
-						{/* Roles */}
-						{node.roles.length > 0 && (
-							<div className="mt-2 flex flex-wrap gap-1">
-								{node.roles.slice(0, 2).map((role) => (
-									<span
-										key={role}
-										className="rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
-									>
-										{t(`propertiesPanel.roleNames.${role}`)}
-									</span>
-								))}
-								{node.roles.length > 2 && (
-									<span className="rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
-										+{node.roles.length - 2}
-									</span>
-								)}
-							</div>
-						)}
 
-						{/* Badge de tipo de challenge para nodos Challenge */}
-						{isChallengeNode && challengeConfig && (
-							<div className="mt-2">
-								<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-									<Shield className="h-3 w-3" />
-									{challengeConfig.challengeType === "acceptance"
-										? t("canvas.challengeTypeAcceptance")
-										: t("canvas.challengeTypeSignature")}
-								</span>
-							</div>
-						)}
-
-						{isChallengeNode && challengeRetries && (
-							<div className="mt-2 flex flex-wrap gap-1">
-								<span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-semibold text-orange-700 dark:text-orange-300">
-									Reintentos: {challengeRetries.maxRetries}
-								</span>
-								{challengeRetries.roles.length > 0 && (
-									<span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-										{challengeRetries.roles
-											.slice(0, 2)
-											.map((role) => t(`propertiesPanel.roleNames.${role}`))
-											.join(", ")}
-										{challengeRetries.roles.length > 2 &&
-											` +${challengeRetries.roles.length - 2}`}
-									</span>
-								)}
-							</div>
-						)}
-
-						{isPromotionNode && promotionConfig && (
-							<div className="mt-2">
-								<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-									<BadgePercent className="h-3 w-3" />
-									{t("canvas.promotionCommissionLabel")}:{" "}
-									{promotionConfig.commission}
-								</span>
-							</div>
-						)}
-
-						{isNLSNode && nlsConfig?.functionId && (
-							<div className="mt-2">
-								<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-									<Banknote className="h-3 w-3" />
-									{nlsConfig.functionId}
-								</span>
-							</div>
-						)}
-
-						{/* Contador de reintentos para nodos Reject con allowRetry */}
-						{allowRetry && node.type === "Reject" && (
-							<div className="mt-2">
-								<span className="rounded-full bg-orange-500/20 px-2 py-1 text-xs font-semibold text-orange-700 dark:text-orange-400">
-									{maxRetries > 0
-										? t("canvas.nodeRetriesLabel")
-												.replace("{count}", String(retryCount))
-												.replace("{max}", String(maxRetries))
-										: t("canvas.nodeRetriesUnlimitedLabel").replace(
-												"{count}",
-												String(retryCount),
-											)}
-								</span>
-							</div>
-						)}
-
-						{/* Badges de flags para nodos FlagChange */}
-						{node.type === "FlagChange" &&
-						(node.config.flagChanges as
-							| Array<{ flagId: string; optionId: string }>
-							| undefined) ? (
-							<div className="mt-2 flex flex-wrap gap-1">
-								{(
-									node.config.flagChanges as Array<{
-										flagId: string;
-										optionId: string;
-									}>
-								).map((flagChange) => {
-									const flag = flags.find((f) => f.id === flagChange.flagId);
-									const option = flag?.options.find(
-										(opt) => opt.id === flagChange.optionId,
-									);
-									if (!flag || !option) return null;
-									return (
-										<span
-											key={`${flagChange.flagId}-${flagChange.optionId}`}
-											className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-white"
-											style={{ backgroundColor: getColorValue(option.color) }}
-										>
-											<span className="truncate max-w-[100px]">
-												{flag.name}:
-											</span>
-											<span className="truncate max-w-[80px]">
-												{option.label}
-											</span>
+								{/* Badge de tipo de challenge para nodos Challenge */}
+								{isChallengeNode && challengeConfig && (
+									<div className="mt-2">
+										<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+											<Shield className="h-3 w-3" />
+											{challengeConfig.challengeType === "acceptance"
+												? t("canvas.challengeTypeAcceptance")
+												: t("canvas.challengeTypeSignature")}
 										</span>
-									);
-								})}
-							</div>
-						) : null}
+									</div>
+								)}
 
-						{/* Badge de manejo de fallos para nodos API/NLS */}
-						{(node.type === "API" || node.type === "NLS") &&
-						node.config.failureHandling
-							? (() => {
-									const fh = node.config.failureHandling as
-										| (APIFailureHandling & { checkpointId?: string })
-										| undefined;
-									if (!fh) return null;
-									const icons = {
-										stop: "❌",
-										continue: "⚠️",
-										retry: "🔄",
-										"return-to-checkpoint": "⏮️",
-									};
-									const labels = {
-										stop: t("canvas.nodeApiFailureStop"),
-										continue: t("canvas.nodeApiFailureContinue"),
-										retry: t("canvas.nodeApiFailureRetry"),
-										"return-to-checkpoint": t(
-											"canvas.nodeApiFailureCheckpoint",
-										),
-									};
-									return (
-										<div className="mt-2 flex items-center gap-1">
-											<span className="flex-1 truncate rounded-md bg-blue-500/10 px-2 py-1 text-center text-xs font-semibold text-blue-700 dark:text-blue-400">
-												{icons[fh.onFailure as keyof typeof icons]}{" "}
-												{labels[fh.onFailure as keyof typeof labels]}
+								{isChallengeNode && challengeRetries && (
+									<div className="mt-2 flex flex-wrap gap-1">
+										<span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-semibold text-orange-700 dark:text-orange-300">
+											Reintentos: {challengeRetries.maxRetries}
+										</span>
+										{challengeRetries.roles.length > 0 && (
+											<span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+												{challengeRetries.roles
+													.slice(0, 2)
+													.map((role) => t(`propertiesPanel.roleNames.${role}`))
+													.join(", ")}
+												{challengeRetries.roles.length > 2 &&
+													` +${challengeRetries.roles.length - 2}`}
 											</span>
-											{(fh.onFailure === "retry" ||
-												fh.onFailure === "return-to-checkpoint") && (
-												<span className="rounded-md bg-orange-500/10 px-2 py-1 text-xs font-semibold text-orange-700 dark:text-orange-400">
-													{fh.maxRetries || 0}
-												</span>
-											)}
-										</div>
-									);
-								})()
-							: null}
-					</div>
-				</div>
+										)}
+									</div>
+								)}
 
-				{/* Conectores de salida */}
-				{!isTerminalNode && (
-					<>
-						{hasDecisionOutputs ? (
+								{isPromotionNode && promotionConfig && (
+									<div className="mt-2">
+										<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+											<BadgePercent className="h-3 w-3" />
+											{t("canvas.promotionCommissionLabel")}:{" "}
+											{promotionConfig.commission}
+										</span>
+									</div>
+								)}
+
+								{isNLSNode && nlsConfig?.functionId && (
+									<div className="mt-2">
+										<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+											<Banknote className="h-3 w-3" />
+											{nlsConfig.functionId}
+										</span>
+									</div>
+								)}
+
+								{/* Contador de reintentos para nodos Reject con allowRetry */}
+								{allowRetry && node.type === "Reject" && (
+									<div className="mt-2">
+										<span className="rounded-full bg-orange-500/20 px-2 py-1 text-xs font-semibold text-orange-700 dark:text-orange-400">
+											{maxRetries > 0
+												? t("canvas.nodeRetriesLabel")
+														.replace("{count}", String(retryCount))
+														.replace("{max}", String(maxRetries))
+												: t("canvas.nodeRetriesUnlimitedLabel").replace(
+														"{count}",
+														String(retryCount),
+													)}
+										</span>
+									</div>
+								)}
+
+								{/* Badges de flags para nodos FlagChange */}
+								{node.type === "FlagChange" &&
+								(node.config.flagChanges as
+									| Array<{ flagId: string; optionId: string }>
+									| undefined) ? (
+									<div className="mt-2 flex flex-wrap gap-1">
+										{(
+											node.config.flagChanges as Array<{
+												flagId: string;
+												optionId: string;
+											}>
+										).map((flagChange) => {
+											const flag = flags.find(
+												(f) => f.id === flagChange.flagId,
+											);
+											const option = flag?.options.find(
+												(opt) => opt.id === flagChange.optionId,
+											);
+											if (!flag || !option) return null;
+											return (
+												<span
+													key={`${flagChange.flagId}-${flagChange.optionId}`}
+													className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-white"
+													style={{
+														backgroundColor: getColorValue(option.color),
+													}}
+												>
+													<span className="truncate max-w-[100px]">
+														{flag.name}:
+													</span>
+													<span className="truncate max-w-[80px]">
+														{option.label}
+													</span>
+												</span>
+											);
+										})}
+									</div>
+								) : null}
+
+								{/* Badge de manejo de fallos para nodos API/NLS */}
+								{(node.type === "API" || node.type === "NLS") &&
+								node.config.failureHandling
+									? (() => {
+											const fh = node.config.failureHandling as
+												| (APIFailureHandling & { checkpointId?: string })
+												| undefined;
+											if (!fh) return null;
+											const icons = {
+												stop: "❌",
+												continue: "⚠️",
+												retry: "🔄",
+												"return-to-checkpoint": "⏮️",
+											};
+											const labels = {
+												stop: t("canvas.nodeApiFailureStop"),
+												continue: t("canvas.nodeApiFailureContinue"),
+												retry: t("canvas.nodeApiFailureRetry"),
+												"return-to-checkpoint": t(
+													"canvas.nodeApiFailureCheckpoint",
+												),
+											};
+											return (
+												<div className="mt-2 flex items-center gap-1">
+													<span className="flex-1 truncate rounded-md bg-blue-500/10 px-2 py-1 text-center text-xs font-semibold text-blue-700 dark:text-blue-400">
+														{icons[fh.onFailure as keyof typeof icons]}{" "}
+														{labels[fh.onFailure as keyof typeof labels]}
+													</span>
+													{(fh.onFailure === "retry" ||
+														fh.onFailure === "return-to-checkpoint") && (
+														<span className="rounded-md bg-orange-500/10 px-2 py-1 text-xs font-semibold text-orange-700 dark:text-orange-400">
+															{fh.maxRetries || 0}
+														</span>
+													)}
+												</div>
+											);
+										})()
+									: null}
+							</div>
+						</div>
+
+						{/* Conectores de salida */}
+						{!isTerminalNode && (
 							<>
-								<div
-									className={cn(
-										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
-										connecting &&
-											"scale-125 animate-pulse border-primary bg-primary",
-										showConnectors
-											? "pointer-events-auto opacity-100"
-											: "pointer-events-none scale-75 opacity-0",
-									)}
-									style={{
-										right: `${-CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
-										transform:
-											hoveredConnector === "right-top"
-												? "scale(1.25)"
-												: "scale(1)",
-										transformOrigin: "center center",
-									}}
-									title={t("canvas.nodeConnectorPositiveDecision")}
-									onClick={(e) =>
-										handleConnectorClick(rightTopConnectorPos!, e, "top")
-									}
-									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("right-top")}
-									onMouseLeave={() => setHoveredConnector(null)}
-									data-testid="output-connector-positive"
-								/>
-								<div
-									className={cn(
-										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
-										connecting &&
-											"scale-125 animate-pulse border-primary bg-primary",
-										showConnectors
-											? "pointer-events-auto opacity-100"
-											: "pointer-events-none scale-75 opacity-0",
-									)}
-									style={{
-										right: `${-CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
-										transform:
-											hoveredConnector === "right-bottom"
-												? "scale(1.25)"
-												: "scale(1)",
-										transformOrigin: "center center",
-									}}
-									title={t("canvas.nodeConnectorNegativeDecision")}
-									onClick={(e) =>
-										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
-									}
-									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("right-bottom")}
-									onMouseLeave={() => setHoveredConnector(null)}
-									data-testid="output-connector-negative"
-								/>
+								{hasDecisionOutputs ? (
+									<>
+										<div
+											className={cn(
+												"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
+												connecting &&
+													"scale-125 animate-pulse border-primary bg-primary",
+												showConnectors
+													? "pointer-events-auto opacity-100"
+													: "pointer-events-none scale-75 opacity-0",
+											)}
+											style={{
+												right: `${-CONNECTOR_SIZE / 2}px`,
+												top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
+												transform:
+													hoveredConnector === "right-top"
+														? "scale(1.25)"
+														: "scale(1)",
+												transformOrigin: "center center",
+											}}
+											title={t("canvas.nodeConnectorPositiveDecision")}
+											onClick={(e) =>
+												handleConnectorClick(rightTopConnectorPos!, e, "top")
+											}
+											onMouseDown={(e) => e.stopPropagation()}
+											onMouseEnter={() => setHoveredConnector("right-top")}
+											onMouseLeave={() => setHoveredConnector(null)}
+											data-testid="output-connector-positive"
+										/>
+										<div
+											className={cn(
+												"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
+												connecting &&
+													"scale-125 animate-pulse border-primary bg-primary",
+												showConnectors
+													? "pointer-events-auto opacity-100"
+													: "pointer-events-none scale-75 opacity-0",
+											)}
+											style={{
+												right: `${-CONNECTOR_SIZE / 2}px`,
+												top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
+												transform:
+													hoveredConnector === "right-bottom"
+														? "scale(1.25)"
+														: "scale(1)",
+												transformOrigin: "center center",
+											}}
+											title={t("canvas.nodeConnectorNegativeDecision")}
+											onClick={(e) =>
+												handleConnectorClick(
+													rightBottomConnectorPos!,
+													e,
+													"bottom",
+												)
+											}
+											onMouseDown={(e) => e.stopPropagation()}
+											onMouseEnter={() => setHoveredConnector("right-bottom")}
+											onMouseLeave={() => setHoveredConnector(null)}
+											data-testid="output-connector-negative"
+										/>
+									</>
+								) : hasChallengeOutputs ? (
+									<>
+										<div
+											className={cn(
+												"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
+												connecting &&
+													"scale-125 animate-pulse border-primary bg-primary",
+												showConnectors
+													? "pointer-events-auto opacity-100"
+													: "pointer-events-none scale-75 opacity-0",
+											)}
+											style={{
+												right: `${-CONNECTOR_SIZE / 2}px`,
+												top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
+												transform:
+													hoveredConnector === "right-top"
+														? "scale(1.25)"
+														: "scale(1)",
+												transformOrigin: "center center",
+											}}
+											title={t("canvas.nodeConnectorPositiveChallenge")}
+											onClick={(e) =>
+												handleConnectorClick(rightTopConnectorPos!, e, "top")
+											}
+											onMouseDown={(e) => e.stopPropagation()}
+											onMouseEnter={() => setHoveredConnector("right-top")}
+											onMouseLeave={() => setHoveredConnector(null)}
+											data-testid="output-connector-positive"
+										/>
+										<div
+											className={cn(
+												"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
+												connecting &&
+													"scale-125 animate-pulse border-primary bg-primary",
+												showConnectors
+													? "pointer-events-auto opacity-100"
+													: "pointer-events-none scale-75 opacity-0",
+											)}
+											style={{
+												right: `${-CONNECTOR_SIZE / 2}px`,
+												top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
+												transform:
+													hoveredConnector === "right-bottom"
+														? "scale(1.25)"
+														: "scale(1)",
+												transformOrigin: "center center",
+											}}
+											title={t("canvas.nodeConnectorNegativeChallenge")}
+											onClick={(e) =>
+												handleConnectorClick(
+													rightBottomConnectorPos!,
+													e,
+													"bottom",
+												)
+											}
+											onMouseDown={(e) => e.stopPropagation()}
+											onMouseEnter={() => setHoveredConnector("right-bottom")}
+											onMouseLeave={() => setHoveredConnector(null)}
+											data-testid="output-connector-negative"
+										/>
+									</>
+								) : (
+									<div
+										ref={rightConnectorRef}
+										className={cn(
+											"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
+											connecting &&
+												"scale-125 animate-pulse border-primary bg-primary",
+											showConnectors
+												? "pointer-events-auto opacity-100"
+												: "pointer-events-none scale-75 opacity-0",
+										)}
+										style={{
+											right: `${-CONNECTOR_SIZE / 2}px`,
+											top: `${realHeight / 2 - CONNECTOR_SIZE / 2}px`,
+											transform:
+												hoveredConnector === "right"
+													? "scale(1.25)"
+													: "scale(1)",
+											transformOrigin: "center center",
+										}}
+										title={t("canvas.nodeConnectorOutput")}
+										onClick={(e) => handleConnectorClick(rightConnectorPos!, e)}
+										onMouseDown={(e) => e.stopPropagation()}
+										onMouseEnter={() => setHoveredConnector("right")}
+										onMouseLeave={() => setHoveredConnector(null)}
+										data-testid="output-connector"
+									/>
+								)}
 							</>
-						) : hasChallengeOutputs ? (
-							<>
-								<div
-									className={cn(
-										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-green-500 bg-background transition-all duration-150",
-										connecting &&
-											"scale-125 animate-pulse border-primary bg-primary",
-										showConnectors
-											? "pointer-events-auto opacity-100"
-											: "pointer-events-none scale-75 opacity-0",
-									)}
-									style={{
-										right: `${-CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight * multiOutputPositiveRatio - CONNECTOR_SIZE / 2}px`,
-										transform:
-											hoveredConnector === "right-top"
-												? "scale(1.25)"
-												: "scale(1)",
-										transformOrigin: "center center",
-									}}
-									title={t("canvas.nodeConnectorPositiveChallenge")}
-									onClick={(e) =>
-										handleConnectorClick(rightTopConnectorPos!, e, "top")
-									}
-									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("right-top")}
-									onMouseLeave={() => setHoveredConnector(null)}
-									data-testid="output-connector-positive"
-								/>
-								<div
-									className={cn(
-										"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-red-500 bg-background transition-all duration-150",
-										connecting &&
-											"scale-125 animate-pulse border-primary bg-primary",
-										showConnectors
-											? "pointer-events-auto opacity-100"
-											: "pointer-events-none scale-75 opacity-0",
-									)}
-									style={{
-										right: `${-CONNECTOR_SIZE / 2}px`,
-										top: `${realHeight * multiOutputNegativeRatio - CONNECTOR_SIZE / 2}px`,
-										transform:
-											hoveredConnector === "right-bottom"
-												? "scale(1.25)"
-												: "scale(1)",
-										transformOrigin: "center center",
-									}}
-									title={t("canvas.nodeConnectorNegativeChallenge")}
-									onClick={(e) =>
-										handleConnectorClick(rightBottomConnectorPos!, e, "bottom")
-									}
-									onMouseDown={(e) => e.stopPropagation()}
-									onMouseEnter={() => setHoveredConnector("right-bottom")}
-									onMouseLeave={() => setHoveredConnector(null)}
-									data-testid="output-connector-negative"
-								/>
-							</>
-						) : (
+						)}
+
+						{/* Conector de entrada */}
+						{!isStartNode && (
 							<div
-								ref={rightConnectorRef}
 								className={cn(
-									"workflow-connector absolute z-10 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
+									"workflow-connector absolute z-30 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
 									connecting &&
 										"scale-125 animate-pulse border-primary bg-primary",
 									showConnectors
@@ -791,49 +879,28 @@ export function NodeRenderer({
 										: "pointer-events-none scale-75 opacity-0",
 								)}
 								style={{
-									right: `${-CONNECTOR_SIZE / 2}px`,
+									left: `${-CONNECTOR_SIZE / 2}px`,
 									top: `${realHeight / 2 - CONNECTOR_SIZE / 2}px`,
 									transform:
-										hoveredConnector === "right" ? "scale(1.25)" : "scale(1)",
+										hoveredConnector === "left" ? "scale(1.25)" : "scale(1)",
 									transformOrigin: "center center",
 								}}
-								title={t("canvas.nodeConnectorOutput")}
-								onClick={(e) => handleConnectorClick(rightConnectorPos!, e)}
+								title={t("canvas.nodeConnectorInput")}
+								onClick={(e) =>
+									handleConnectorClick(leftConnectorPos, e, "middle")
+								}
 								onMouseDown={(e) => e.stopPropagation()}
-								onMouseEnter={() => setHoveredConnector("right")}
+								onMouseEnter={() => setHoveredConnector("left")}
 								onMouseLeave={() => setHoveredConnector(null)}
-								data-testid="output-connector"
+								data-testid="input-connector"
 							/>
 						)}
-					</>
-				)}
-
-				{/* Conector de entrada */}
-				{!isStartNode && (
-					<div
-						className={cn(
-							"workflow-connector absolute z-30 h-4 w-4 cursor-pointer rounded-full border-2 border-primary bg-background transition-all duration-150",
-							connecting && "scale-125 animate-pulse border-primary bg-primary",
-							showConnectors
-								? "pointer-events-auto opacity-100"
-								: "pointer-events-none scale-75 opacity-0",
-						)}
-						style={{
-							left: `${-CONNECTOR_SIZE / 2}px`,
-							top: `${realHeight / 2 - CONNECTOR_SIZE / 2}px`,
-							transform:
-								hoveredConnector === "left" ? "scale(1.25)" : "scale(1)",
-							transformOrigin: "center center",
-						}}
-						title={t("canvas.nodeConnectorInput")}
-						onClick={(e) => handleConnectorClick(leftConnectorPos, e, "middle")}
-						onMouseDown={(e) => e.stopPropagation()}
-						onMouseEnter={() => setHoveredConnector("left")}
-						onMouseLeave={() => setHoveredConnector(null)}
-						data-testid="input-connector"
-					/>
-				)}
-			</div>
-		</div>
+					</div>
+				</div>
+			</TooltipTrigger>
+			<TooltipContent side="top" sideOffset={8}>
+				{tooltipContent}
+			</TooltipContent>
+		</Tooltip>
 	);
 }

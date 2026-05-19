@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkflowEditor } from "./WorkflowEditor";
 
 // Mock heavy dependencies so the test can load WorkflowEditor
@@ -57,7 +58,11 @@ describe("WorkflowEditor responsive behavior", () => {
 		vi.stubGlobal("innerWidth", 375);
 		window.dispatchEvent(new Event("resize"));
 
-		render(<WorkflowEditor />);
+		render(
+			<TooltipProvider>
+				<WorkflowEditor />
+			</TooltipProvider>,
+		);
 
 		// The small screen overlay should be visible
 		expect(

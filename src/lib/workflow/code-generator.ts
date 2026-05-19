@@ -664,6 +664,43 @@ function generateCaseObjectCall(
 	return code;
 }
 
+/**
+ * Emit a `step.do`-wrapped CASES_SVC.updateCaseLoanData call for NLS nodes
+ * that create or fetch loan/amortization data.
+ */
+function generateCaseLoanDataCall(
+	node: WorkflowNode,
+	indent: string,
+	varName: string,
+	functionId: NLSFunctionId,
+	retryVarName?: string,
+): string {
+	const baseName = `_loan-${node.id}`;
+	let stepDoNameExpr: string;
+	if (retryVarName) {
+		stepDoNameExpr = `${retryVarName} > 0 ? \`${baseName}-r\${${retryVarName}}\` : "${baseName}"`;
+	} else {
+		stepDoNameExpr = `"${baseName}"`;
+	}
+
+	const i2 = indent + "\t";
+	let code = `${indent}await step.do(${stepDoNameExpr}, async () => {\n`;
+
+	if (functionId === "cancelLoan") {
+		code += `${i2}await this.env.CASES_SVC.clearCaseLoanData(\n`;
+		code += `${i2}\tevent.payload.caseId as string,\n`;
+		code += `${i2});\n`;
+	} else {
+		code += `${i2}await this.env.CASES_SVC.updateCaseLoanData(\n`;
+		code += `${i2}\tevent.payload.caseId as string,\n`;
+		code += `${i2}\t${varName},\n`;
+		code += `${i2});\n`;
+	}
+
+	code += `${indent}});\n`;
+	return code;
+}
+
 // ---------------------------------------------------------------------------
 // Node code generators
 // ---------------------------------------------------------------------------
@@ -1028,6 +1065,13 @@ function generateNLSStep(
 
 	code += `);\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
+	code += generateCaseLoanDataCall(
+		node,
+		indent,
+		varName,
+		functionId,
+		retryVarName,
+	);
 	code += generateProgressCall(
 		node,
 		indent,

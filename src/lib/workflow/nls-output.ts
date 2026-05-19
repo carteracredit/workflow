@@ -9,6 +9,48 @@ const CREATE_LOAN_OUTPUT: OutputSchemaProperty[] = [
 		description: "True when the loan was created successfully in NLS",
 		readOnly: true,
 	},
+	{
+		id: "nls-createLoan-loanNumber",
+		name: "loanNumber",
+		type: "string",
+		description: "The loan number assigned or generated",
+		readOnly: true,
+	},
+	{
+		id: "nls-createLoan-originationDate",
+		name: "originationDate",
+		type: "string",
+		description: "Origination date of the loan",
+		readOnly: true,
+	},
+	{
+		id: "nls-createLoan-firstPaymentDate",
+		name: "firstPaymentDate",
+		type: "string",
+		description: "Date of the first payment",
+		readOnly: true,
+	},
+	{
+		id: "nls-createLoan-term",
+		name: "term",
+		type: "number",
+		description: "Loan term in months",
+		readOnly: true,
+	},
+	{
+		id: "nls-createLoan-loanAmount",
+		name: "loanAmount",
+		type: "number",
+		description: "Loan amount",
+		readOnly: true,
+	},
+	{
+		id: "nls-createLoan-interestRate",
+		name: "interestRate",
+		type: "number",
+		description: "Interest rate",
+		readOnly: true,
+	},
 ];
 
 const CANCEL_LOAN_OUTPUT: OutputSchemaProperty[] = [
@@ -19,6 +61,13 @@ const CANCEL_LOAN_OUTPUT: OutputSchemaProperty[] = [
 		description: "True when the loan was canceled successfully in NLS",
 		readOnly: true,
 	},
+	{
+		id: "nls-cancelLoan-loanNumber",
+		name: "loanNumber",
+		type: "string",
+		description: "The loan number that was canceled",
+		readOnly: true,
+	},
 ];
 
 const GET_AMORTIZATION_OUTPUT: OutputSchemaProperty[] = [
@@ -27,6 +76,13 @@ const GET_AMORTIZATION_OUTPUT: OutputSchemaProperty[] = [
 		name: "LoanAmount",
 		type: "number",
 		description: "Total loan amount from amortization schedule",
+		readOnly: true,
+	},
+	{
+		id: "nls-amort-CashFlow",
+		name: "CashFlow",
+		type: "string",
+		description: "Cash flow string (date;amount pairs)",
 		readOnly: true,
 	},
 	{
@@ -77,6 +133,44 @@ const GET_AMORTIZATION_OUTPUT: OutputSchemaProperty[] = [
 		type: "number",
 		description: "Computed Annual Percentage Rate",
 		readOnly: true,
+	},
+	{
+		id: "nls-amort-schedule",
+		name: "schedule",
+		type: "array",
+		description: "Full amortization schedule rows",
+		readOnly: true,
+		items: {
+			id: "nls-amort-schedule-item",
+			name: "row",
+			type: "object",
+			properties: [
+				{
+					id: "nls-amort-schedule-item-PaymentNumber",
+					name: "PaymentNumber",
+					type: "number",
+					description: "Payment number in sequence",
+				},
+				{
+					id: "nls-amort-schedule-item-LoanAmount",
+					name: "LoanAmount",
+					type: "number",
+					description: "Remaining loan amount",
+				},
+				{
+					id: "nls-amort-schedule-item-PaymentDate",
+					name: "PaymentDate",
+					type: "string",
+					description: "Date of the payment",
+				},
+				{
+					id: "nls-amort-schedule-item-PaymentAmount",
+					name: "PaymentAmount",
+					type: "number",
+					description: "Payment amount",
+				},
+			],
+		},
 	},
 ];
 
