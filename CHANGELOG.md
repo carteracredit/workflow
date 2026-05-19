@@ -1,3 +1,15 @@
+# [1.3.0-rc.21](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.20...v1.3.0-rc.21) (2026-05-19)
+
+
+### Bug Fixes
+
+* clarify terminal node conditions in NodeRenderer ([7327880](https://github.com/carteracredit/workflow/commit/732788039a53421c79042c8ab4f004213aa71191))
+
+
+### Features
+
+* integrate TooltipProvider into WorkflowEditor and NodeRenderer tests ([4d6c2e3](https://github.com/carteracredit/workflow/commit/4d6c2e3c2a726c9bf0a88592ab40935b173c17e0))
+
 # [1.3.0-rc.20](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.19...v1.3.0-rc.20) (2026-05-19)
 
 
