@@ -1681,4 +1681,66 @@ describe("NLS node validation", () => {
 			),
 		).toBe(true);
 	});
+
+	describe("precalification function", () => {
+		it("should not error for precalification in case_attached mode", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "precalification",
+				fields: [{ fieldId: "mode", value: "case_attached", source: "manual" }],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" && e.message.includes("campos requeridos"),
+				),
+			).toBe(false);
+		});
+
+		it("should error for precalification in lead mode when identity fields are missing", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "precalification",
+				fields: [{ fieldId: "mode", value: "lead", source: "manual" }],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("campos requeridos de identidad"),
+				),
+			).toBe(true);
+		});
+
+		it("should not error for precalification in lead mode when all required fields are provided", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "precalification",
+				fields: [
+					{ fieldId: "mode", value: "lead", source: "manual" },
+					{ fieldId: "firstName", value: "John", source: "manual" },
+					{ fieldId: "lastName", value: "Doe", source: "manual" },
+					{ fieldId: "email", value: "john@test.com", source: "manual" },
+					{ fieldId: "addressStreetNumber", value: "123", source: "manual" },
+					{ fieldId: "addressStreetName", value: "Main St", source: "manual" },
+					{ fieldId: "addressCity", value: "Austin", source: "manual" },
+					{ fieldId: "addressState", value: "TX", source: "manual" },
+					{ fieldId: "addressZipCode", value: "78701", source: "manual" },
+				],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("campos requeridos de identidad"),
+				),
+			).toBe(false);
+		});
+	});
 });

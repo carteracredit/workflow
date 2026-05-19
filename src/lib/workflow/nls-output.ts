@@ -174,6 +174,86 @@ const GET_AMORTIZATION_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
+const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-prequal-runId",
+		name: "runId",
+		type: "string",
+		description: "Unique identifier for this prequalification run",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-passes",
+		name: "passes",
+		type: "boolean",
+		description: "True if the applicant passed prequalification rules",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-reason",
+		name: "reason",
+		type: "string",
+		description: "Rejection reason if passes is false",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-scoreCardV3",
+		name: "scoreCardV3",
+		type: "number",
+		description: "SageMaker V3 score card number",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-scoreCardV4",
+		name: "scoreCardV4",
+		type: "number",
+		description: "SageMaker V4 score card number",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-errorCode",
+		name: "errorCode",
+		type: "string",
+		description: "Error code if an error occurred during prequalification",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-requestedPullType",
+		name: "requestedPullType",
+		type: "string",
+		description: "The credit pull type that was requested (soft/hard/new)",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-actualPullType",
+		name: "actualPullType",
+		type: "string",
+		description: "The credit pull type that was actually performed",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-reusedSoftPull",
+		name: "reusedSoftPull",
+		type: "boolean",
+		description: "True if a previous soft pull was reused",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-mode",
+		name: "mode",
+		type: "string",
+		description: "Mode used: case_attached or lead",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-cifNumber",
+		name: "cifNumber",
+		type: "string",
+		description: "The CIF number used for NLS operations",
+		readOnly: true,
+	},
+];
+
 export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	NLSFunctionId,
 	OutputSchemaProperty[]
@@ -181,6 +261,7 @@ export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	createLoan: CREATE_LOAN_OUTPUT,
 	cancelLoan: CANCEL_LOAN_OUTPUT,
 	getAmortization: GET_AMORTIZATION_OUTPUT,
+	precalification: PRECALIFICATION_OUTPUT,
 };
 
 export function getNlsOutputSchema(

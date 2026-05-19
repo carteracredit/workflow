@@ -999,6 +999,84 @@ const NLS_RPC_METHOD: Record<string, string> = {
 	getAmortization: "nlsGetAmortization",
 };
 
+/**
+ * Generate code for the precalification RPC call to CASES_SVC.
+ * Handles both case_attached and lead modes based on the "mode" field.
+ */
+function generatePrecalificationCall(
+	node: WorkflowNode,
+	indent: string,
+	fields: Array<{ fieldId: string; value: string }>,
+): string {
+	const i2 = indent + "\t";
+
+	// Build a map of field values for easy access
+	const fieldMap: Record<string, string> = {};
+	for (const field of fields) {
+		if (field.value) {
+			fieldMap[field.fieldId] = field.value;
+		}
+	}
+
+	let code = "";
+
+	// Determine mode from fields (default to case_attached)
+	const modeValue = fieldMap["mode"]
+		? emitInterpolatedString(fieldMap["mode"])
+		: '"case_attached"';
+
+	code += `${i2}const _mode = ${modeValue} as "case_attached" | "lead";\n`;
+
+	// Build identity object for lead mode
+	const identityFields = [
+		"firstName",
+		"middleName",
+		"lastName",
+		"email",
+		"birthDate",
+		"phoneNumber",
+		"taxIdType",
+		"taxIdNumber",
+		"addressStreetNumber",
+		"addressStreetName",
+		"addressApt",
+		"addressCity",
+		"addressState",
+		"addressZipCode",
+	];
+
+	code += `${i2}const _identity = _mode === "lead" ? {\n`;
+	for (const field of identityFields) {
+		if (fieldMap[field]) {
+			code += `${i2}\t${field}: ${emitInterpolatedString(fieldMap[field])},\n`;
+		}
+	}
+	code += `${i2}} : undefined;\n`;
+
+	// Get pullType if specified
+	const pullTypeValue = fieldMap["pullType"]
+		? emitInterpolatedString(fieldMap["pullType"])
+		: "undefined";
+
+	// Get userId for case_attached mode
+	const userIdValue = fieldMap["userId"]
+		? emitInterpolatedString(fieldMap["userId"])
+		: "event.payload.clientUserId as string";
+
+	code += `${i2}const _prequal = await this.env.CASES_SVC.runPrequalificationForWorkflow({\n`;
+	code += `${i2}\tuserJwt: event.payload._jwt as string,\n`;
+	code += `${i2}\tmode: _mode,\n`;
+	code += `${i2}\tuserId: _mode === "case_attached" ? ${userIdValue} : undefined,\n`;
+	code += `${i2}\tidentity: _identity,\n`;
+	code += `${i2}\tcaseId: event.payload.caseId as string,\n`;
+	code += `${i2}\torgId: event.payload.orgId as string | undefined,\n`;
+	code += `${i2}\tpullType: ${pullTypeValue} as "soft" | "hard" | "new" | undefined,\n`;
+	code += `${i2}});\n`;
+	code += `${i2}return _prequal as Record<string, unknown>;\n`;
+
+	return code;
+}
+
 function generateNLSStep(
 	node: WorkflowNode,
 	indent: string,
@@ -1006,7 +1084,6 @@ function generateNLSStep(
 ): string {
 	const cfg = node.config as NLSNodeConfig | undefined;
 	const functionId = (cfg?.functionId ?? "createLoan") as NLSFunctionId;
-	const rpcMethod = NLS_RPC_METHOD[functionId] ?? `nls${functionId}`;
 	const failureHandling = cfg?.failureHandling as
 		| APIFailureHandling
 		| undefined;
@@ -1037,19 +1114,25 @@ function generateNLSStep(
 
 	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
 
-	// Build body object from configured fields
-	code += `${indent}\tconst _nlsBody: Record<string, unknown> = {};\n`;
-	for (const field of fields) {
-		if (!field.value) continue;
-		const valueExpr = emitInterpolatedString(field.value);
-		code += `${indent}\t_nlsBody[${JSON.stringify(field.fieldId)}] = ${valueExpr};\n`;
-	}
+	// Special handling for precalification — dispatches to CASES_SVC
+	if (functionId === "precalification") {
+		code += generatePrecalificationCall(node, indent, fields);
+	} else {
+		const rpcMethod = NLS_RPC_METHOD[functionId] ?? `nls${functionId}`;
+		// Build body object from configured fields
+		code += `${indent}\tconst _nlsBody: Record<string, unknown> = {};\n`;
+		for (const field of fields) {
+			if (!field.value) continue;
+			const valueExpr = emitInterpolatedString(field.value);
+			code += `${indent}\t_nlsBody[${JSON.stringify(field.fieldId)}] = ${valueExpr};\n`;
+		}
 
-	code += `${indent}\tconst _nlsResult = await this.env.PROXY_SVC.${rpcMethod}({\n`;
-	code += `${indent}\t\tbearerToken: event.payload._jwt as string,\n`;
-	code += `${indent}\t\tbody: _nlsBody,\n`;
-	code += `${indent}\t});\n`;
-	code += `${indent}\treturn _nlsResult as Record<string, unknown>;\n`;
+		code += `${indent}\tconst _nlsResult = await this.env.PROXY_SVC.${rpcMethod}({\n`;
+		code += `${indent}\t\tbearerToken: event.payload._jwt as string,\n`;
+		code += `${indent}\t\tbody: _nlsBody,\n`;
+		code += `${indent}\t});\n`;
+		code += `${indent}\treturn _nlsResult as Record<string, unknown>;\n`;
+	}
 	code += `${indent}}`;
 
 	if (failureHandling && failureHandling.maxRetries > 0) {
