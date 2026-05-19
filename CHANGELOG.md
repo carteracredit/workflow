@@ -1,3 +1,11 @@
+# [1.3.0-rc.20](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.19...v1.3.0-rc.20) (2026-05-19)
+
+
+### Features
+
+* add NLS node integration for workflow ([d3ff8bf](https://github.com/carteracredit/workflow/commit/d3ff8bfcdaaada984ae83530394d293d206b88f0))
+* add prequalification variables to case workflow ([eab1d63](https://github.com/carteracredit/workflow/commit/eab1d63a247b1113e53b0b3ed5c43d3ec030e5b5))
+
 # [1.3.0-rc.19](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.18...v1.3.0-rc.19) (2026-05-12)
 
 
