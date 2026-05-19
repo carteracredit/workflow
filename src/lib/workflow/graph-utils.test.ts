@@ -887,6 +887,86 @@ describe("graph-utils", () => {
 			expect(monthlyEntries).toHaveLength(1);
 			expect(monthlyEntries[0].type).toBe("number");
 		});
+
+		it("NLS nodes expose output fields based on functionId (createLoan)", () => {
+			const nlsNode: WorkflowNode = {
+				id: "nls-1",
+				type: "NLS",
+				title: "Crear préstamo",
+				description: "",
+				roles: [],
+				config: {
+					functionId: "createLoan",
+					fields: [],
+					failureHandling: { onFailure: "stop", maxRetries: 0 },
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([nlsNode]);
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe("crearPrestamo");
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toContain("success");
+			expect(names).toContain("loanNumber");
+			expect(names).toContain("originationDate");
+			expect(names).toContain("firstPaymentDate");
+			expect(names).toContain("term");
+			expect(names).toContain("loanAmount");
+			expect(names).toContain("interestRate");
+		});
+
+		it("NLS nodes expose output fields based on functionId (getAmortization)", () => {
+			const nlsNode: WorkflowNode = {
+				id: "nls-2",
+				type: "NLS",
+				title: "Obtener amortización",
+				description: "",
+				roles: [],
+				config: {
+					functionId: "getAmortization",
+					fields: [],
+					failureHandling: { onFailure: "stop", maxRetries: 0 },
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([nlsNode]);
+			expect(result).toHaveLength(1);
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toContain("LoanAmount");
+			expect(names).toContain("apr");
+			expect(names).toContain("totalOfPayments");
+			expect(names).toContain("CashFlow");
+			expect(names).toContain("schedule");
+
+			const schedule = result[0].variables.find((v) => v.name === "schedule");
+			expect(schedule?.type).toBe("array");
+			expect(schedule?.children).toBeDefined();
+		});
+
+		it("NLS node without functionId produces no variables", () => {
+			const nlsNode: WorkflowNode = {
+				id: "nls-3",
+				type: "NLS",
+				title: "NLS sin función",
+				description: "",
+				roles: [],
+				config: {
+					fields: [],
+					failureHandling: { onFailure: "stop", maxRetries: 0 },
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([nlsNode]);
+			expect(result).toEqual([]);
+		});
 	});
 
 	describe("buildSecretsSource", () => {

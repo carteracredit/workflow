@@ -107,6 +107,7 @@ import type {
 } from "@/lib/workflow-api/nls-actions";
 import type { NLSNodeConfig, NLSFunctionId } from "@/lib/workflow/types";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
+import { getNlsOutputSchema } from "@/lib/workflow/nls-output";
 import { useLanguage } from "@/components/LanguageProvider";
 import { buildAliasMap, titleToCamelCase } from "@/lib/workflow/node-alias";
 import {
@@ -5147,6 +5148,10 @@ export function PropertiesPanel({
 									}
 									onValueChange={(v) => {
 										const functionId = v as NLSFunctionId;
+										const outputSchema = {
+											name: `${functionId}Output`,
+											properties: getNlsOutputSchema(functionId),
+										};
 										getNlsFunctionAction(functionId)
 											.then((detail) => {
 												const discoveredFields = detail.sections.flatMap((s) =>
@@ -5161,6 +5166,7 @@ export function PropertiesPanel({
 														...selectedNode.config,
 														functionId,
 														fields: discoveredFields,
+														outputSchema,
 													},
 												});
 												setNlsFunctionDetail(detail);
@@ -5174,6 +5180,7 @@ export function PropertiesPanel({
 														...selectedNode.config,
 														functionId,
 														fields: [],
+														outputSchema,
 													},
 												});
 											});
@@ -5307,6 +5314,30 @@ export function PropertiesPanel({
 										</div>
 									);
 								})}
+
+							{/* Output fields — read-only display when function is selected */}
+							{(selectedNode.config as NLSNodeConfig).functionId && (
+								<div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+									<p className="font-medium text-foreground">
+										{t("propertiesPanel.nlsOutputsTitle")}
+									</p>
+									<p className="mt-1">{t("propertiesPanel.nlsOutputsDesc")}</p>
+									<ul className="mt-2 space-y-0.5 list-disc list-inside">
+										{getNlsOutputSchema(
+											(selectedNode.config as NLSNodeConfig).functionId,
+										).map((prop) => (
+											<li key={prop.id}>
+												<span className="font-mono text-foreground/80">
+													{prop.name}
+												</span>{" "}
+												<span className="text-muted-foreground">
+													({prop.type})
+												</span>
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
 
 							{/* Failure handling — reuses same pattern as API node */}
 							{(() => {

@@ -25,6 +25,11 @@ import {
 	Banknote,
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface PaletteProps {
 	onAddNode: (node: WorkflowNode) => void;
@@ -237,36 +242,32 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 				<div key={category.id} className="flex items-center gap-2">
 					{category.nodes.map(
 						({ type, labelKey, icon, bgColor, iconColorVar }) => (
-							<div key={type} className="group relative">
-								<button
-									type="button"
-									className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-									onClick={() => handleAddNode(type, labelKey)}
-									aria-label={t("palette.addNodeLabel").replace(
-										"{label}",
-										t(labelKey),
-									)}
-								>
-									<div
-										className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
-										style={{
-											backgroundColor: bgColor,
-											color: `var(${iconColorVar})`,
-										}}
+							<Tooltip key={type} delayDuration={200}>
+								<TooltipTrigger asChild>
+									<button
+										type="button"
+										className="group flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										onClick={() => handleAddNode(type, labelKey)}
+										aria-label={t("palette.addNodeLabel").replace(
+											"{label}",
+											t(labelKey),
+										)}
 									>
-										{icon}
-									</div>
-								</button>
-								<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-									<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
-										{t(labelKey)}
-									</span>
-									<span
-										className="mt-1 h-2 w-px rounded-full bg-border"
-										aria-hidden="true"
-									/>
-								</div>
-							</div>
+										<div
+											className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
+											style={{
+												backgroundColor: bgColor,
+												color: `var(${iconColorVar})`,
+											}}
+										>
+											{icon}
+										</div>
+									</button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom" sideOffset={8}>
+									<p>{t(labelKey)}</p>
+								</TooltipContent>
+							</Tooltip>
 						),
 					)}
 					{index < NODE_CATEGORIES.length - 1 && (

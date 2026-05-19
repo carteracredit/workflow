@@ -8,7 +8,9 @@ import type {
 import { cloneCaseVariables } from "./case-variables";
 import { cloneChallengeOutputSchemaForType } from "./challenge-output";
 import { clonePromotionOutputSchema } from "./promotion-output";
+import { cloneNlsOutputSchema } from "./nls-output";
 import { buildAliasMap } from "./node-alias";
+import type { NLSNodeConfig } from "./types";
 
 /**
  * Encuentra el checkpoint anterior más próximo a un nodo dado.
@@ -320,11 +322,9 @@ export function buildVariableSourceNodes(
 		const schema = node.config.outputSchema as OutputSchema | undefined;
 		const customProps = schema?.properties ?? [];
 
-		// Challenge and Promotion nodes always expose a fixed output schema
-		// (accepted/timedOut/... for Challenge; promotionId/monthlyPayment/...
-		// for Promotion). User-declared custom properties are merged on top,
-		// but fixed fields win on collisions so downstream references are
-		// always resolvable at runtime.
+		// Challenge, Promotion, and NLS nodes always expose a fixed output schema.
+		// User-declared custom properties are merged on top, but fixed fields
+		// win on collisions so downstream references are always resolvable at runtime.
 		let properties: OutputSchemaProperty[];
 		if (node.type === "Challenge") {
 			properties = mergePropertiesByName(
@@ -336,6 +336,12 @@ export function buildVariableSourceNodes(
 		} else if (node.type === "Promotion") {
 			properties = mergePropertiesByName(
 				clonePromotionOutputSchema(),
+				customProps,
+			);
+		} else if (node.type === "NLS") {
+			const nlsConfig = node.config as NLSNodeConfig;
+			properties = mergePropertiesByName(
+				cloneNlsOutputSchema(nlsConfig.functionId),
 				customProps,
 			);
 		} else {

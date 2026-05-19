@@ -406,6 +406,7 @@ export const translations = {
 			nodeApiFailureContinue: "Continue",
 			nodeApiFailureRetry: "Retry",
 			nodeApiFailureCheckpoint: "Checkpoint",
+			nlsFunctionLabel: "Function",
 			challengeTypeAcceptance: "Acceptance",
 			challengeTypeSignature: "Signature",
 			promotionCommissionLabel: "Commission",
@@ -747,6 +748,9 @@ export const translations = {
 			promotionOutputsTitle: "Outputs exposed by this node",
 			promotionOutputsDesc:
 				"The selected promotion snapshot (promotionId, selectedTerm, monthlyPayment, etc.) is automatically exposed to downstream nodes through the variable picker.",
+			nlsOutputsTitle: "Outputs exposed by this node",
+			nlsOutputsDesc:
+				"The NLS function result is automatically exposed to downstream nodes through the variable picker.",
 			checkpointSafeLabel: "Safe checkpoint",
 			checkpointSafeDesc:
 				'Mark this checkpoint as "safe" to use it as a protected stage.',
@@ -1384,6 +1388,7 @@ export const translations = {
 			nodeApiFailureContinue: "Continuar",
 			nodeApiFailureRetry: "Reintentar",
 			nodeApiFailureCheckpoint: "Checkpoint",
+			nlsFunctionLabel: "Función",
 			challengeTypeAcceptance: "Aceptación",
 			challengeTypeSignature: "Firma",
 			promotionCommissionLabel: "Comisión",
@@ -1725,6 +1730,9 @@ export const translations = {
 			promotionOutputsTitle: "Salidas expuestas por este nodo",
 			promotionOutputsDesc:
 				"El snapshot de la promoción seleccionada (promotionId, selectedTerm, monthlyPayment, etc.) queda disponible automáticamente para los nodos siguientes a través del selector de variables.",
+			nlsOutputsTitle: "Salidas expuestas por este nodo",
+			nlsOutputsDesc:
+				"El resultado de la función NLS queda disponible automáticamente para los nodos siguientes a través del selector de variables.",
 			checkpointSafeLabel: "Checkpoint seguro",
 			checkpointSafeDesc:
 				'Marca este checkpoint como "safe" para usarlo como etapa protegida.',
