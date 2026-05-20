@@ -414,7 +414,11 @@ export interface OutputSchema {
 
 // ─── NLS Node Config ────────────────────────────────────────────────────────
 
-export type NLSFunctionId = "createLoan" | "cancelLoan" | "getAmortization";
+export type NLSFunctionId =
+	| "createLoan"
+	| "cancelLoan"
+	| "getAmortization"
+	| "precalification";
 
 export interface NLSFieldConfig {
 	fieldId: string;

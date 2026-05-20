@@ -346,6 +346,42 @@ export function validateWorkflow(
 				});
 			}
 
+			// Validations specific to precalification function
+			if (nlsCfg?.functionId === "precalification") {
+				const fields = nlsCfg.fields ?? [];
+				const fieldMap: Record<string, string> = {};
+				for (const f of fields) {
+					fieldMap[f.fieldId] = f.value;
+				}
+
+				const mode = fieldMap["mode"] ?? "case_attached";
+				const isLiteralLead = mode === "lead" || mode === '"lead"';
+
+				if (isLiteralLead) {
+					// In lead mode, identity fields are required
+					const requiredLeadFields = [
+						"firstName",
+						"lastName",
+						"email",
+						"addressStreetNumber",
+						"addressStreetName",
+						"addressCity",
+						"addressState",
+						"addressZipCode",
+					];
+					const missingFields = requiredLeadFields.filter(
+						(f) => !fieldMap[f]?.trim(),
+					);
+					if (missingFields.length > 0) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}": En modo lead, faltan campos requeridos de identidad: ${missingFields.join(", ")}`,
+							severity: "error",
+						});
+					}
+				}
+			}
+
 			const fh = nlsCfg?.failureHandling as
 				| (APIFailureHandling & { checkpointId?: string })
 				| undefined;
