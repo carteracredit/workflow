@@ -108,6 +108,12 @@ import type {
 import type { NLSNodeConfig, NLSFunctionId } from "@/lib/workflow/types";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
 import { getNlsOutputSchema } from "@/lib/workflow/nls-output";
+import {
+	getNlsSectionLabel,
+	getNlsFieldLabel,
+	getNlsOptionLabel,
+	getNlsFunctionDescription,
+} from "@/lib/workflow/nls-labels";
 import { useLanguage } from "@/components/LanguageProvider";
 import { buildAliasMap, titleToCamelCase } from "@/lib/workflow/node-alias";
 import {
@@ -293,7 +299,7 @@ export function PropertiesPanel({
 	onManageVariables,
 	extraVariableSources,
 }: PropertiesPanelProps) {
-	const { t, getFieldLabel } = useLanguage();
+	const { t, getFieldLabel, language } = useLanguage();
 	// For backward compatibility and single selection UI, use first selected item
 	const selectedNode =
 		selectedNodes.length === 1 ? selectedNodes[0] : undefined;
@@ -5203,17 +5209,21 @@ export function PropertiesPanel({
 										))}
 									</SelectContent>
 								</Select>
-								{(selectedNode.config as NLSNodeConfig).functionId && (
-									<p className="text-xs text-muted-foreground">
-										{
-											nlsFunctions.find(
-												(f) =>
-													f.id ===
-													(selectedNode.config as NLSNodeConfig).functionId,
-											)?.description
-										}
-									</p>
-								)}
+								{(() => {
+									const fnId = (selectedNode.config as NLSNodeConfig)
+										.functionId;
+									if (!fnId) return null;
+									const fnDef = nlsFunctions.find((f) => f.id === fnId);
+									return (
+										<p className="text-xs text-muted-foreground">
+											{getNlsFunctionDescription(
+												language,
+												fnId,
+												fnDef?.description ?? "",
+											)}
+										</p>
+									);
+								})()}
 							</div>
 
 							{/* Fields by section */}
@@ -5275,7 +5285,11 @@ export function PropertiesPanel({
 														) : (
 															<ChevronDown className="h-3 w-3" />
 														)}
-														{section.label}
+														{getNlsSectionLabel(
+															language,
+															section.id,
+															section.label,
+														)}
 														<span className="text-[10px] text-muted-foreground font-normal">
 															({visibleFields.length})
 														</span>
@@ -5298,7 +5312,11 @@ export function PropertiesPanel({
 																	return (
 																		<div key={field.id} className="space-y-1">
 																			<Label className="text-xs">
-																				{field.label}
+																				{getNlsFieldLabel(
+																					language,
+																					field.id,
+																					field.label,
+																				)}
 																			</Label>
 																			<p className="text-xs text-muted-foreground bg-muted/50 px-2 py-1.5 rounded border border-border/40">
 																				{t("propertiesPanel.nlsUserIdAutoInfo")}
@@ -5311,7 +5329,11 @@ export function PropertiesPanel({
 																	return (
 																		<div key={field.id} className="space-y-1">
 																			<Label className="text-xs">
-																				{field.label}
+																				{getNlsFieldLabel(
+																					language,
+																					field.id,
+																					field.label,
+																				)}
 																				{field.required && (
 																					<span className="text-destructive ml-0.5">
 																						*
@@ -5360,7 +5382,11 @@ export function PropertiesPanel({
 																							key={opt.value}
 																							value={opt.value}
 																						>
-																							{opt.label}
+																							{getNlsOptionLabel(
+																								language,
+																								opt.value,
+																								opt.label,
+																							)}
 																						</SelectItem>
 																					))}
 																				</SelectContent>
@@ -5372,7 +5398,11 @@ export function PropertiesPanel({
 																return (
 																	<div key={field.id} className="space-y-1">
 																		<Label className="text-xs">
-																			{field.label}
+																			{getNlsFieldLabel(
+																				language,
+																				field.id,
+																				field.label,
+																			)}
 																			{field.required && (
 																				<span className="text-destructive ml-0.5">
 																					*
