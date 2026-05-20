@@ -1,3 +1,12 @@
+# [1.3.0-rc.22](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.21...v1.3.0-rc.22) (2026-05-20)
+
+
+### Features
+
+* enhance NLS functionality in PropertiesPanel and translations ([a9969aa](https://github.com/carteracredit/workflow/commit/a9969aa8afd06ff836dc557936c02f9b895e0213))
+* enhance NLS label handling in PropertiesPanel and add new utility functions ([0428414](https://github.com/carteracredit/workflow/commit/0428414f2cee245e79fb9d046b78fcebe6301e3e))
+* implement precalification functionality in workflow ([b1ba690](https://github.com/carteracredit/workflow/commit/b1ba690a949745c5a1b0603def15a37bdf473f69))
+
 # [1.3.0-rc.21](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.20...v1.3.0-rc.21) (2026-05-19)
 
 
