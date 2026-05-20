@@ -366,3 +366,115 @@ export const NlsNodeGetAmortization: Story = {
 		selectedEdges: [],
 	},
 };
+
+export const NlsNodePrecalificationCaseAttached: Story = {
+	name: "NLS — precalification (Case Attached)",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Precalificación",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "precalification",
+					fields: [
+						{
+							fieldId: "mode",
+							value: "case_attached",
+							source: "manual",
+						},
+						{
+							fieldId: "pullType",
+							value: "soft",
+							source: "manual",
+						},
+					],
+					failureHandling: {
+						onFailure: "stop",
+						maxRetries: 1,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 60000,
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodePrecalificationLead: Story = {
+	name: "NLS — precalification (Lead)",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Precalificación Lead",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "precalification",
+					fields: [
+						{
+							fieldId: "mode",
+							value: "lead",
+							source: "manual",
+						},
+						{
+							fieldId: "pullType",
+							value: "hard",
+							source: "manual",
+						},
+						{
+							fieldId: "firstName",
+							value: "${form.firstName}",
+							source: "discovered",
+						},
+						{
+							fieldId: "lastName",
+							value: "${form.lastName}",
+							source: "discovered",
+						},
+						{
+							fieldId: "email",
+							value: "${form.email}",
+							source: "discovered",
+						},
+						{
+							fieldId: "addressStreetNumber",
+							value: "${form.streetNumber}",
+							source: "discovered",
+						},
+						{
+							fieldId: "addressStreetName",
+							value: "${form.streetName}",
+							source: "discovered",
+						},
+						{
+							fieldId: "addressCity",
+							value: "${form.city}",
+							source: "discovered",
+						},
+						{
+							fieldId: "addressState",
+							value: "${form.state}",
+							source: "discovered",
+						},
+						{
+							fieldId: "addressZipCode",
+							value: "${form.zipCode}",
+							source: "discovered",
+						},
+					],
+					failureHandling: {
+						onFailure: "retry",
+						maxRetries: 2,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 90000,
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};

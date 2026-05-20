@@ -26,12 +26,25 @@ export interface NlsFunctionSummary {
 	outputFields: NlsFunctionOutputField[];
 }
 
+export interface NlsFunctionFieldOption {
+	value: string;
+	label: string;
+}
+
+export interface NlsFunctionFieldDependsOn {
+	fieldId: string;
+	equals: string;
+}
+
 export interface NlsFunctionField {
 	id: string;
 	label: string;
 	type: string;
 	required: boolean;
 	defaultValue?: string;
+	options?: NlsFunctionFieldOption[];
+	hidden?: boolean;
+	dependsOn?: NlsFunctionFieldDependsOn;
 }
 
 export interface NlsFunctionSection {

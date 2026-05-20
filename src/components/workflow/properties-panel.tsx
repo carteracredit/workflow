@@ -5218,102 +5218,215 @@ export function PropertiesPanel({
 
 							{/* Fields by section */}
 							{nlsDetailLoading && (
-								<p className="text-xs text-muted-foreground">Loading fields…</p>
+								<p className="text-xs text-muted-foreground">
+									{t("propertiesPanel.nlsFieldsLoading")}
+								</p>
 							)}
 							{nlsFunctionDetail &&
 								!nlsDetailLoading &&
-								nlsFunctionDetail.sections.map((section) => {
-									const isExpanded = nlsExpandedSections.has(section.id);
-									return (
-										<div
-											key={section.id}
-											className="rounded border border-border/40"
-										>
-											<button
-												type="button"
-												className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-accent/50"
-												onClick={() =>
-													setNlsExpandedSections((prev) => {
-														const next = new Set(prev);
-														if (next.has(section.id)) next.delete(section.id);
-														else next.add(section.id);
-														return next;
-													})
+								(() => {
+									const nlsConfig = selectedNode.config as NLSNodeConfig;
+									const fieldMap: Record<string, string> = {};
+									for (const f of nlsConfig.fields ?? []) {
+										fieldMap[f.fieldId] = f.value;
+									}
+									for (const sec of nlsFunctionDetail.sections) {
+										for (const fld of sec.fields) {
+											if (!(fld.id in fieldMap) && fld.defaultValue) {
+												fieldMap[fld.id] = fld.defaultValue;
+											}
+										}
+									}
+
+									return nlsFunctionDetail.sections
+										.map((section) => {
+											const visibleFields = section.fields.filter((field) => {
+												if (field.hidden) return false;
+												if (field.dependsOn) {
+													const depValue =
+														fieldMap[field.dependsOn.fieldId] ?? "";
+													if (depValue !== field.dependsOn.equals) return false;
 												}
-											>
-												{isExpanded ? (
-													<ChevronUp className="h-3 w-3" />
-												) : (
-													<ChevronDown className="h-3 w-3" />
-												)}
-												{section.label}
-												<span className="text-[10px] text-muted-foreground font-normal">
-													({section.fields.length})
-												</span>
-											</button>
-											{isExpanded && (
-												<div className="space-y-2 px-3 pb-3">
-													{section.fields.map((field) => {
-														const nlsConfig =
-															selectedNode.config as NLSNodeConfig;
-														const fieldConfig = nlsConfig.fields.find(
-															(f) => f.fieldId === field.id,
-														);
-														return (
-															<div key={field.id} className="space-y-1">
-																<Label className="text-xs">
-																	{field.label}
-																	{field.required && (
-																		<span className="text-destructive ml-0.5">
-																			*
-																		</span>
-																	)}
-																</Label>
-																<VariableTemplateInput
-																	nodes={upstreamVariableNodes}
-																	value={parseTemplateStringToSegments(
-																		fieldConfig?.value ?? "",
-																	)}
-																	placeholder={
-																		field.defaultValue ||
-																		`${field.type}${field.required ? " (required)" : ""}`
-																	}
-																	onChange={(segs) => {
-																		const val = segmentsToTemplateString(segs);
-																		const fields = [
-																			...(nlsConfig.fields ?? []),
-																		];
-																		const idx = fields.findIndex(
-																			(f) => f.fieldId === field.id,
-																		);
-																		if (idx >= 0) {
-																			fields[idx] = {
-																				...fields[idx],
-																				value: val,
-																			};
-																		} else {
-																			fields.push({
-																				fieldId: field.id,
-																				value: val,
-																				source: "discovered",
-																			});
-																		}
-																		onUpdateNode(selectedNode.id, {
-																			config: {
-																				...selectedNode.config,
-																				fields,
-																			},
-																		});
-																	}}
-																/>
-															</div>
-														);
-													})}
+												return true;
+											});
+											if (visibleFields.length === 0) return null;
+
+											const isExpanded = nlsExpandedSections.has(section.id);
+											return (
+												<div
+													key={section.id}
+													className="rounded border border-border/40"
+												>
+													<button
+														type="button"
+														className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-accent/50"
+														onClick={() =>
+															setNlsExpandedSections((prev) => {
+																const next = new Set(prev);
+																if (next.has(section.id))
+																	next.delete(section.id);
+																else next.add(section.id);
+																return next;
+															})
+														}
+													>
+														{isExpanded ? (
+															<ChevronUp className="h-3 w-3" />
+														) : (
+															<ChevronDown className="h-3 w-3" />
+														)}
+														{section.label}
+														<span className="text-[10px] text-muted-foreground font-normal">
+															({visibleFields.length})
+														</span>
+													</button>
+													{isExpanded && (
+														<div className="space-y-2 px-3 pb-3">
+															{visibleFields.map((field) => {
+																const fieldConfig = nlsConfig.fields.find(
+																	(f) => f.fieldId === field.id,
+																);
+																const currentValue =
+																	fieldConfig?.value ??
+																	field.defaultValue ??
+																	"";
+
+																if (
+																	field.id === "userId" &&
+																	fieldMap["mode"] === "case_attached"
+																) {
+																	return (
+																		<div key={field.id} className="space-y-1">
+																			<Label className="text-xs">
+																				{field.label}
+																			</Label>
+																			<p className="text-xs text-muted-foreground bg-muted/50 px-2 py-1.5 rounded border border-border/40">
+																				{t("propertiesPanel.nlsUserIdAutoInfo")}
+																			</p>
+																		</div>
+																	);
+																}
+
+																if (field.type === "select" && field.options) {
+																	return (
+																		<div key={field.id} className="space-y-1">
+																			<Label className="text-xs">
+																				{field.label}
+																				{field.required && (
+																					<span className="text-destructive ml-0.5">
+																						*
+																					</span>
+																				)}
+																			</Label>
+																			<Select
+																				value={currentValue}
+																				onValueChange={(val) => {
+																					const fields = [
+																						...(nlsConfig.fields ?? []),
+																					];
+																					const idx = fields.findIndex(
+																						(f) => f.fieldId === field.id,
+																					);
+																					if (idx >= 0) {
+																						fields[idx] = {
+																							...fields[idx],
+																							value: val,
+																						};
+																					} else {
+																						fields.push({
+																							fieldId: field.id,
+																							value: val,
+																							source: "discovered",
+																						});
+																					}
+																					onUpdateNode(selectedNode.id, {
+																						config: {
+																							...selectedNode.config,
+																							fields,
+																						},
+																					});
+																				}}
+																			>
+																				<SelectTrigger className="h-8 text-xs">
+																					<SelectValue
+																						placeholder={t(
+																							"propertiesPanel.nlsSelectPlaceholder",
+																						)}
+																					/>
+																				</SelectTrigger>
+																				<SelectContent>
+																					{field.options.map((opt) => (
+																						<SelectItem
+																							key={opt.value}
+																							value={opt.value}
+																						>
+																							{opt.label}
+																						</SelectItem>
+																					))}
+																				</SelectContent>
+																			</Select>
+																		</div>
+																	);
+																}
+
+																return (
+																	<div key={field.id} className="space-y-1">
+																		<Label className="text-xs">
+																			{field.label}
+																			{field.required && (
+																				<span className="text-destructive ml-0.5">
+																					*
+																				</span>
+																			)}
+																		</Label>
+																		<VariableTemplateInput
+																			nodes={upstreamVariableNodes}
+																			value={parseTemplateStringToSegments(
+																				currentValue,
+																			)}
+																			placeholder={
+																				field.defaultValue ||
+																				`${field.type}${field.required ? ` (${t("propertiesPanel.nlsFieldRequired")})` : ""}`
+																			}
+																			onChange={(segs) => {
+																				const val =
+																					segmentsToTemplateString(segs);
+																				const fields = [
+																					...(nlsConfig.fields ?? []),
+																				];
+																				const idx = fields.findIndex(
+																					(f) => f.fieldId === field.id,
+																				);
+																				if (idx >= 0) {
+																					fields[idx] = {
+																						...fields[idx],
+																						value: val,
+																					};
+																				} else {
+																					fields.push({
+																						fieldId: field.id,
+																						value: val,
+																						source: "discovered",
+																					});
+																				}
+																				onUpdateNode(selectedNode.id, {
+																					config: {
+																						...selectedNode.config,
+																						fields,
+																					},
+																				});
+																			}}
+																		/>
+																	</div>
+																);
+															})}
+														</div>
+													)}
 												</div>
-											)}
-										</div>
-									);
-								})}
+											);
+										})
+										.filter(Boolean);
+								})()}
 
 							{/* Output fields — read-only display when function is selected */}
 							{(selectedNode.config as NLSNodeConfig).functionId && (

@@ -252,6 +252,103 @@ const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
 		description: "The CIF number used for NLS operations",
 		readOnly: true,
 	},
+	{
+		id: "nls-prequal-preApprovalResult",
+		name: "preApprovalResult",
+		type: "number",
+		description:
+			"Score card number for approved, or global reject number for denied",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-preApprovalDate",
+		name: "preApprovalDate",
+		type: "string",
+		description: "ISO date string when the prequalification completed",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-passesValidation",
+		name: "passesValidation",
+		type: "number",
+		description: "1 if passes validation, 0 otherwise",
+		readOnly: true,
+	},
+	{
+		id: "nls-prequal-bureau",
+		name: "bureau",
+		type: "object",
+		description: "Bureau credit data snapshot",
+		readOnly: true,
+		properties: [
+			{
+				id: "nls-prequal-bureau-fico",
+				name: "fico",
+				type: "number",
+				description: "FICO credit score",
+			},
+			{
+				id: "nls-prequal-bureau-scoreFactor1",
+				name: "scoreFactor1",
+				type: "string",
+				description: "First score factor from bureau",
+			},
+			{
+				id: "nls-prequal-bureau-scoreFactor2",
+				name: "scoreFactor2",
+				type: "string",
+				description: "Second score factor from bureau",
+			},
+			{
+				id: "nls-prequal-bureau-scoreFactor3",
+				name: "scoreFactor3",
+				type: "string",
+				description: "Third score factor from bureau",
+			},
+			{
+				id: "nls-prequal-bureau-scoreFactor4",
+				name: "scoreFactor4",
+				type: "string",
+				description: "Fourth score factor from bureau",
+			},
+			{
+				id: "nls-prequal-bureau-bankruptcyColor",
+				name: "bankruptcyColor",
+				type: "string",
+				description: "Bankruptcy color indicator (green/yellow/red)",
+			},
+			{
+				id: "nls-prequal-bureau-mortgageColor",
+				name: "mortgageColor",
+				type: "string",
+				description: "Mortgage color indicator (green/yellow/red)",
+			},
+			{
+				id: "nls-prequal-bureau-adjudication",
+				name: "adjudication",
+				type: "string",
+				description: "Adjudication result",
+			},
+			{
+				id: "nls-prequal-bureau-defaults",
+				name: "defaults",
+				type: "number",
+				description: "Number of defaults",
+			},
+			{
+				id: "nls-prequal-bureau-hasMortgage",
+				name: "hasMortgage",
+				type: "boolean",
+				description: "True if applicant has a mortgage",
+			},
+			{
+				id: "nls-prequal-bureau-hasBankruptcy",
+				name: "hasBankruptcy",
+				type: "boolean",
+				description: "True if applicant has a bankruptcy",
+			},
+		],
+	},
 ];
 
 export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
