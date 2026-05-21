@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
 import { useLanguage } from "@/components/LanguageProvider";
+import { getNlsFunctionLabel } from "@/lib/workflow/nls-labels";
 import {
 	Tooltip,
 	TooltipContent,
@@ -120,7 +121,7 @@ export function NodeRenderer({
 	onConnectorClick,
 	onHeightMeasured,
 }: NodeRendererProps) {
-	const { t, getFieldLabel } = useLanguage();
+	const { t, getFieldLabel, language } = useLanguage();
 	const nodeRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const [hoveredConnector, setHoveredConnector] = useState<string | null>(null);
@@ -415,7 +416,12 @@ export function NodeRenderer({
 				<p className="text-xs text-muted-foreground">{node.type}</p>
 				{nlsFunctionId && (
 					<p className="text-xs text-muted-foreground">
-						{t("canvas.nlsFunctionLabel")}: {nlsFunctionId}
+						{t("canvas.nlsFunctionLabel")}:{" "}
+						{getNlsFunctionLabel(
+							language as "en" | "es",
+							nlsFunctionId,
+							nlsFunctionId,
+						)}
 					</p>
 				)}
 				{displayDesc && <p className="mt-1 text-xs">{displayDesc}</p>}
@@ -608,9 +614,15 @@ export function NodeRenderer({
 
 								{isNLSNode && nlsConfig?.functionId && (
 									<div className="mt-2">
-										<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-											<Banknote className="h-3 w-3" />
-											{nlsConfig.functionId}
+										<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary max-w-full">
+											<Banknote className="h-3 w-3 shrink-0" />
+											<span className="truncate">
+												{getNlsFunctionLabel(
+													language as "en" | "es",
+													nlsConfig.functionId,
+													nlsConfig.functionId,
+												)}
+											</span>
 										</span>
 									</div>
 								)}

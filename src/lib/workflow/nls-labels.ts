@@ -121,6 +121,31 @@ export function getNlsOptionLabel(
 	return optionLabelOverrides[language]?.[optionValue] ?? fallbackLabel;
 }
 
+const functionLabelOverrides: Record<Language, Record<string, string>> = {
+	en: {
+		createLoan: "Create Loan",
+		cancelLoan: "Cancel Loan",
+		getAmortization: "Get Amortization",
+		prequalification: "Prequalification",
+		findPrequalificationMatches: "Find Matches",
+	},
+	es: {
+		createLoan: "Crear Préstamo",
+		cancelLoan: "Cancelar Préstamo",
+		getAmortization: "Obtener Amortización",
+		prequalification: "Precalificación",
+		findPrequalificationMatches: "Buscar Coincidencias",
+	},
+};
+
+export function getNlsFunctionLabel(
+	language: Language,
+	functionId: string,
+	fallbackLabel: string,
+): string {
+	return functionLabelOverrides[language]?.[functionId] ?? fallbackLabel;
+}
+
 const functionDescriptionOverrides: Record<Language, Record<string, string>> = {
 	en: {
 		prequalification:
