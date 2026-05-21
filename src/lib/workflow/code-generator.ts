@@ -1091,7 +1091,7 @@ function generateFindMatchesCall(
 
 	let code = "";
 
-	const matchFields = ["ssn", "ein", "phone", "email", "userId"];
+	const matchFields = ["taxIdNumber", "phone", "email", "userId"];
 	code += `${i2}const _matchData: Record<string, string | undefined> = {};\n`;
 	for (const f of matchFields) {
 		if (fieldMap[f]) {

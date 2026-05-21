@@ -390,12 +390,12 @@ export function validateWorkflow(
 					fieldMap[f.fieldId] = f.value;
 				}
 
-				const matchFields = ["ssn", "ein", "phone", "email", "userId"];
+				const matchFields = ["taxIdNumber", "phone", "email", "userId"];
 				const hasAtLeastOne = matchFields.some((f) => fieldMap[f]?.trim());
 				if (!hasAtLeastOne) {
 					errors.push({
 						nodeId: node.id,
-						message: `"${node.title}": Se requiere al menos un campo de búsqueda (SSN, EIN, teléfono, email o userId)`,
+						message: `"${node.title}": Se requiere al menos un campo de búsqueda (SSN/ITIN, teléfono, email o userId)`,
 						severity: "error",
 					});
 				}

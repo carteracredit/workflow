@@ -5465,20 +5465,60 @@ export function PropertiesPanel({
 										{t("propertiesPanel.nlsOutputsTitle")}
 									</p>
 									<p className="mt-1">{t("propertiesPanel.nlsOutputsDesc")}</p>
-									<ul className="mt-2 space-y-0.5 list-disc list-inside">
-										{getNlsOutputSchema(
-											(selectedNode.config as NLSNodeConfig).functionId,
-										).map((prop) => (
-											<li key={prop.id}>
-												<span className="font-mono text-foreground/80">
-													{prop.name}
-												</span>{" "}
-												<span className="text-muted-foreground">
-													({prop.type})
-												</span>
-											</li>
-										))}
-									</ul>
+									{(() => {
+										const renderOutputProps = (
+											props: OutputSchemaProperty[],
+											depth: number = 0,
+											prefix: string = "",
+										): React.ReactNode[] => {
+											return props.flatMap((prop) => {
+												const fullPath = prefix
+													? `${prefix}.${prop.name}`
+													: prop.name;
+												const indent = depth * 12;
+												const nodes: React.ReactNode[] = [
+													<li
+														key={prop.id}
+														style={{ paddingLeft: `${indent}px` }}
+													>
+														<span className="font-mono text-foreground/80">
+															{prop.name}
+														</span>{" "}
+														<span className="text-muted-foreground">
+															({prop.type})
+														</span>
+													</li>,
+												];
+												if (prop.type === "array" && prop.items?.properties) {
+													nodes.push(
+														...renderOutputProps(
+															prop.items.properties,
+															depth + 1,
+															`${fullPath}[]`,
+														),
+													);
+												} else if (prop.type === "object" && prop.properties) {
+													nodes.push(
+														...renderOutputProps(
+															prop.properties,
+															depth + 1,
+															fullPath,
+														),
+													);
+												}
+												return nodes;
+											});
+										};
+										return (
+											<ul className="mt-2 space-y-0.5 list-disc list-inside">
+												{renderOutputProps(
+													getNlsOutputSchema(
+														(selectedNode.config as NLSNodeConfig).functionId,
+													),
+												)}
+											</ul>
+										);
+									})()}
 								</div>
 							)}
 

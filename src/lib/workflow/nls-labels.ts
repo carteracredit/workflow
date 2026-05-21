@@ -45,15 +45,13 @@ const fieldLabelOverrides: Record<Language, Record<string, string>> = {
 		birthDate: "Birth Date",
 		phoneNumber: "Phone Number",
 		taxIdType: "Tax ID Type",
-		taxIdNumber: "Tax ID Number",
+		taxIdNumber: "SSN/ITIN",
 		addressStreetNumber: "Street Number",
 		addressStreetName: "Street Name",
 		addressApt: "Apt/Suite",
 		addressCity: "City",
 		addressState: "State",
 		addressZipCode: "Zip Code",
-		ssn: "SSN",
-		ein: "EIN",
 		phone: "Phone",
 	},
 	es: {
@@ -67,15 +65,13 @@ const fieldLabelOverrides: Record<Language, Record<string, string>> = {
 		birthDate: "Fecha de Nacimiento (AAAA-MM-DD)",
 		phoneNumber: "Número de Teléfono",
 		taxIdType: "Tipo de ID Fiscal",
-		taxIdNumber: "Número de ID Fiscal",
+		taxIdNumber: "SSN/ITIN",
 		addressStreetNumber: "Número de Calle",
 		addressStreetName: "Nombre de Calle",
 		addressApt: "Apt/Suite",
 		addressCity: "Ciudad",
 		addressState: "Estado",
 		addressZipCode: "Código Postal",
-		ssn: "SSN",
-		ein: "EIN",
 		phone: "Teléfono",
 	},
 };
@@ -130,13 +126,13 @@ const functionDescriptionOverrides: Record<Language, Record<string, string>> = {
 		prequalification:
 			"Runs the full prequalification pipeline: customer save, credit pull, bureau data, SageMaker scoring, and rule evaluation. Supports applicant (existing user) or coapplicant (inline identity from form).",
 		findPrequalificationMatches:
-			"Searches for existing prequalification records matching the provided PII fields (SSN, EIN, phone, email, userId). Returns full snapshots.",
+			"Searches for existing prequalification records matching the provided PII fields (SSN/ITIN, phone, email, userId). Returns full snapshots including bureau data and latest run.",
 	},
 	es: {
 		prequalification:
 			"Ejecuta el pipeline completo de precalificación: guardado de cliente, consulta de crédito, datos del buró, scoring de SageMaker y evaluación de reglas. Soporta solicitante (usuario existente) o cosolicitante (identidad desde formulario).",
 		findPrequalificationMatches:
-			"Busca registros de precalificación existentes que coincidan con los campos PII proporcionados (SSN, EIN, teléfono, email, userId). Devuelve snapshots completos.",
+			"Busca registros de precalificación existentes que coincidan con los campos PII proporcionados (SSN/ITIN, teléfono, email, userId). Devuelve snapshots completos incluyendo datos del buró y último run.",
 	},
 };
 

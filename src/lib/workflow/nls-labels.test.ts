@@ -54,7 +54,7 @@ describe("nls-labels", () => {
 			expect(getNlsFieldLabel("es", "actorType", "Actor Type")).toBe(
 				"Tipo de Actor",
 			);
-			expect(getNlsFieldLabel("es", "ssn", "SSN")).toBe("SSN");
+			expect(getNlsFieldLabel("es", "taxIdNumber", "Tax ID")).toBe("SSN/ITIN");
 			expect(getNlsFieldLabel("es", "phone", "Phone")).toBe("Teléfono");
 		});
 
