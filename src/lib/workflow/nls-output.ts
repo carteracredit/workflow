@@ -174,7 +174,7 @@ const GET_AMORTIZATION_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
-const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
+const PREQUALIFICATION_OUTPUT: OutputSchemaProperty[] = [
 	{
 		id: "nls-prequal-runId",
 		name: "runId",
@@ -239,10 +239,10 @@ const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
 		readOnly: true,
 	},
 	{
-		id: "nls-prequal-mode",
-		name: "mode",
+		id: "nls-prequal-actorType",
+		name: "actorType",
 		type: "string",
-		description: "Mode used: case_attached or lead",
+		description: "Actor type used: applicant or coapplicant",
 		readOnly: true,
 	},
 	{
@@ -351,6 +351,65 @@ const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
+const FIND_MATCHES_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-matches-matches",
+		name: "matches",
+		type: "array",
+		description: "Array of matching prequalification records",
+		readOnly: true,
+		items: {
+			id: "nls-matches-match-item",
+			name: "match",
+			type: "object",
+			properties: [
+				{
+					id: "nls-matches-match-prequalificationId",
+					name: "prequalificationId",
+					type: "string",
+					description: "Prequalification record ID",
+				},
+				{
+					id: "nls-matches-match-actorType",
+					name: "actorType",
+					type: "string",
+					description: "Actor type (applicant or coapplicant)",
+				},
+				{
+					id: "nls-matches-match-userId",
+					name: "userId",
+					type: "string",
+					description: "User ID (may be null)",
+				},
+				{
+					id: "nls-matches-match-cifNumber",
+					name: "cifNumber",
+					type: "string",
+					description: "CIF number",
+				},
+				{
+					id: "nls-matches-match-preApprovalResult",
+					name: "preApprovalResult",
+					type: "number",
+					description: "Pre-approval score result",
+				},
+				{
+					id: "nls-matches-match-passesValidation",
+					name: "passesValidation",
+					type: "number",
+					description: "1 if passes validation, 0 otherwise",
+				},
+				{
+					id: "nls-matches-match-createdAt",
+					name: "createdAt",
+					type: "string",
+					description: "ISO date of the prequalification record",
+				},
+			],
+		},
+	},
+];
+
 export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	NLSFunctionId,
 	OutputSchemaProperty[]
@@ -358,7 +417,8 @@ export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	createLoan: CREATE_LOAN_OUTPUT,
 	cancelLoan: CANCEL_LOAN_OUTPUT,
 	getAmortization: GET_AMORTIZATION_OUTPUT,
-	precalification: PRECALIFICATION_OUTPUT,
+	prequalification: PREQUALIFICATION_OUTPUT,
+	findPrequalificationMatches: FIND_MATCHES_OUTPUT,
 };
 
 export function getNlsOutputSchema(

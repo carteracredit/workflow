@@ -367,8 +367,8 @@ export const NlsNodeGetAmortization: Story = {
 	},
 };
 
-export const NlsNodePrecalificationCaseAttached: Story = {
-	name: "NLS — precalification (Case Attached)",
+export const NlsNodePrequalificationApplicant: Story = {
+	name: "NLS — prequalification (Applicant)",
 	args: {
 		selectedNodes: [
 			{
@@ -376,11 +376,11 @@ export const NlsNodePrecalificationCaseAttached: Story = {
 				title: "Precalificación",
 				config: {
 					...nlsNodeBase.config,
-					functionId: "precalification",
+					functionId: "prequalification",
 					fields: [
 						{
-							fieldId: "mode",
-							value: "case_attached",
+							fieldId: "actorType",
+							value: "applicant",
 							source: "manual",
 						},
 						{
@@ -403,20 +403,20 @@ export const NlsNodePrecalificationCaseAttached: Story = {
 	},
 };
 
-export const NlsNodePrecalificationLead: Story = {
-	name: "NLS — precalification (Lead)",
+export const NlsNodePrequalificationCoapplicant: Story = {
+	name: "NLS — prequalification (Coapplicant)",
 	args: {
 		selectedNodes: [
 			{
 				...nlsNodeBase,
-				title: "Precalificación Lead",
+				title: "Precalificación Cosolicitante",
 				config: {
 					...nlsNodeBase.config,
-					functionId: "precalification",
+					functionId: "prequalification",
 					fields: [
 						{
-							fieldId: "mode",
-							value: "lead",
+							fieldId: "actorType",
+							value: "coapplicant",
 							source: "manual",
 						},
 						{

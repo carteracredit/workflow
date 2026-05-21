@@ -1682,12 +1682,14 @@ describe("NLS node validation", () => {
 		).toBe(true);
 	});
 
-	describe("precalification function", () => {
-		it("should not error for precalification in case_attached mode", () => {
+	describe("prequalification function", () => {
+		it("should not error for prequalification in applicant mode", () => {
 			const cfg: NLSNodeConfig = {
 				...createDefaultNLSConfig(),
-				functionId: "precalification",
-				fields: [{ fieldId: "mode", value: "case_attached", source: "manual" }],
+				functionId: "prequalification",
+				fields: [
+					{ fieldId: "actorType", value: "applicant", source: "manual" },
+				],
 			};
 			const { nodes, edges } = makeNlsWorkflow(cfg);
 			const errors = validateWorkflow(nodes, edges);
@@ -1699,11 +1701,13 @@ describe("NLS node validation", () => {
 			).toBe(false);
 		});
 
-		it("should error for precalification in lead mode when identity fields are missing", () => {
+		it("should error for prequalification in coapplicant mode when identity fields are missing", () => {
 			const cfg: NLSNodeConfig = {
 				...createDefaultNLSConfig(),
-				functionId: "precalification",
-				fields: [{ fieldId: "mode", value: "lead", source: "manual" }],
+				functionId: "prequalification",
+				fields: [
+					{ fieldId: "actorType", value: "coapplicant", source: "manual" },
+				],
 			};
 			const { nodes, edges } = makeNlsWorkflow(cfg);
 			const errors = validateWorkflow(nodes, edges);
@@ -1716,12 +1720,12 @@ describe("NLS node validation", () => {
 			).toBe(true);
 		});
 
-		it("should not error for precalification in lead mode when all required fields are provided", () => {
+		it("should not error for prequalification in coapplicant mode when all required fields are provided", () => {
 			const cfg: NLSNodeConfig = {
 				...createDefaultNLSConfig(),
-				functionId: "precalification",
+				functionId: "prequalification",
 				fields: [
-					{ fieldId: "mode", value: "lead", source: "manual" },
+					{ fieldId: "actorType", value: "coapplicant", source: "manual" },
 					{ fieldId: "firstName", value: "John", source: "manual" },
 					{ fieldId: "lastName", value: "Doe", source: "manual" },
 					{ fieldId: "email", value: "john@test.com", source: "manual" },
@@ -1739,6 +1743,42 @@ describe("NLS node validation", () => {
 					(e) =>
 						e.nodeId === "nls-1" &&
 						e.message.includes("campos requeridos de identidad"),
+				),
+			).toBe(false);
+		});
+
+		it("should error for findPrequalificationMatches when no match fields are provided", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "findPrequalificationMatches",
+				fields: [],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("al menos un campo de búsqueda"),
+				),
+			).toBe(true);
+		});
+
+		it("should not error for findPrequalificationMatches when at least one match field is provided", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "findPrequalificationMatches",
+				fields: [
+					{ fieldId: "email", value: "test@test.com", source: "manual" },
+				],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("al menos un campo de búsqueda"),
 				),
 			).toBe(false);
 		});

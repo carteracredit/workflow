@@ -5307,7 +5307,7 @@ export function PropertiesPanel({
 
 																if (
 																	field.id === "userId" &&
-																	fieldMap["mode"] === "case_attached"
+																	fieldMap["actorType"] === "applicant"
 																) {
 																	return (
 																		<div key={field.id} className="space-y-1">

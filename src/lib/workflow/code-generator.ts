@@ -1000,17 +1000,16 @@ const NLS_RPC_METHOD: Record<string, string> = {
 };
 
 /**
- * Generate code for the precalification RPC call to CASES_SVC.
- * Handles both case_attached and lead modes based on the "mode" field.
+ * Generate code for the prequalification RPC call to CASES_SVC.
+ * Handles both applicant and coapplicant actor types.
  */
-function generatePrecalificationCall(
+function generatePrequalificationCall(
 	node: WorkflowNode,
 	indent: string,
 	fields: Array<{ fieldId: string; value: string }>,
 ): string {
 	const i2 = indent + "\t";
 
-	// Build a map of field values for easy access
 	const fieldMap: Record<string, string> = {};
 	for (const field of fields) {
 		if (field.value) {
@@ -1020,15 +1019,13 @@ function generatePrecalificationCall(
 
 	let code = "";
 
-	// Determine mode from fields (default to case_attached)
-	const modeValue = fieldMap["mode"]
-		? emitInterpolatedString(fieldMap["mode"])
-		: '"case_attached"';
+	const actorTypeValue = fieldMap["actorType"]
+		? emitInterpolatedString(fieldMap["actorType"])
+		: '"applicant"';
 
-	code += `${i2}const _mode = ${modeValue} as "case_attached" | "lead";\n`;
+	code += `${i2}const _actorType = ${actorTypeValue} as "applicant" | "coapplicant";\n`;
 
-	// Build identity object for lead mode
-	const identityFields = [
+	const coapplicantFields = [
 		"firstName",
 		"middleName",
 		"lastName",
@@ -1045,34 +1042,65 @@ function generatePrecalificationCall(
 		"addressZipCode",
 	];
 
-	code += `${i2}const _identity = _mode === "lead" ? {\n`;
-	for (const field of identityFields) {
+	code += `${i2}const _data = _actorType === "coapplicant" ? {\n`;
+	for (const field of coapplicantFields) {
 		if (fieldMap[field]) {
 			code += `${i2}\t${field}: ${emitInterpolatedString(fieldMap[field])},\n`;
 		}
 	}
-	code += `${i2}} : undefined;\n`;
+	code += `${i2}} : null;\n`;
 
-	// Get pullType if specified
 	const pullTypeValue = fieldMap["pullType"]
 		? emitInterpolatedString(fieldMap["pullType"])
 		: "undefined";
 
-	// Get userId for case_attached mode
 	const userIdValue = fieldMap["userId"]
 		? emitInterpolatedString(fieldMap["userId"])
 		: "event.payload.clientUserId as string";
 
-	code += `${i2}const _prequal = await this.env.CASES_SVC.runPrequalificationForWorkflow({\n`;
+	code += `${i2}const _prequal = await this.env.CASES_SVC.runPrequalification({\n`;
 	code += `${i2}\tuserJwt: event.payload._jwt as string,\n`;
-	code += `${i2}\tmode: _mode,\n`;
-	code += `${i2}\tuserId: _mode === "case_attached" ? ${userIdValue} : undefined,\n`;
-	code += `${i2}\tidentity: _identity,\n`;
+	code += `${i2}\tactorType: _actorType,\n`;
+	code += `${i2}\tuserId: _actorType === "applicant" ? ${userIdValue} : undefined,\n`;
+	code += `${i2}\tdata: _data,\n`;
 	code += `${i2}\tcaseId: event.payload.caseId as string,\n`;
 	code += `${i2}\torgId: event.payload.orgId as string | undefined,\n`;
 	code += `${i2}\tpullType: ${pullTypeValue} as "soft" | "hard" | "new" | undefined,\n`;
 	code += `${i2}});\n`;
 	code += `${i2}return _prequal as Record<string, unknown>;\n`;
+
+	return code;
+}
+
+/**
+ * Generate code for the findPrequalificationMatches RPC call to CASES_SVC.
+ */
+function generateFindMatchesCall(
+	node: WorkflowNode,
+	indent: string,
+	fields: Array<{ fieldId: string; value: string }>,
+): string {
+	const i2 = indent + "\t";
+
+	const fieldMap: Record<string, string> = {};
+	for (const field of fields) {
+		if (field.value) {
+			fieldMap[field.fieldId] = field.value;
+		}
+	}
+
+	let code = "";
+
+	const matchFields = ["ssn", "ein", "phone", "email", "userId"];
+	code += `${i2}const _matchData: Record<string, string | undefined> = {};\n`;
+	for (const f of matchFields) {
+		if (fieldMap[f]) {
+			code += `${i2}_matchData[${JSON.stringify(f)}] = ${emitInterpolatedString(fieldMap[f])};\n`;
+		}
+	}
+
+	code += `${i2}const _matches = await this.env.CASES_SVC.findPrequalificationMatches(_matchData);\n`;
+	code += `${i2}return _matches as Record<string, unknown>;\n`;
 
 	return code;
 }
@@ -1114,9 +1142,11 @@ function generateNLSStep(
 
 	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
 
-	// Special handling for precalification — dispatches to CASES_SVC
-	if (functionId === "precalification") {
-		code += generatePrecalificationCall(node, indent, fields);
+	// Special handling for prequalification — dispatches to CASES_SVC
+	if (functionId === "prequalification") {
+		code += generatePrequalificationCall(node, indent, fields);
+	} else if (functionId === "findPrequalificationMatches") {
+		code += generateFindMatchesCall(node, indent, fields);
 	} else {
 		const rpcMethod = NLS_RPC_METHOD[functionId] ?? `nls${functionId}`;
 		// Build body object from configured fields
