@@ -1,3 +1,12 @@
+# [1.3.0-rc.23](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.22...v1.3.0-rc.23) (2026-05-21)
+
+
+### Features
+
+* enhance NLS function label handling in NodeRenderer ([ae03a76](https://github.com/carteracredit/workflow/commit/ae03a76e214901252f74fa4ee7535c1d46fab4c3))
+* update NLS output schema and validation logic for prequalification ([b6b5d7f](https://github.com/carteracredit/workflow/commit/b6b5d7f7792f54b2c6c33121a32eaac9891038e0))
+* update workflow for prequalification functionality and NLS integration ([1c50a9a](https://github.com/carteracredit/workflow/commit/1c50a9aee46b3e183a095766a70927187424f8ca))
+
 # [1.3.0-rc.22](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.21...v1.3.0-rc.22) (2026-05-20)
 
 
