@@ -346,20 +346,20 @@ export function validateWorkflow(
 				});
 			}
 
-			// Validations specific to precalification function
-			if (nlsCfg?.functionId === "precalification") {
+			// Validations specific to prequalification function
+			if (nlsCfg?.functionId === "prequalification") {
 				const fields = nlsCfg.fields ?? [];
 				const fieldMap: Record<string, string> = {};
 				for (const f of fields) {
 					fieldMap[f.fieldId] = f.value;
 				}
 
-				const mode = fieldMap["mode"] ?? "case_attached";
-				const isLiteralLead = mode === "lead" || mode === '"lead"';
+				const actorType = fieldMap["actorType"] ?? "applicant";
+				const isCoapplicant =
+					actorType === "coapplicant" || actorType === '"coapplicant"';
 
-				if (isLiteralLead) {
-					// In lead mode, identity fields are required
-					const requiredLeadFields = [
+				if (isCoapplicant) {
+					const requiredCoapplicantFields = [
 						"firstName",
 						"lastName",
 						"email",
@@ -369,16 +369,35 @@ export function validateWorkflow(
 						"addressState",
 						"addressZipCode",
 					];
-					const missingFields = requiredLeadFields.filter(
+					const missingFields = requiredCoapplicantFields.filter(
 						(f) => !fieldMap[f]?.trim(),
 					);
 					if (missingFields.length > 0) {
 						errors.push({
 							nodeId: node.id,
-							message: `"${node.title}": En modo lead, faltan campos requeridos de identidad: ${missingFields.join(", ")}`,
+							message: `"${node.title}": En modo cosolicitante, faltan campos requeridos de identidad: ${missingFields.join(", ")}`,
 							severity: "error",
 						});
 					}
+				}
+			}
+
+			// Validations specific to findPrequalificationMatches function
+			if (nlsCfg?.functionId === "findPrequalificationMatches") {
+				const fields = nlsCfg.fields ?? [];
+				const fieldMap: Record<string, string> = {};
+				for (const f of fields) {
+					fieldMap[f.fieldId] = f.value;
+				}
+
+				const matchFields = ["taxIdNumber", "phone", "email", "userId"];
+				const hasAtLeastOne = matchFields.some((f) => fieldMap[f]?.trim());
+				if (!hasAtLeastOne) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": Se requiere al menos un campo de búsqueda (SSN/ITIN, teléfono, email o userId)`,
+						severity: "error",
+					});
 				}
 			}
 

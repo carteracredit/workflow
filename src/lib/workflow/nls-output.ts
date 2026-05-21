@@ -174,7 +174,7 @@ const GET_AMORTIZATION_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
-const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
+const PREQUALIFICATION_OUTPUT: OutputSchemaProperty[] = [
 	{
 		id: "nls-prequal-runId",
 		name: "runId",
@@ -239,10 +239,10 @@ const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
 		readOnly: true,
 	},
 	{
-		id: "nls-prequal-mode",
-		name: "mode",
+		id: "nls-prequal-actorType",
+		name: "actorType",
 		type: "string",
-		description: "Mode used: case_attached or lead",
+		description: "Actor type used: applicant or coapplicant",
 		readOnly: true,
 	},
 	{
@@ -351,6 +351,231 @@ const PRECALIFICATION_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
+const FIND_MATCHES_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-matches-matches",
+		name: "matches",
+		type: "array",
+		description: "Array of matching prequalification records",
+		readOnly: true,
+		items: {
+			id: "nls-matches-match-item",
+			name: "match",
+			type: "object",
+			properties: [
+				{
+					id: "nls-matches-match-prequalificationId",
+					name: "prequalificationId",
+					type: "string",
+					description: "Prequalification record ID",
+				},
+				{
+					id: "nls-matches-match-actorType",
+					name: "actorType",
+					type: "string",
+					description: "Actor type (applicant or coapplicant)",
+				},
+				{
+					id: "nls-matches-match-userId",
+					name: "userId",
+					type: "string",
+					description: "User ID (may be null)",
+				},
+				{
+					id: "nls-matches-match-taxIdNumber",
+					name: "taxIdNumber",
+					type: "string",
+					description: "SSN or ITIN (may be null)",
+				},
+				{
+					id: "nls-matches-match-phone",
+					name: "phone",
+					type: "string",
+					description: "Phone number (may be null)",
+				},
+				{
+					id: "nls-matches-match-email",
+					name: "email",
+					type: "string",
+					description: "Email address (may be null)",
+				},
+				{
+					id: "nls-matches-match-cifNumber",
+					name: "cifNumber",
+					type: "string",
+					description: "CIF number",
+				},
+				{
+					id: "nls-matches-match-preApprovalResult",
+					name: "preApprovalResult",
+					type: "number",
+					description: "Pre-approval score result",
+				},
+				{
+					id: "nls-matches-match-preApprovalDate",
+					name: "preApprovalDate",
+					type: "string",
+					description: "ISO date of pre-approval",
+				},
+				{
+					id: "nls-matches-match-passesValidation",
+					name: "passesValidation",
+					type: "number",
+					description: "1 if passes validation, 0 otherwise",
+				},
+				{
+					id: "nls-matches-match-lastPullType",
+					name: "lastPullType",
+					type: "string",
+					description: "Type of the last credit pull (soft/hard/new)",
+				},
+				{
+					id: "nls-matches-match-lastPullAt",
+					name: "lastPullAt",
+					type: "string",
+					description: "ISO date of the last credit pull",
+				},
+				{
+					id: "nls-matches-match-createdAt",
+					name: "createdAt",
+					type: "string",
+					description: "ISO date of the prequalification record",
+				},
+				{
+					id: "nls-matches-match-bureau",
+					name: "bureau",
+					type: "object",
+					description: "Bureau credit data snapshot",
+					properties: [
+						{
+							id: "nls-matches-match-bureau-fico",
+							name: "fico",
+							type: "number",
+							description: "FICO credit score",
+						},
+						{
+							id: "nls-matches-match-bureau-scoreFactor1",
+							name: "scoreFactor1",
+							type: "string",
+							description: "First score factor from bureau",
+						},
+						{
+							id: "nls-matches-match-bureau-scoreFactor2",
+							name: "scoreFactor2",
+							type: "string",
+							description: "Second score factor from bureau",
+						},
+						{
+							id: "nls-matches-match-bureau-scoreFactor3",
+							name: "scoreFactor3",
+							type: "string",
+							description: "Third score factor from bureau",
+						},
+						{
+							id: "nls-matches-match-bureau-scoreFactor4",
+							name: "scoreFactor4",
+							type: "string",
+							description: "Fourth score factor from bureau",
+						},
+						{
+							id: "nls-matches-match-bureau-bankruptcyColor",
+							name: "bankruptcyColor",
+							type: "string",
+							description: "Bankruptcy color indicator",
+						},
+						{
+							id: "nls-matches-match-bureau-mortgageColor",
+							name: "mortgageColor",
+							type: "string",
+							description: "Mortgage color indicator",
+						},
+						{
+							id: "nls-matches-match-bureau-adjudication",
+							name: "adjudication",
+							type: "string",
+							description: "Adjudication result",
+						},
+						{
+							id: "nls-matches-match-bureau-defaults",
+							name: "defaults",
+							type: "number",
+							description: "Number of defaults",
+						},
+						{
+							id: "nls-matches-match-bureau-hasMortgage",
+							name: "hasMortgage",
+							type: "boolean",
+							description: "True if applicant has a mortgage",
+						},
+						{
+							id: "nls-matches-match-bureau-hasBankruptcy",
+							name: "hasBankruptcy",
+							type: "boolean",
+							description: "True if applicant has a bankruptcy",
+						},
+					],
+				},
+				{
+					id: "nls-matches-match-lastRun",
+					name: "lastRun",
+					type: "object",
+					description: "Latest prequalification run details",
+					properties: [
+						{
+							id: "nls-matches-match-lastRun-runId",
+							name: "runId",
+							type: "string",
+							description: "Run ID",
+						},
+						{
+							id: "nls-matches-match-lastRun-passes",
+							name: "passes",
+							type: "boolean",
+							description: "True if the run passed prequalification",
+						},
+						{
+							id: "nls-matches-match-lastRun-reason",
+							name: "reason",
+							type: "string",
+							description: "Rejection reason if applicable",
+						},
+						{
+							id: "nls-matches-match-lastRun-scoreCardV3",
+							name: "scoreCardV3",
+							type: "number",
+							description: "SageMaker V3 score card number",
+						},
+						{
+							id: "nls-matches-match-lastRun-scoreCardV4",
+							name: "scoreCardV4",
+							type: "number",
+							description: "SageMaker V4 score card number",
+						},
+						{
+							id: "nls-matches-match-lastRun-errorCode",
+							name: "errorCode",
+							type: "string",
+							description: "Error code if an error occurred",
+						},
+						{
+							id: "nls-matches-match-lastRun-executedAt",
+							name: "executedAt",
+							type: "string",
+							description: "ISO date when the run started",
+						},
+						{
+							id: "nls-matches-match-lastRun-completedAt",
+							name: "completedAt",
+							type: "string",
+							description: "ISO date when the run completed",
+						},
+					],
+				},
+			],
+		},
+	},
+];
+
 export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	NLSFunctionId,
 	OutputSchemaProperty[]
@@ -358,7 +583,8 @@ export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	createLoan: CREATE_LOAN_OUTPUT,
 	cancelLoan: CANCEL_LOAN_OUTPUT,
 	getAmortization: GET_AMORTIZATION_OUTPUT,
-	precalification: PRECALIFICATION_OUTPUT,
+	prequalification: PREQUALIFICATION_OUTPUT,
+	findPrequalificationMatches: FIND_MATCHES_OUTPUT,
 };
 
 export function getNlsOutputSchema(

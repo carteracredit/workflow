@@ -418,7 +418,8 @@ export type NLSFunctionId =
 	| "createLoan"
 	| "cancelLoan"
 	| "getAmortization"
-	| "precalification";
+	| "prequalification"
+	| "findPrequalificationMatches";
 
 export interface NLSFieldConfig {
 	fieldId: string;

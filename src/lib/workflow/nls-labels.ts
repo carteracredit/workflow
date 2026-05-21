@@ -8,9 +8,10 @@ type Language = "en" | "es";
 
 const sectionLabelOverrides: Record<Language, Record<string, string>> = {
 	en: {
-		mode: "Mode",
-		caseAttached: "Case Attached",
-		leadIdentity: "Lead Identity (from form node)",
+		actorType: "Actor Type",
+		applicant: "Applicant",
+		coapplicantIdentity: "Coapplicant Identity (from form node)",
+		matchData: "Match Data",
 		loan: "Loan",
 		collateral: "Collateral",
 		employment: "Employment",
@@ -19,9 +20,10 @@ const sectionLabelOverrides: Record<Language, Record<string, string>> = {
 		client: "Client",
 	},
 	es: {
-		mode: "Modo",
-		caseAttached: "Caso Asociado",
-		leadIdentity: "Identidad del Lead (desde nodo formulario)",
+		actorType: "Tipo de Actor",
+		applicant: "Solicitante",
+		coapplicantIdentity: "Identidad del Cosolicitante (desde nodo formulario)",
+		matchData: "Datos de Búsqueda",
 		loan: "Préstamo",
 		collateral: "Garantía",
 		employment: "Empleo",
@@ -33,7 +35,7 @@ const sectionLabelOverrides: Record<Language, Record<string, string>> = {
 
 const fieldLabelOverrides: Record<Language, Record<string, string>> = {
 	en: {
-		mode: "Mode",
+		actorType: "Actor Type",
 		pullType: "Pull Type",
 		userId: "User ID",
 		firstName: "First Name",
@@ -43,16 +45,17 @@ const fieldLabelOverrides: Record<Language, Record<string, string>> = {
 		birthDate: "Birth Date",
 		phoneNumber: "Phone Number",
 		taxIdType: "Tax ID Type",
-		taxIdNumber: "Tax ID Number",
+		taxIdNumber: "SSN/ITIN",
 		addressStreetNumber: "Street Number",
 		addressStreetName: "Street Name",
 		addressApt: "Apt/Suite",
 		addressCity: "City",
 		addressState: "State",
 		addressZipCode: "Zip Code",
+		phone: "Phone",
 	},
 	es: {
-		mode: "Modo",
+		actorType: "Tipo de Actor",
 		pullType: "Tipo de Consulta",
 		userId: "ID de Usuario",
 		firstName: "Nombre",
@@ -62,20 +65,21 @@ const fieldLabelOverrides: Record<Language, Record<string, string>> = {
 		birthDate: "Fecha de Nacimiento (AAAA-MM-DD)",
 		phoneNumber: "Número de Teléfono",
 		taxIdType: "Tipo de ID Fiscal",
-		taxIdNumber: "Número de ID Fiscal",
+		taxIdNumber: "SSN/ITIN",
 		addressStreetNumber: "Número de Calle",
 		addressStreetName: "Nombre de Calle",
 		addressApt: "Apt/Suite",
 		addressCity: "Ciudad",
 		addressState: "Estado",
 		addressZipCode: "Código Postal",
+		phone: "Teléfono",
 	},
 };
 
 const optionLabelOverrides: Record<Language, Record<string, string>> = {
 	en: {
-		case_attached: "Case Attached",
-		lead: "Lead",
+		applicant: "Applicant",
+		coapplicant: "Coapplicant",
 		soft: "Soft",
 		hard: "Hard",
 		new: "New",
@@ -83,8 +87,8 @@ const optionLabelOverrides: Record<Language, Record<string, string>> = {
 		ITIN: "ITIN",
 	},
 	es: {
-		case_attached: "Caso Asociado",
-		lead: "Lead",
+		applicant: "Solicitante",
+		coapplicant: "Cosolicitante",
 		soft: "Suave",
 		hard: "Fuerte",
 		new: "Nuevo",
@@ -117,14 +121,43 @@ export function getNlsOptionLabel(
 	return optionLabelOverrides[language]?.[optionValue] ?? fallbackLabel;
 }
 
-const functionDescriptionOverrides: Record<Language, Record<string, string>> = {
+const functionLabelOverrides: Record<Language, Record<string, string>> = {
 	en: {
-		precalification:
-			"Runs the full prequalification pipeline: customer save, credit pull, bureau data, SageMaker scoring, and rule evaluation. Supports case_attached mode (existing user) or lead mode (inline identity from form).",
+		createLoan: "Create Loan",
+		cancelLoan: "Cancel Loan",
+		getAmortization: "Get Amortization",
+		prequalification: "Prequalification",
+		findPrequalificationMatches: "Find Matches",
 	},
 	es: {
-		precalification:
-			"Ejecuta el pipeline completo de precalificación: guardado de cliente, consulta de crédito, datos del buró, scoring de SageMaker y evaluación de reglas. Soporta modo caso asociado (usuario existente) o modo lead (identidad desde formulario).",
+		createLoan: "Crear Préstamo",
+		cancelLoan: "Cancelar Préstamo",
+		getAmortization: "Obtener Amortización",
+		prequalification: "Precalificación",
+		findPrequalificationMatches: "Buscar Coincidencias",
+	},
+};
+
+export function getNlsFunctionLabel(
+	language: Language,
+	functionId: string,
+	fallbackLabel: string,
+): string {
+	return functionLabelOverrides[language]?.[functionId] ?? fallbackLabel;
+}
+
+const functionDescriptionOverrides: Record<Language, Record<string, string>> = {
+	en: {
+		prequalification:
+			"Runs the full prequalification pipeline: customer save, credit pull, bureau data, SageMaker scoring, and rule evaluation. Supports applicant (existing user) or coapplicant (inline identity from form).",
+		findPrequalificationMatches:
+			"Searches for existing prequalification records matching the provided PII fields (SSN/ITIN, phone, email, userId). Returns full snapshots including bureau data and latest run.",
+	},
+	es: {
+		prequalification:
+			"Ejecuta el pipeline completo de precalificación: guardado de cliente, consulta de crédito, datos del buró, scoring de SageMaker y evaluación de reglas. Soporta solicitante (usuario existente) o cosolicitante (identidad desde formulario).",
+		findPrequalificationMatches:
+			"Busca registros de precalificación existentes que coincidan con los campos PII proporcionados (SSN/ITIN, teléfono, email, userId). Devuelve snapshots completos incluyendo datos del buró y último run.",
 	},
 };
 
