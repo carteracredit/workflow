@@ -1,3 +1,10 @@
+# [1.3.0-rc.25](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.24...v1.3.0-rc.25) (2026-05-25)
+
+
+### Features
+
+* enforce Cloudflare Workflows config order in step.do calls ([a7cd237](https://github.com/carteracredit/workflow/commit/a7cd237ec9d56a5892b39e9110da1daf7bc93992))
+
 # [1.3.0-rc.24](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.23...v1.3.0-rc.24) (2026-05-25)
 
 
