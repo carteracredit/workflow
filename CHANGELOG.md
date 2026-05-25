@@ -1,3 +1,10 @@
+# [1.3.0-rc.24](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.23...v1.3.0-rc.24) (2026-05-25)
+
+
+### Features
+
+* update NLS node connection rules in workflow ([2b42c93](https://github.com/carteracredit/workflow/commit/2b42c9337bd86bb1f5c52eada82f5080b7481b8d))
+
 # [1.3.0-rc.23](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.22...v1.3.0-rc.23) (2026-05-21)
 
 
