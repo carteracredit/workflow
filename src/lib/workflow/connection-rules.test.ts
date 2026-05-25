@@ -167,6 +167,50 @@ describe("connection-rules", () => {
 			};
 			expect(canNodeHaveOutgoingConnections(node)).toBe(true);
 		});
+
+		it("should return true for NLS with onFailure='stop' (NLS always has a success output)", () => {
+			const node: WorkflowNode = {
+				id: "nls-1",
+				type: "NLS",
+				title: "NLS Node",
+				description: "",
+				roles: [],
+				config: {
+					failureHandling: {
+						onFailure: "stop",
+						maxRetries: 0,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 30000,
+					},
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+			expect(canNodeHaveOutgoingConnections(node)).toBe(true);
+		});
+
+		it("should return true for NLS with other onFailure strategies", () => {
+			const node: WorkflowNode = {
+				id: "nls-1",
+				type: "NLS",
+				title: "NLS Node",
+				description: "",
+				roles: [],
+				config: {
+					failureHandling: {
+						onFailure: "continue",
+						maxRetries: 0,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 30000,
+					},
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+			expect(canNodeHaveOutgoingConnections(node)).toBe(true);
+		});
 	});
 
 	describe("canCreateConnection", () => {
