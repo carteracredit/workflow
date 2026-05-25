@@ -342,9 +342,17 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
+		// Config must come BEFORE the callback (Cloudflare Workflows requirement)
 		expect(result.code).toContain("retries:");
 		expect(result.code).toContain("limit: 3");
 		expect(result.code).toContain('timeout: "30 seconds"');
+		// Verify config appears before the api-call step callback.
+		// step.do("api-call", { retries: {...}, ... }, async () => { ... })
+		const stepDoApiIdx = result.code.indexOf('step.do("api-call"');
+		const configIdx = result.code.indexOf("retries:", stepDoApiIdx);
+		const callbackIdx = result.code.indexOf("async () => {", stepDoApiIdx);
+		expect(configIdx).toBeGreaterThan(-1);
+		expect(configIdx).toBeLessThan(callbackIdx);
 	});
 
 	it("should generate Challenge (waitForEvent) step code", () => {
@@ -5235,6 +5243,35 @@ describe("NLS node code generation", () => {
 		expect(result.code).toContain(
 			"continue; // Return to checkpoint and retry",
 		);
+	});
+
+	it("should place step.do config BEFORE callback when maxRetries > 0 (NLS findPrequalificationMatches)", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "findPrequalificationMatches",
+			fields: [
+				{ fieldId: "phone", value: "${start.phone}", source: "discovered" },
+			],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 1,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+
+		// Config (retries) must appear BEFORE the async callback in the main step
+		// step.do("create-loan", { retries: {...}, ... }, async () => { ... })
+		const stepDoIdx = result.code.indexOf('step.do("create-loan"');
+		const configIdx = result.code.indexOf("retries:", stepDoIdx);
+		const callbackIdx = result.code.indexOf("async () => {", stepDoIdx);
+		expect(configIdx).toBeGreaterThan(-1);
+		expect(configIdx).toBeLessThan(callbackIdx);
+		expect(result.code).toContain("limit: 1");
+		expect(result.code).toContain('timeout: "30 seconds"');
+		expect(result.code).toContain("findPrequalificationMatches");
 	});
 });
 
