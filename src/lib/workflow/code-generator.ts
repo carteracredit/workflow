@@ -826,7 +826,19 @@ function generateAPIStep(
 		indent += "\t";
 	}
 
-	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	// Cloudflare Workflows requires: step.do(name, config, callback) — config MUST come before callback.
+	if (failureHandling && failureHandling.maxRetries > 0) {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, {\n`;
+		code += `${indent}\tretries: {\n`;
+		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
+		code += `${indent}\t\tdelay: "1 second",\n`;
+		code += `${indent}\t\tbackoff: "exponential",\n`;
+		code += `${indent}\t},\n`;
+		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
+		code += `${indent}}, async () => {\n`;
+	} else {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	}
 
 	// Validate body content at code-generation time (build-time check)
 	if (hasBody && bodyConfig) {
@@ -953,21 +965,7 @@ function generateAPIStep(
 		code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
 	}
 
-	code += `${indent}}`;
-
-	// Add retry configuration if specified
-	if (failureHandling && failureHandling.maxRetries > 0) {
-		code += `, {\n`;
-		code += `${indent}\tretries: {\n`;
-		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
-		code += `${indent}\t\tdelay: "1 second",\n`;
-		code += `${indent}\t\tbackoff: "exponential",\n`;
-		code += `${indent}\t},\n`;
-		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
-		code += `${indent}}`;
-	}
-
-	code += `);\n`;
+	code += `${indent}});\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
 	code += generateProgressCall(
 		node,
@@ -1140,7 +1138,19 @@ function generateNLSStep(
 		indent += "\t";
 	}
 
-	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	// Cloudflare Workflows requires: step.do(name, config, callback) — config MUST come before callback.
+	if (failureHandling && failureHandling.maxRetries > 0) {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, {\n`;
+		code += `${indent}\tretries: {\n`;
+		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
+		code += `${indent}\t\tdelay: "1 second",\n`;
+		code += `${indent}\t\tbackoff: "exponential",\n`;
+		code += `${indent}\t},\n`;
+		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
+		code += `${indent}}, async () => {\n`;
+	} else {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	}
 
 	// Special handling for prequalification — dispatches to CASES_SVC
 	if (functionId === "prequalification") {
@@ -1163,20 +1173,7 @@ function generateNLSStep(
 		code += `${indent}\t});\n`;
 		code += `${indent}\treturn _nlsResult as Record<string, unknown>;\n`;
 	}
-	code += `${indent}}`;
-
-	if (failureHandling && failureHandling.maxRetries > 0) {
-		code += `, {\n`;
-		code += `${indent}\tretries: {\n`;
-		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
-		code += `${indent}\t\tdelay: "1 second",\n`;
-		code += `${indent}\t\tbackoff: "exponential",\n`;
-		code += `${indent}\t},\n`;
-		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
-		code += `${indent}}`;
-	}
-
-	code += `);\n`;
+	code += `${indent}});\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
 	code += generateCaseLoanDataCall(
 		node,
