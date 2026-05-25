@@ -116,15 +116,9 @@ export function canNodeHaveOutgoingConnections(node: WorkflowNode): boolean {
 		}
 	}
 
-	// Nodo NLS con onFailure='stop': es terminal (mismas reglas que API)
-	if (node.type === "NLS") {
-		const fh = node.config.failureHandling as
-			| { onFailure?: string }
-			| undefined;
-		if (fh?.onFailure === "stop") {
-			return false;
-		}
-	}
+	// Nota: NLS con onFailure='stop' NO es terminal para el flujo exitoso.
+	// El conector de salida siempre existe en NLS (igual que en el renderer).
+	// onFailure='stop' solo indica que no hay ruta de error, no que no haya salida.
 
 	return true;
 }
