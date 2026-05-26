@@ -5272,6 +5272,10 @@ describe("NLS node code generation", () => {
 		expect(result.code).toContain("limit: 1");
 		expect(result.code).toContain('timeout: "30 seconds"');
 		expect(result.code).toContain("findPrequalificationMatches");
+		// Result must be wrapped in { matches } to match output schema
+		expect(result.code).toContain("{ matches: _matches }");
+		// Should NOT generate a _loan-node step (not loan data)
+		expect(result.code).not.toContain("updateCaseLoanData");
 	});
 });
 

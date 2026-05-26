@@ -1098,7 +1098,9 @@ function generateFindMatchesCall(
 	}
 
 	code += `${i2}const _matches = await this.env.CASES_SVC.findPrequalificationMatches(_matchData);\n`;
-	code += `${i2}return _matches as Record<string, unknown>;\n`;
+	// Wrap in { matches } to match the output schema so downstream nodes
+	// can reference ${search-matches.matches.0.userId} etc.
+	code += `${i2}return { matches: _matches } as Record<string, unknown>;\n`;
 
 	return code;
 }
@@ -1175,13 +1177,16 @@ function generateNLSStep(
 	}
 	code += `${indent}});\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
-	code += generateCaseLoanDataCall(
-		node,
-		indent,
-		varName,
-		functionId,
-		retryVarName,
-	);
+	// findPrequalificationMatches returns match data, not loan data — skip loan step.
+	if (functionId !== "findPrequalificationMatches") {
+		code += generateCaseLoanDataCall(
+			node,
+			indent,
+			varName,
+			functionId,
+			retryVarName,
+		);
+	}
 	code += generateProgressCall(
 		node,
 		indent,
