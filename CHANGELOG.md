@@ -1,3 +1,10 @@
+# [1.3.0-rc.26](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.25...v1.3.0-rc.26) (2026-05-26)
+
+
+### Features
+
+* update NLS node code generation to match output schema ([5aeea09](https://github.com/carteracredit/workflow/commit/5aeea0927b5248368097d7d5a67cba9d090bc473))
+
 # [1.3.0-rc.25](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.24...v1.3.0-rc.25) (2026-05-25)
 
 
