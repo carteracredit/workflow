@@ -420,7 +420,7 @@ export type NLSFunctionId =
 	| "getAmortization"
 	| "prequalification"
 	| "findPrequalificationMatches"
-	// Oleada 1 — Loan Reads
+	// Loan Reads
 	| "getLoan"
 	| "getLoanDetail1"
 	| "getPaymentInfo"
@@ -430,23 +430,23 @@ export type NLSFunctionId =
 	| "getPaymentsDue"
 	| "getPayoffAmounts"
 	| "getPayoffDetails"
-	// Oleada 2 — Loan Writes
-	| "submitPayment"
+	// Collection Comments
 	| "addCollectionComment"
 	| "updateCollectionComment"
-	| "cancelPromiseToPay"
-	| "addCreditCard"
-	| "forgetCreditCard"
-	| "getWebPayUrl"
-	| "getAddPaymentMethodUrl"
-	| "getConvenienceFee"
-	// Oleada 3 — Contacts & Utils
+	// Contacts & Search
 	| "getContact"
 	| "searchContacts"
 	| "searchLoans"
-	| "parseName"
-	| "parseAddress"
-	| "calculateAmortizedPayment";
+	// Calculations
+	| "calculateAmortizedPayment"
+	// Nuevas funciones
+	| "getContactLoans"
+	| "getContactPortfolio"
+	| "getContactEmployments"
+	| "getLoanTransactions"
+	| "getAmortizationSchedule"
+	| "advancePeriod"
+	| "getLoanStatusCodes";
 
 export interface NLSFieldConfig {
 	fieldId: string;

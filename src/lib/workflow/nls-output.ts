@@ -787,24 +787,7 @@ const GET_PAYOFF_DETAILS_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
-// ── Oleada 2 — Loan Writes ─────────────────────────────────────────────────────
-
-const SUBMIT_PAYMENT_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-submitPayment-OrderID",
-		name: "OrderID",
-		type: "number",
-		description: "Gateway order ID (0 = declined)",
-		readOnly: true,
-	},
-	{
-		id: "nls-submitPayment-Confirmation",
-		name: "Confirmation",
-		type: "string",
-		description: "Confirmation message from gateway",
-		readOnly: true,
-	},
-];
+// ── Collection Comments ────────────────────────────────────────────────────────
 
 const ADD_COLLECTION_COMMENT_OUTPUT: OutputSchemaProperty[] = [
 	{
@@ -826,74 +809,7 @@ const UPDATE_COLLECTION_COMMENT_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
-const CANCEL_PROMISE_TO_PAY_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-cancelPromiseToPay-success",
-		name: "success",
-		type: "boolean",
-		description: "True when the Promise to Pay was cancelled",
-		readOnly: true,
-	},
-];
-
-const ADD_CREDIT_CARD_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-addCreditCard-success",
-		name: "success",
-		type: "boolean",
-		description: "True when the card was added",
-		readOnly: true,
-	},
-];
-
-const FORGET_CREDIT_CARD_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-forgetCreditCard-success",
-		name: "success",
-		type: "boolean",
-		description: "True when the card was forgotten",
-		readOnly: true,
-	},
-];
-
-const GET_WEB_PAY_URL_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-getWebPayUrl-url",
-		name: "url",
-		type: "string",
-		description: "Web pay URL for borrower self-service",
-		readOnly: true,
-	},
-];
-
-const GET_ADD_PAYMENT_METHOD_URL_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-getAddPaymentMethodUrl-url",
-		name: "url",
-		type: "string",
-		description: "URL to add a new payment method",
-		readOnly: true,
-	},
-];
-
-const GET_CONVENIENCE_FEE_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-getConvenienceFee-ConvenienceFeeAmount",
-		name: "ConvenienceFeeAmount",
-		type: "number",
-		description: "Convenience fee amount",
-		readOnly: true,
-	},
-	{
-		id: "nls-getConvenienceFee-ConvenienceFeePercent",
-		name: "ConvenienceFeePercent",
-		type: "number",
-		description: "Convenience fee as a percentage",
-		readOnly: true,
-	},
-];
-
-// ── Oleada 3 — Contacts & Utils ────────────────────────────────────────────────
+// ── Contacts & Search ──────────────────────────────────────────────────────────
 
 const GET_CONTACT_OUTPUT: OutputSchemaProperty[] = [
 	{
@@ -988,81 +904,7 @@ const SEARCH_LOANS_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
-const PARSE_NAME_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-parseName-FirstName",
-		name: "FirstName",
-		type: "string",
-		description: "Parsed first name",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseName-MiddleName",
-		name: "MiddleName",
-		type: "string",
-		description: "Parsed middle name",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseName-LastName",
-		name: "LastName",
-		type: "string",
-		description: "Parsed last name",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseName-Salutation",
-		name: "Salutation",
-		type: "string",
-		description: "Parsed salutation (Mr., Ms., etc.)",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseName-Suffix",
-		name: "Suffix",
-		type: "string",
-		description: "Parsed suffix (Jr., Sr., etc.)",
-		readOnly: true,
-	},
-];
-
-const PARSE_ADDRESS_OUTPUT: OutputSchemaProperty[] = [
-	{
-		id: "nls-parseAddress-StreetNumber",
-		name: "StreetNumber",
-		type: "string",
-		description: "Parsed street number",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseAddress-StreetName",
-		name: "StreetName",
-		type: "string",
-		description: "Parsed street name",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseAddress-City",
-		name: "City",
-		type: "string",
-		description: "Parsed city",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseAddress-State",
-		name: "State",
-		type: "string",
-		description: "Parsed state",
-		readOnly: true,
-	},
-	{
-		id: "nls-parseAddress-ZipCode",
-		name: "ZipCode",
-		type: "string",
-		description: "Parsed zip code",
-		readOnly: true,
-	},
-];
+// ── Calculations ──────────────────────────────────────────────────────────────
 
 const CALCULATE_AMORTIZED_PAYMENT_OUTPUT: OutputSchemaProperty[] = [
 	{
@@ -1070,6 +912,35 @@ const CALCULATE_AMORTIZED_PAYMENT_OUTPUT: OutputSchemaProperty[] = [
 		name: "paymentAmount",
 		type: "number",
 		description: "Calculated periodic payment amount (rounded to 2 decimals)",
+		readOnly: true,
+	},
+];
+
+// ── Nuevas funciones ──────────────────────────────────────────────────────────
+
+const ITEMS_TOTAL_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-itemsTotal-items",
+		name: "items",
+		type: "array",
+		description: "Array of result items",
+		readOnly: true,
+	},
+	{
+		id: "nls-itemsTotal-total",
+		name: "total",
+		type: "number",
+		description: "Total count of results",
+		readOnly: true,
+	},
+];
+
+const ADVANCE_PERIOD_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-advancePeriod-date",
+		name: "date",
+		type: "string",
+		description: "Resulting date after advancing the period",
 		readOnly: true,
 	},
 ];
@@ -1083,7 +954,7 @@ export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	getAmortization: GET_AMORTIZATION_OUTPUT,
 	prequalification: PREQUALIFICATION_OUTPUT,
 	findPrequalificationMatches: FIND_MATCHES_OUTPUT,
-	// Oleada 1 — Loan Reads
+	// Loan Reads
 	getLoan: GET_LOAN_OUTPUT,
 	getLoanDetail1: GET_LOAN_DETAIL1_OUTPUT,
 	getPaymentInfo: GET_PAYMENT_INFO_OUTPUT,
@@ -1093,23 +964,23 @@ export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	getPaymentsDue: GET_PAYMENTS_DUE_OUTPUT,
 	getPayoffAmounts: GET_PAYOFF_AMOUNTS_OUTPUT,
 	getPayoffDetails: GET_PAYOFF_DETAILS_OUTPUT,
-	// Oleada 2 — Loan Writes
-	submitPayment: SUBMIT_PAYMENT_OUTPUT,
+	// Collection Comments
 	addCollectionComment: ADD_COLLECTION_COMMENT_OUTPUT,
 	updateCollectionComment: UPDATE_COLLECTION_COMMENT_OUTPUT,
-	cancelPromiseToPay: CANCEL_PROMISE_TO_PAY_OUTPUT,
-	addCreditCard: ADD_CREDIT_CARD_OUTPUT,
-	forgetCreditCard: FORGET_CREDIT_CARD_OUTPUT,
-	getWebPayUrl: GET_WEB_PAY_URL_OUTPUT,
-	getAddPaymentMethodUrl: GET_ADD_PAYMENT_METHOD_URL_OUTPUT,
-	getConvenienceFee: GET_CONVENIENCE_FEE_OUTPUT,
-	// Oleada 3 — Contacts & Utils
+	// Contacts & Search
 	getContact: GET_CONTACT_OUTPUT,
 	searchContacts: SEARCH_CONTACTS_OUTPUT,
 	searchLoans: SEARCH_LOANS_OUTPUT,
-	parseName: PARSE_NAME_OUTPUT,
-	parseAddress: PARSE_ADDRESS_OUTPUT,
+	// Calculations
 	calculateAmortizedPayment: CALCULATE_AMORTIZED_PAYMENT_OUTPUT,
+	// Nuevas funciones
+	getContactLoans: ITEMS_TOTAL_OUTPUT,
+	getContactPortfolio: ITEMS_TOTAL_OUTPUT,
+	getContactEmployments: ITEMS_TOTAL_OUTPUT,
+	getLoanTransactions: ITEMS_TOTAL_OUTPUT,
+	getAmortizationSchedule: ITEMS_TOTAL_OUTPUT,
+	advancePeriod: ADVANCE_PERIOD_OUTPUT,
+	getLoanStatusCodes: ITEMS_TOTAL_OUTPUT,
 };
 
 export function getNlsOutputSchema(

@@ -995,7 +995,7 @@ const NLS_RPC_METHOD: Record<string, string> = {
 	createLoan: "nlsCreateLoan",
 	cancelLoan: "nlsCancelLoan",
 	getAmortization: "nlsGetAmortization",
-	// Oleada 1 — Loan Reads
+	// Loan Reads
 	getLoan: "nlsGetLoan",
 	getLoanDetail1: "nlsGetLoanDetail1",
 	getPaymentInfo: "nlsGetPaymentInfo",
@@ -1005,23 +1005,23 @@ const NLS_RPC_METHOD: Record<string, string> = {
 	getPaymentsDue: "nlsGetPaymentsDue",
 	getPayoffAmounts: "nlsGetPayoffAmounts",
 	getPayoffDetails: "nlsGetPayoffDetails",
-	// Oleada 2 — Loan Writes
-	submitPayment: "nlsSubmitPayment",
+	// Collection Comments
 	addCollectionComment: "nlsAddCollectionComment",
 	updateCollectionComment: "nlsUpdateCollectionComment",
-	cancelPromiseToPay: "nlsCancelPromiseToPay",
-	addCreditCard: "nlsAddCreditCard",
-	forgetCreditCard: "nlsForgetCreditCard",
-	getWebPayUrl: "nlsGetWebPayUrl",
-	getAddPaymentMethodUrl: "nlsGetAddPaymentMethodUrl",
-	getConvenienceFee: "nlsGetConvenienceFee",
-	// Oleada 3 — Contacts & Utils
+	// Contacts & Search
 	getContact: "nlsGetContact",
 	searchContacts: "nlsSearchContacts",
 	searchLoans: "nlsSearchLoans",
-	parseName: "nlsParseName",
-	parseAddress: "nlsParseAddress",
+	// Calculations
 	calculateAmortizedPayment: "nlsCalculateAmortizedPayment",
+	// Nuevas funciones
+	getContactLoans: "nlsGetContactLoans",
+	getContactPortfolio: "nlsGetContactPortfolio",
+	getContactEmployments: "nlsGetContactEmployments",
+	getLoanTransactions: "nlsGetLoanTransactions",
+	getAmortizationSchedule: "nlsGetAmortizationSchedule",
+	advancePeriod: "nlsAdvancePeriod",
+	getLoanStatusCodes: "nlsGetLoanStatusCodes",
 };
 
 /**

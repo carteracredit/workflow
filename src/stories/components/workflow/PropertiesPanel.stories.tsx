@@ -386,41 +386,7 @@ export const NlsNodeGetPaymentInfo: Story = {
 	},
 };
 
-// ── Oleada 2 — Loan Writes representative stories ─────────────────────────────
-
-export const NlsNodeSubmitPayment: Story = {
-	name: "NLS — submitPayment",
-	args: {
-		selectedNodes: [
-			{
-				...nlsNodeBase,
-				title: "Registrar Pago",
-				config: {
-					...nlsNodeBase.config,
-					functionId: "submitPayment" as const,
-					fields: [
-						{
-							fieldId: "loanNumber",
-							value: "${start.loanNumber}",
-							source: "discovered" as const,
-						},
-						{
-							fieldId: "PaymentGatewayTokenID",
-							value: "${start.tokenId}",
-							source: "discovered" as const,
-						},
-						{
-							fieldId: "PaymentAmount",
-							value: "${start.paymentAmount}",
-							source: "discovered" as const,
-						},
-					],
-				},
-			},
-		],
-		selectedEdges: [],
-	},
-};
+// ── Collection Comments & Search representative stories ───────────────────────
 
 export const NlsNodeAddCollectionComment: Story = {
 	name: "NLS — addCollectionComment",
@@ -461,7 +427,36 @@ export const NlsNodeAddCollectionComment: Story = {
 	},
 };
 
-// ── Oleada 3 — Contacts & Utils representative stories ────────────────────────
+export const NlsNodeSearchLoans: Story = {
+	name: "NLS — searchLoans",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Buscar Préstamos por CIF",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "searchLoans" as const,
+					fields: [
+						{
+							fieldId: "Cifno",
+							value: "${prequal.cifNumber}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "limit",
+							value: "10",
+							source: "manual" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+// ── Contacts & Utils representative stories ────────────────────────────────────
 
 export const NlsNodeGetContact: Story = {
 	name: "NLS — getContact",
@@ -662,6 +657,95 @@ export const NlsNodePrequalificationCoapplicant: Story = {
 						cacheStrategy: "always-execute",
 						timeout: 90000,
 					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+// ── Nuevas funciones — representative stories ─────────────────────────────────
+
+export const NlsNodeGetContactLoans: Story = {
+	name: "NLS — getContactLoans",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Obtener Préstamos del Contacto",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "getContactLoans" as const,
+					fields: [
+						{
+							fieldId: "cifNo",
+							value: "${prequal.cifNumber}",
+							source: "discovered" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodeGetLoanTransactions: Story = {
+	name: "NLS — getLoanTransactions",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Obtener Transacciones del Préstamo",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "getLoanTransactions" as const,
+					fields: [
+						{
+							fieldId: "loanNumber",
+							value: "${createLoan.loanNumber}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "limit",
+							value: "50",
+							source: "manual" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodeAdvancePeriod: Story = {
+	name: "NLS — advancePeriod",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Avanzar Período",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "advancePeriod" as const,
+					fields: [
+						{
+							fieldId: "startDate",
+							value: "${createLoan.firstPaymentDate}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "period",
+							value: "MO",
+							source: "manual" as const,
+						},
+						{
+							fieldId: "numberOfPeriods",
+							value: "1",
+							source: "manual" as const,
+						},
+					],
 				},
 			},
 		],
