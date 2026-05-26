@@ -288,18 +288,6 @@ export function validateWorkflow(
 					});
 				}
 
-				// Validar que API con onFailure='stop' no tenga conexiones salientes
-				if (fh.onFailure === "stop") {
-					const outgoingEdges = edges.filter((e) => e.from === node.id);
-					if (outgoingEdges.length > 0) {
-						errors.push({
-							nodeId: node.id,
-							message: `"${node.title}": Un nodo API con "Detener Workflow" no puede tener conexiones salientes`,
-							severity: "error",
-						});
-					}
-				}
-
 				// Validar que API con return-to-checkpoint tenga checkpoint configurado
 				if (fh.onFailure === "return-to-checkpoint") {
 					const checkpointId = findNearestPreviousCheckpoint(
@@ -441,14 +429,8 @@ export function validateWorkflow(
 					});
 				}
 				if (fh.onFailure === "stop") {
-					const outgoingEdges = edges.filter((e) => e.from === node.id);
-					if (outgoingEdges.length > 0) {
-						errors.push({
-							nodeId: node.id,
-							message: `"${node.title}": Un nodo NLS con "Detener Workflow" no puede tener conexiones salientes`,
-							severity: "error",
-						});
-					}
+					// onFailure='stop' solo aplica al camino de error:
+					// el nodo puede y debe tener conexiones salientes para el camino de éxito.
 				}
 			}
 		}
