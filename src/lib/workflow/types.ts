@@ -419,7 +419,34 @@ export type NLSFunctionId =
 	| "cancelLoan"
 	| "getAmortization"
 	| "prequalification"
-	| "findPrequalificationMatches";
+	| "findPrequalificationMatches"
+	// Oleada 1 — Loan Reads
+	| "getLoan"
+	| "getLoanDetail1"
+	| "getPaymentInfo"
+	| "getCollectionFields"
+	| "getStatuses"
+	| "getPaymentHistory"
+	| "getPaymentsDue"
+	| "getPayoffAmounts"
+	| "getPayoffDetails"
+	// Oleada 2 — Loan Writes
+	| "submitPayment"
+	| "addCollectionComment"
+	| "updateCollectionComment"
+	| "cancelPromiseToPay"
+	| "addCreditCard"
+	| "forgetCreditCard"
+	| "getWebPayUrl"
+	| "getAddPaymentMethodUrl"
+	| "getConvenienceFee"
+	// Oleada 3 — Contacts & Utils
+	| "getContact"
+	| "searchContacts"
+	| "searchLoans"
+	| "parseName"
+	| "parseAddress"
+	| "calculateAmortizedPayment";
 
 export interface NLSFieldConfig {
 	fieldId: string;

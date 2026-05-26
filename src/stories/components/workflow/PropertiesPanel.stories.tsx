@@ -336,6 +336,196 @@ export const NlsNodeCreateLoan: Story = {
 	},
 };
 
+// ── Oleada 1 — Loan Reads representative stories ─────────────────────────────
+
+export const NlsNodeGetLoan: Story = {
+	name: "NLS — getLoan",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Obtener Préstamo",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "getLoan" as const,
+					fields: [
+						{
+							fieldId: "loanNumber",
+							value: "${start.loanNumber}",
+							source: "discovered" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodeGetPaymentInfo: Story = {
+	name: "NLS — getPaymentInfo",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Obtener Info de Pago",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "getPaymentInfo" as const,
+					fields: [
+						{
+							fieldId: "loanNumber",
+							value: "${start.loanNumber}",
+							source: "discovered" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+// ── Oleada 2 — Loan Writes representative stories ─────────────────────────────
+
+export const NlsNodeSubmitPayment: Story = {
+	name: "NLS — submitPayment",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Registrar Pago",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "submitPayment" as const,
+					fields: [
+						{
+							fieldId: "loanNumber",
+							value: "${start.loanNumber}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "PaymentGatewayTokenID",
+							value: "${start.tokenId}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "PaymentAmount",
+							value: "${start.paymentAmount}",
+							source: "discovered" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodeAddCollectionComment: Story = {
+	name: "NLS — addCollectionComment",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Agregar Comentario de Cobranza",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "addCollectionComment" as const,
+					fields: [
+						{
+							fieldId: "loanNumber",
+							value: "${start.loanNumber}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "Action_Code_No",
+							value: "10",
+							source: "manual" as const,
+						},
+						{
+							fieldId: "Result_Code_No",
+							value: "22",
+							source: "manual" as const,
+						},
+						{
+							fieldId: "Comments",
+							value: "${start.commentText}",
+							source: "discovered" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+// ── Oleada 3 — Contacts & Utils representative stories ────────────────────────
+
+export const NlsNodeGetContact: Story = {
+	name: "NLS — getContact",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Obtener Contacto",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "getContact" as const,
+					fields: [
+						{
+							fieldId: "cifNo",
+							value: "${start.cifNumber}",
+							source: "discovered" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NlsNodeCalculateAmortizedPayment: Story = {
+	name: "NLS — calculateAmortizedPayment",
+	args: {
+		selectedNodes: [
+			{
+				...nlsNodeBase,
+				title: "Calcular Pago Amortizado",
+				config: {
+					...nlsNodeBase.config,
+					functionId: "calculateAmortizedPayment" as const,
+					fields: [
+						{
+							fieldId: "LoanAmount",
+							value: "${start.loanAmount}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "InterestRate",
+							value: "${start.interestRate}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "NumberOfPayments",
+							value: "${start.term}",
+							source: "discovered" as const,
+						},
+						{
+							fieldId: "PaymentsPerYear",
+							value: "12",
+							source: "manual" as const,
+						},
+					],
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
 export const NlsNodeGetAmortization: Story = {
 	name: "NLS — getAmortization",
 	args: {
