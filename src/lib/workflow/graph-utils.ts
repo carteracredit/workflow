@@ -8,7 +8,8 @@ import type {
 import { cloneCaseVariables } from "./case-variables";
 import { cloneChallengeOutputSchemaForType } from "./challenge-output";
 import { clonePromotionOutputSchema } from "./promotion-output";
-import { cloneNlsOutputSchema } from "./nls-output";
+import { getNlsOutputFieldsFromCache } from "./nls-functions-cache";
+import { cloneNlsOutputFieldsToSchema } from "./nls-output-mapper";
 import { buildAliasMap } from "./node-alias";
 import type { NLSNodeConfig } from "./types";
 
@@ -340,8 +341,9 @@ export function buildVariableSourceNodes(
 			);
 		} else if (node.type === "NLS") {
 			const nlsConfig = node.config as NLSNodeConfig;
+			const cachedFields = getNlsOutputFieldsFromCache(nlsConfig.functionId);
 			properties = mergePropertiesByName(
-				cloneNlsOutputSchema(nlsConfig.functionId),
+				cloneNlsOutputFieldsToSchema(cachedFields ?? [], nlsConfig.functionId),
 				customProps,
 			);
 		} else {

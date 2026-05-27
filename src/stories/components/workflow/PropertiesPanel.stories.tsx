@@ -449,6 +449,63 @@ export const NlsNodeSearchLoans: Story = {
 							source: "manual" as const,
 						},
 					],
+					// outputSchema populated as it would be after the function is
+					// selected in the editor (nlsOutputFieldsToSchema from proxy-svc)
+					outputSchema: {
+						name: "searchLoansOutput",
+						properties: [
+							{
+								id: "nls-searchLoans-items",
+								name: "items",
+								type: "array",
+								readOnly: true,
+								items: {
+									id: "nls-searchLoans-items-item",
+									name: "item",
+									type: "object",
+									readOnly: true,
+									properties: [
+										{
+											id: "nls-searchLoans-items-item-Loan_Number",
+											name: "Loan_Number",
+											type: "string",
+											readOnly: true,
+										},
+										{
+											id: "nls-searchLoans-items-item-Cifno",
+											name: "Cifno",
+											type: "number",
+											readOnly: true,
+										},
+										{
+											id: "nls-searchLoans-items-item-Name",
+											name: "Name",
+											type: "string",
+											readOnly: true,
+										},
+										{
+											id: "nls-searchLoans-items-item-Status_Code_No",
+											name: "Status_Code_No",
+											type: "number",
+											readOnly: true,
+										},
+										{
+											id: "nls-searchLoans-items-item-Current_Payoff_Balance",
+											name: "Current_Payoff_Balance",
+											type: "number",
+											readOnly: true,
+										},
+									],
+								},
+							},
+							{
+								id: "nls-searchLoans-total",
+								name: "total",
+								type: "number",
+								readOnly: true,
+							},
+						],
+					},
 				},
 			},
 		],

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import {
 	findNearestPreviousCheckpoint,
 	findAllNearestPreviousCheckpoints,
@@ -9,6 +9,90 @@ import {
 	SECRETS_SOURCE_ID,
 } from "./graph-utils";
 import type { WorkflowNode, WorkflowEdge } from "./types";
+import { updateNlsCache } from "./nls-functions-cache";
+import type { NlsFunctionSummary } from "@/lib/workflow-api/nls";
+
+// ---------------------------------------------------------------------------
+// Pre-populate the NLS output fields cache for tests that involve NLS nodes.
+// In production this is done by useNlsFunctionsCache hook; in tests we do it
+// directly so graph-utils can resolve output schemas synchronously.
+// ---------------------------------------------------------------------------
+const NLS_FUNCTION_FIXTURES: NlsFunctionSummary[] = [
+	{
+		id: "createLoan",
+		label: "Create Loan",
+		description: "Creates a loan",
+		outputFields: [
+			{ id: "success", label: "Success", type: "boolean" },
+			{ id: "loanNumber", label: "Loan Number", type: "string" },
+			{ id: "originationDate", label: "Origination Date", type: "string" },
+			{ id: "firstPaymentDate", label: "First Payment Date", type: "string" },
+			{ id: "term", label: "Term", type: "number" },
+			{ id: "loanAmount", label: "Loan Amount", type: "number" },
+			{ id: "interestRate", label: "Interest Rate", type: "number" },
+		],
+	},
+	{
+		id: "getAmortization",
+		label: "Get Amortization",
+		description: "Gets amortization",
+		outputFields: [
+			{ id: "LoanAmount", label: "Loan Amount", type: "number" },
+			{ id: "totalOfPayments", label: "Total of Payments", type: "number" },
+			{
+				id: "regularPaymentAmount",
+				label: "Regular Payment Amount",
+				type: "number",
+			},
+			{ id: "firstPaymentApr", label: "First Payment Date", type: "string" },
+			{ id: "lastPaymentAmount", label: "Last Payment Amount", type: "number" },
+			{ id: "lastPaymentDate", label: "Last Payment Date", type: "string" },
+			{ id: "OriginationDate", label: "Origination Date", type: "string" },
+			{ id: "apr", label: "APR", type: "number" },
+			{ id: "CashFlow", label: "Cash Flow", type: "number" },
+			{
+				id: "schedule",
+				label: "Amortization Schedule",
+				type: "array",
+				items: {
+					id: "item",
+					label: "Entry",
+					type: "object",
+					properties: [
+						{ id: "PaymentNumber", label: "Payment Number", type: "number" },
+						{ id: "PaymentAmount", label: "Payment Amount", type: "number" },
+					],
+				},
+			},
+		],
+	},
+	{
+		id: "searchLoans",
+		label: "Search Loans",
+		description: "Searches loans",
+		outputFields: [
+			{
+				id: "items",
+				label: "Loans Array",
+				type: "array",
+				items: {
+					id: "item",
+					label: "Loan",
+					type: "object",
+					properties: [
+						{ id: "Loan_Number", label: "Loan Number", type: "string" },
+						{ id: "Cifno", label: "CIF No", type: "number" },
+					],
+				},
+			},
+			{ id: "total", label: "Total", type: "number" },
+		],
+	},
+];
+
+beforeAll(() => {
+	updateNlsCache(NLS_FUNCTION_FIXTURES);
+});
 
 describe("graph-utils", () => {
 	describe("findNearestPreviousCheckpoint", () => {
@@ -966,6 +1050,46 @@ describe("graph-utils", () => {
 
 			const result = buildVariableSourceNodes([nlsNode]);
 			expect(result).toEqual([]);
+		});
+
+		it("NLS searchLoans exposes items[] with Loan_Number child via cache", () => {
+			const nlsNode: WorkflowNode = {
+				id: "nls-search",
+				type: "NLS",
+				title: "Buscar préstamos",
+				description: "",
+				roles: [],
+				config: {
+					functionId: "searchLoans",
+					fields: [],
+					failureHandling: { onFailure: "stop", maxRetries: 0 },
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([nlsNode]);
+			expect(result).toHaveLength(1);
+
+			const itemsVar = result[0].variables.find((v) => v.name === "items");
+			expect(itemsVar).toBeDefined();
+			expect(itemsVar!.type).toBe("array");
+			// children of an array are the ITEM PROPERTIES directly (items[0].Field)
+			expect(itemsVar!.children).toBeDefined();
+			expect(itemsVar!.children!.length).toBeGreaterThan(0);
+
+			// items[0].Loan_Number should be accessible as a leaf variable
+			const loanNumberLeaf = itemsVar!.children!.find(
+				(c) => c.name === "Loan_Number",
+			);
+			expect(loanNumberLeaf).toBeDefined();
+			expect(loanNumberLeaf!.type).toBe("string");
+			expect(loanNumberLeaf!.path).toContain("items[0].Loan_Number");
+
+			// items[0].Cifno should also be accessible
+			const cifnoLeaf = itemsVar!.children!.find((c) => c.name === "Cifno");
+			expect(cifnoLeaf).toBeDefined();
+			expect(cifnoLeaf!.type).toBe("number");
 		});
 	});
 
