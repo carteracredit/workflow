@@ -419,7 +419,34 @@ export type NLSFunctionId =
 	| "cancelLoan"
 	| "getAmortization"
 	| "prequalification"
-	| "findPrequalificationMatches";
+	| "findPrequalificationMatches"
+	// Loan Reads
+	| "getLoan"
+	| "getLoanDetail1"
+	| "getPaymentInfo"
+	| "getCollectionFields"
+	| "getStatuses"
+	| "getPaymentHistory"
+	| "getPaymentsDue"
+	| "getPayoffAmounts"
+	| "getPayoffDetails"
+	// Collection Comments
+	| "addCollectionComment"
+	| "updateCollectionComment"
+	// Contacts & Search
+	| "getContact"
+	| "searchContacts"
+	| "searchLoans"
+	// Calculations
+	| "calculateAmortizedPayment"
+	// Nuevas funciones
+	| "getContactLoans"
+	| "getContactPortfolio"
+	| "getContactEmployments"
+	| "getLoanTransactions"
+	| "getAmortizationSchedule"
+	| "advancePeriod"
+	| "getLoanStatusCodes";
 
 export interface NLSFieldConfig {
 	fieldId: string;

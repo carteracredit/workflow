@@ -531,7 +531,7 @@ describe("validateWorkflow", () => {
 			).toBe(true);
 		});
 
-		it("should error when API node with onFailure='stop' has outgoing edges", () => {
+		it("should NOT error when API node with onFailure='stop' has outgoing edges (success path is valid)", () => {
 			const nodes: WorkflowNode[] = [
 				{
 					id: "start-1",
@@ -579,14 +579,13 @@ describe("validateWorkflow", () => {
 			];
 
 			const errors = validateWorkflow(nodes, edges);
+			// onFailure='stop' only affects the failure path — success path connections are valid
 			expect(
 				errors.some(
 					(e) =>
-						e.nodeId === "api-1" &&
-						e.message.includes("Detener Workflow") &&
-						e.message.includes("conexiones salientes"),
+						e.nodeId === "api-1" && e.message.includes("conexiones salientes"),
 				),
-			).toBe(true);
+			).toBe(false);
 		});
 	});
 
@@ -1598,7 +1597,7 @@ describe("NLS node validation", () => {
 		).toBe(true);
 	});
 
-	it("should error when onFailure=stop and node has outgoing edges", () => {
+	it("should NOT error when onFailure=stop and node has outgoing edges (success path is valid)", () => {
 		const cfg: NLSNodeConfig = {
 			...createDefaultNLSConfig(),
 			functionId: "createLoan",
@@ -1609,13 +1608,14 @@ describe("NLS node validation", () => {
 		};
 		const { nodes, edges } = makeNlsWorkflow(cfg);
 		const errors = validateWorkflow(nodes, edges);
+		// onFailure='stop' only affects the failure path — success path connections are valid
 		expect(
 			errors.some(
 				(e) =>
 					e.nodeId === "nls-1" &&
 					e.message.includes("no puede tener conexiones salientes"),
 			),
-		).toBe(true);
+		).toBe(false);
 	});
 
 	it("should not error when onFailure=stop and no outgoing edges", () => {

@@ -576,6 +576,375 @@ const FIND_MATCHES_OUTPUT: OutputSchemaProperty[] = [
 	},
 ];
 
+// ── Oleada 1 — Loan Reads ─────────────────────────────────────────────────────
+
+const GET_LOAN_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getLoan-Loan_Number",
+		name: "Loan_Number",
+		type: "string",
+		description: "Loan number",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoan-Account_Name",
+		name: "Account_Name",
+		type: "string",
+		description: "Account holder name",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoan-Loan_Amount",
+		name: "Loan_Amount",
+		type: "number",
+		description: "Original loan amount",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoan-Interest_Rate",
+		name: "Interest_Rate",
+		type: "number",
+		description: "Loan interest rate",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoan-Origination_Date",
+		name: "Origination_Date",
+		type: "string",
+		description: "Loan origination date",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoan-Maturity_Date",
+		name: "Maturity_Date",
+		type: "string",
+		description: "Loan maturity date",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoan-Current_Balance",
+		name: "Current_Balance",
+		type: "number",
+		description: "Current outstanding balance",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoan-Loan_Status",
+		name: "Loan_Status",
+		type: "string",
+		description: "Current loan status",
+		readOnly: true,
+	},
+];
+
+const GET_LOAN_DETAIL1_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getLoanDetail1-UserDefined1",
+		name: "UserDefined1",
+		type: "string",
+		description: "User Defined field 1",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoanDetail1-UserDefined2",
+		name: "UserDefined2",
+		type: "string",
+		description: "User Defined field 2",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoanDetail1-UserDefined3",
+		name: "UserDefined3",
+		type: "string",
+		description: "User Defined field 3",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoanDetail1-UserDefined4",
+		name: "UserDefined4",
+		type: "string",
+		description: "User Defined field 4",
+		readOnly: true,
+	},
+	{
+		id: "nls-getLoanDetail1-UserDefined5",
+		name: "UserDefined5",
+		type: "string",
+		description: "User Defined field 5",
+		readOnly: true,
+	},
+];
+
+const GET_PAYMENT_INFO_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getPaymentInfo-Next_Payment_Date",
+		name: "Next_Payment_Date",
+		type: "string",
+		description: "Date of next payment",
+		readOnly: true,
+	},
+	{
+		id: "nls-getPaymentInfo-Next_Payment_Total_Amount",
+		name: "Next_Payment_Total_Amount",
+		type: "number",
+		description: "Amount of next payment",
+		readOnly: true,
+	},
+	{
+		id: "nls-getPaymentInfo-Past_Due_Amount",
+		name: "Past_Due_Amount",
+		type: "number",
+		description: "Amount currently past due",
+		readOnly: true,
+	},
+	{
+		id: "nls-getPaymentInfo-Current_Balance",
+		name: "Current_Balance",
+		type: "number",
+		description: "Current outstanding balance",
+		readOnly: true,
+	},
+];
+
+const GET_COLLECTION_FIELDS_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getCollectionFields-items",
+		name: "items",
+		type: "array",
+		description: "Array of collection field records",
+		readOnly: true,
+	},
+];
+
+const GET_STATUSES_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getStatuses-items",
+		name: "items",
+		type: "array",
+		description: "Array of loan status records",
+		readOnly: true,
+	},
+];
+
+const GET_PAYMENT_HISTORY_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getPaymentHistory-items",
+		name: "items",
+		type: "array",
+		description: "Array of payment history records",
+		readOnly: true,
+	},
+];
+
+const GET_PAYMENTS_DUE_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getPaymentsDue-items",
+		name: "items",
+		type: "array",
+		description: "Array of upcoming payments due",
+		readOnly: true,
+	},
+];
+
+const GET_PAYOFF_AMOUNTS_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getPayoffAmounts-items",
+		name: "items",
+		type: "array",
+		description: "Array of payoff amount records by date",
+		readOnly: true,
+	},
+];
+
+const GET_PAYOFF_DETAILS_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getPayoffDetails-Payoff_Amount",
+		name: "Payoff_Amount",
+		type: "number",
+		description: "Total payoff amount",
+		readOnly: true,
+	},
+	{
+		id: "nls-getPayoffDetails-Interest_Due",
+		name: "Interest_Due",
+		type: "number",
+		description: "Interest accrued",
+		readOnly: true,
+	},
+	{
+		id: "nls-getPayoffDetails-Fees_Due",
+		name: "Fees_Due",
+		type: "number",
+		description: "Fees due",
+		readOnly: true,
+	},
+	{
+		id: "nls-getPayoffDetails-Payoff_Date",
+		name: "Payoff_Date",
+		type: "string",
+		description: "Payoff date used for calculation",
+		readOnly: true,
+	},
+];
+
+// ── Collection Comments ────────────────────────────────────────────────────────
+
+const ADD_COLLECTION_COMMENT_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-addCollectionComment-Row_ID",
+		name: "Row_ID",
+		type: "string",
+		description: "Newly created comment row ID",
+		readOnly: true,
+	},
+];
+
+const UPDATE_COLLECTION_COMMENT_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-updateCollectionComment-Row_ID",
+		name: "Row_ID",
+		type: "string",
+		description: "Updated comment row ID",
+		readOnly: true,
+	},
+];
+
+// ── Contacts & Search ──────────────────────────────────────────────────────────
+
+const GET_CONTACT_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-getContact-Cifnumber",
+		name: "Cifnumber",
+		type: "string",
+		description: "CIF Number",
+		readOnly: true,
+	},
+	{
+		id: "nls-getContact-Full_Name",
+		name: "Full_Name",
+		type: "string",
+		description: "Contact full name",
+		readOnly: true,
+	},
+	{
+		id: "nls-getContact-Email_Address",
+		name: "Email_Address",
+		type: "string",
+		description: "Contact email address",
+		readOnly: true,
+	},
+	{
+		id: "nls-getContact-Phone_Number",
+		name: "Phone_Number",
+		type: "string",
+		description: "Contact phone number",
+		readOnly: true,
+	},
+	{
+		id: "nls-getContact-Address1",
+		name: "Address1",
+		type: "string",
+		description: "Street address",
+		readOnly: true,
+	},
+	{
+		id: "nls-getContact-City",
+		name: "City",
+		type: "string",
+		description: "City",
+		readOnly: true,
+	},
+	{
+		id: "nls-getContact-State_Code",
+		name: "State_Code",
+		type: "string",
+		description: "State code",
+		readOnly: true,
+	},
+	{
+		id: "nls-getContact-Zip_Code",
+		name: "Zip_Code",
+		type: "string",
+		description: "Zip code",
+		readOnly: true,
+	},
+];
+
+const SEARCH_CONTACTS_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-searchContacts-items",
+		name: "items",
+		type: "array",
+		description: "Array of matching contact records",
+		readOnly: true,
+	},
+	{
+		id: "nls-searchContacts-total",
+		name: "total",
+		type: "number",
+		description: "Number of results returned",
+		readOnly: true,
+	},
+];
+
+const SEARCH_LOANS_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-searchLoans-items",
+		name: "items",
+		type: "array",
+		description: "Array of matching loan records",
+		readOnly: true,
+	},
+	{
+		id: "nls-searchLoans-total",
+		name: "total",
+		type: "number",
+		description: "Number of results returned",
+		readOnly: true,
+	},
+];
+
+// ── Calculations ──────────────────────────────────────────────────────────────
+
+const CALCULATE_AMORTIZED_PAYMENT_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-calculateAmortizedPayment-paymentAmount",
+		name: "paymentAmount",
+		type: "number",
+		description: "Calculated periodic payment amount (rounded to 2 decimals)",
+		readOnly: true,
+	},
+];
+
+// ── Nuevas funciones ──────────────────────────────────────────────────────────
+
+const ITEMS_TOTAL_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-itemsTotal-items",
+		name: "items",
+		type: "array",
+		description: "Array of result items",
+		readOnly: true,
+	},
+	{
+		id: "nls-itemsTotal-total",
+		name: "total",
+		type: "number",
+		description: "Total count of results",
+		readOnly: true,
+	},
+];
+
+const ADVANCE_PERIOD_OUTPUT: OutputSchemaProperty[] = [
+	{
+		id: "nls-advancePeriod-date",
+		name: "date",
+		type: "string",
+		description: "Resulting date after advancing the period",
+		readOnly: true,
+	},
+];
+
 export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	NLSFunctionId,
 	OutputSchemaProperty[]
@@ -585,6 +954,33 @@ export const NLS_FUNCTION_OUTPUT_SCHEMAS: Record<
 	getAmortization: GET_AMORTIZATION_OUTPUT,
 	prequalification: PREQUALIFICATION_OUTPUT,
 	findPrequalificationMatches: FIND_MATCHES_OUTPUT,
+	// Loan Reads
+	getLoan: GET_LOAN_OUTPUT,
+	getLoanDetail1: GET_LOAN_DETAIL1_OUTPUT,
+	getPaymentInfo: GET_PAYMENT_INFO_OUTPUT,
+	getCollectionFields: GET_COLLECTION_FIELDS_OUTPUT,
+	getStatuses: GET_STATUSES_OUTPUT,
+	getPaymentHistory: GET_PAYMENT_HISTORY_OUTPUT,
+	getPaymentsDue: GET_PAYMENTS_DUE_OUTPUT,
+	getPayoffAmounts: GET_PAYOFF_AMOUNTS_OUTPUT,
+	getPayoffDetails: GET_PAYOFF_DETAILS_OUTPUT,
+	// Collection Comments
+	addCollectionComment: ADD_COLLECTION_COMMENT_OUTPUT,
+	updateCollectionComment: UPDATE_COLLECTION_COMMENT_OUTPUT,
+	// Contacts & Search
+	getContact: GET_CONTACT_OUTPUT,
+	searchContacts: SEARCH_CONTACTS_OUTPUT,
+	searchLoans: SEARCH_LOANS_OUTPUT,
+	// Calculations
+	calculateAmortizedPayment: CALCULATE_AMORTIZED_PAYMENT_OUTPUT,
+	// Nuevas funciones
+	getContactLoans: ITEMS_TOTAL_OUTPUT,
+	getContactPortfolio: ITEMS_TOTAL_OUTPUT,
+	getContactEmployments: ITEMS_TOTAL_OUTPUT,
+	getLoanTransactions: ITEMS_TOTAL_OUTPUT,
+	getAmortizationSchedule: ITEMS_TOTAL_OUTPUT,
+	advancePeriod: ADVANCE_PERIOD_OUTPUT,
+	getLoanStatusCodes: ITEMS_TOTAL_OUTPUT,
 };
 
 export function getNlsOutputSchema(

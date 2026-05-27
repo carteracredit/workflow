@@ -995,6 +995,33 @@ const NLS_RPC_METHOD: Record<string, string> = {
 	createLoan: "nlsCreateLoan",
 	cancelLoan: "nlsCancelLoan",
 	getAmortization: "nlsGetAmortization",
+	// Loan Reads
+	getLoan: "nlsGetLoan",
+	getLoanDetail1: "nlsGetLoanDetail1",
+	getPaymentInfo: "nlsGetPaymentInfo",
+	getCollectionFields: "nlsGetCollectionFields",
+	getStatuses: "nlsGetStatuses",
+	getPaymentHistory: "nlsGetPaymentHistory",
+	getPaymentsDue: "nlsGetPaymentsDue",
+	getPayoffAmounts: "nlsGetPayoffAmounts",
+	getPayoffDetails: "nlsGetPayoffDetails",
+	// Collection Comments
+	addCollectionComment: "nlsAddCollectionComment",
+	updateCollectionComment: "nlsUpdateCollectionComment",
+	// Contacts & Search
+	getContact: "nlsGetContact",
+	searchContacts: "nlsSearchContacts",
+	searchLoans: "nlsSearchLoans",
+	// Calculations
+	calculateAmortizedPayment: "nlsCalculateAmortizedPayment",
+	// Nuevas funciones
+	getContactLoans: "nlsGetContactLoans",
+	getContactPortfolio: "nlsGetContactPortfolio",
+	getContactEmployments: "nlsGetContactEmployments",
+	getLoanTransactions: "nlsGetLoanTransactions",
+	getAmortizationSchedule: "nlsGetAmortizationSchedule",
+	advancePeriod: "nlsAdvancePeriod",
+	getLoanStatusCodes: "nlsGetLoanStatusCodes",
 };
 
 /**
