@@ -1,3 +1,15 @@
+# [1.3.0-rc.27](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.26...v1.3.0-rc.27) (2026-05-27)
+
+
+### Bug Fixes
+
+* update validation logic for API and NLS nodes with onFailure='stop' ([d267a84](https://github.com/carteracredit/workflow/commit/d267a844bfe114d2f44f0062e72865fb27acd725))
+
+
+### Features
+
+* expand NLS functionality with new loan-related operations and outputs ([01d245c](https://github.com/carteracredit/workflow/commit/01d245c7d4e383220b688e222b79aeca4c09abb6))
+
 # [1.3.0-rc.26](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.25...v1.3.0-rc.26) (2026-05-26)
 
 
