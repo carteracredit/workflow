@@ -17,6 +17,11 @@ export interface NlsFunctionOutputField {
 	id: string;
 	label: string;
 	type: string;
+	description?: string;
+	/** Schema of array items — only when type === "array" */
+	items?: NlsFunctionOutputField;
+	/** Properties of object shape — only when type === "object" */
+	properties?: NlsFunctionOutputField[];
 }
 
 export interface NlsFunctionSummary {

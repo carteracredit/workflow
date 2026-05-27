@@ -107,7 +107,11 @@ import type {
 } from "@/lib/workflow-api/nls-actions";
 import type { NLSNodeConfig, NLSFunctionId } from "@/lib/workflow/types";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
-import { getNlsOutputSchema } from "@/lib/workflow/nls-output";
+import { nlsOutputFieldsToSchema } from "@/lib/workflow/nls-output-mapper";
+import {
+	getNlsOutputFieldsFromCache,
+	useNlsFunctionsCache,
+} from "@/lib/workflow/nls-functions-cache";
 import {
 	getNlsSectionLabel,
 	getNlsFieldLabel,
@@ -513,6 +517,10 @@ export function PropertiesPanel({
 	const [nlsExpandedSections, setNlsExpandedSections] = useState<Set<string>>(
 		new Set(),
 	);
+
+	// Populate the module-level NLS output fields cache whenever the list changes.
+	// graph-utils reads from this cache synchronously to build variable pickers.
+	useNlsFunctionsCache(nlsFunctions);
 
 	// Limpiar estado mock cuando cambia el nodo seleccionado
 	useEffect(() => {
@@ -5154,9 +5162,15 @@ export function PropertiesPanel({
 									}
 									onValueChange={(v) => {
 										const functionId = v as NLSFunctionId;
+										// Optimistic schema from cache (may be empty if cache not ready)
+										const cachedFields =
+											getNlsOutputFieldsFromCache(functionId) ?? [];
 										const outputSchema = {
 											name: `${functionId}Output`,
-											properties: getNlsOutputSchema(functionId),
+											properties: nlsOutputFieldsToSchema(
+												cachedFields,
+												functionId,
+											),
 										};
 										getNlsFunctionAction(functionId)
 											.then((detail) => {
@@ -5167,12 +5181,20 @@ export function PropertiesPanel({
 														source: "discovered" as const,
 													})),
 												);
+												// Use the actual schema from the detail response
+												const actualOutputSchema = {
+													name: `${functionId}Output`,
+													properties: nlsOutputFieldsToSchema(
+														detail.outputFields,
+														functionId,
+													),
+												};
 												onUpdateNode(selectedNode.id, {
 													config: {
 														...selectedNode.config,
 														functionId,
 														fields: discoveredFields,
-														outputSchema,
+														outputSchema: actualOutputSchema,
 													},
 												});
 												setNlsFunctionDetail(detail);
@@ -5509,13 +5531,29 @@ export function PropertiesPanel({
 												return nodes;
 											});
 										};
+										const nlsCfgForOutput =
+											selectedNode.config as NLSNodeConfig;
+										// Prefer the schema stored in the node config (set when
+										// the function was selected with the real API response).
+										// Fall back to the live cache in case the node was saved
+										// before this refactor.
+										const storedProps = (
+											nlsCfgForOutput.outputSchema as
+												| { properties?: OutputSchemaProperty[] }
+												| undefined
+										)?.properties;
+										const displayProps =
+											storedProps && storedProps.length > 0
+												? storedProps
+												: nlsOutputFieldsToSchema(
+														getNlsOutputFieldsFromCache(
+															nlsCfgForOutput.functionId,
+														) ?? [],
+														nlsCfgForOutput.functionId,
+													);
 										return (
 											<ul className="mt-2 space-y-0.5 list-disc list-inside">
-												{renderOutputProps(
-													getNlsOutputSchema(
-														(selectedNode.config as NLSNodeConfig).functionId,
-													),
-												)}
+												{renderOutputProps(displayProps)}
 											</ul>
 										);
 									})()}
