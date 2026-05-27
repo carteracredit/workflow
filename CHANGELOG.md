@@ -1,3 +1,10 @@
+# [1.3.0-rc.28](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.27...v1.3.0-rc.28) (2026-05-27)
+
+
+### Features
+
+* refactor NLS output handling and introduce caching mechanism ([0e1ce43](https://github.com/carteracredit/workflow/commit/0e1ce4371234ba209589f043080dfd37c23f792b))
+
 # [1.3.0-rc.27](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.26...v1.3.0-rc.27) (2026-05-27)
 
 
