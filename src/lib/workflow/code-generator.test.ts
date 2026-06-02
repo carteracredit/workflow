@@ -5457,6 +5457,69 @@ describe("ExternalLink node code generation", () => {
 		expect(result.code).toContain("let challengeExterno:");
 	});
 
+	it("should emit urlVarName in emailConfig when explicitly set", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "el2",
+				type: "ExternalLink",
+				title: "Link Custom URL",
+				config: {
+					mode: "form",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.clientEmail}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-url" },
+					emailConfig: {
+						templateName: "my-tpl",
+						subject: "Complete form",
+						mergeVars: [],
+						urlVarName: "LINK",
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "el2"), createEdge("el2", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('urlVarName: "LINK"');
+	});
+
+	it("should not emit urlVarName when it is undefined (defaults to URL server-side)", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "el3",
+				type: "ExternalLink",
+				title: "Link Default URL",
+				config: {
+					mode: "form",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.clientEmail}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-def" },
+					emailConfig: {
+						templateName: "my-tpl",
+						subject: "Complete form",
+						mergeVars: [],
+						// urlVarName deliberately omitted
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "el3"), createEdge("el3", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		// urlVarName not set → should not appear in generated code
+		expect(result.code).not.toContain("urlVarName");
+	});
+
 	it("should generate SMS-only ExternalLink without emailConfig", () => {
 		const nodes = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
