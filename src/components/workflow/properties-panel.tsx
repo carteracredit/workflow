@@ -5802,6 +5802,210 @@ export function PropertiesPanel({
 										</Select>
 									</div>
 
+									{/* Form-specific config — shown right after mode */}
+									{elConfig.mode === "form" && (
+										<div className="space-y-3">
+											<div className="space-y-2">
+												<Label htmlFor="el-form-select">
+													{t("propertiesPanel.elFormSelectLabel")}
+												</Label>
+												<Select
+													value={elConfig.formConfig?.formId ?? ""}
+													onValueChange={async (value) => {
+														const updates: Partial<ExternalLinkNodeConfig> = {
+															formConfig: {
+																...elConfig.formConfig,
+																formId: value,
+																formVersion: undefined,
+															},
+														};
+														try {
+															setElFormVersionsLoading(true);
+															const fullForm = await getFormAction(value);
+															setElSelectedFormFull(fullForm);
+															const latestVersion =
+																fullForm.versions.length > 0
+																	? fullForm.versions.reduce((a, b) =>
+																			a.version > b.version ? a : b,
+																		)
+																	: null;
+															if (latestVersion) {
+																updates.formConfig = {
+																	formId: value,
+																	...updates.formConfig,
+																	formVersion: latestVersion.version,
+																};
+															}
+														} catch {
+															setElSelectedFormFull(null);
+														} finally {
+															setElFormVersionsLoading(false);
+														}
+														updateElConfig(updates);
+													}}
+													disabled={elFormsLoading}
+												>
+													<SelectTrigger id="el-form-select">
+														<SelectValue
+															placeholder={
+																elFormsLoading
+																	? t(
+																			"propertiesPanel.elFormSelectLoadingPlaceholder",
+																		)
+																	: t("propertiesPanel.elFormSelectPlaceholder")
+															}
+														/>
+													</SelectTrigger>
+													<SelectContent>
+														{elAvailableForms.length === 0 &&
+														!elFormsLoading ? (
+															<SelectItem value="__empty__" disabled>
+																{t("propertiesPanel.elFormNoForms")}
+															</SelectItem>
+														) : (
+															elAvailableForms.map((form) => (
+																<SelectItem key={form.id} value={form.id}>
+																	{form.name}
+																</SelectItem>
+															))
+														)}
+													</SelectContent>
+												</Select>
+												{elAvailableForms.length === 0 && !elFormsLoading && (
+													<p className="text-xs text-muted-foreground">
+														{t("propertiesPanel.elFormNoFormsNote")}
+													</p>
+												)}
+											</div>
+											{!!elConfig.formConfig?.formId &&
+												(elSelectedFormFull?.versions?.length ?? 0) > 0 && (
+													<div className="space-y-2">
+														<Label htmlFor="el-form-version-select">
+															{t("propertiesPanel.elFormVersionLabel")}
+														</Label>
+														<Select
+															value={
+																elConfig.formConfig?.formVersion?.toString() ??
+																""
+															}
+															onValueChange={(val) => {
+																updateElConfig({
+																	formConfig: {
+																		formId: elConfig.formConfig?.formId ?? "",
+																		...elConfig.formConfig,
+																		formVersion: Number(val),
+																	},
+																});
+															}}
+															disabled={elFormVersionsLoading}
+														>
+															<SelectTrigger id="el-form-version-select">
+																<SelectValue
+																	placeholder={
+																		elFormVersionsLoading
+																			? t(
+																					"propertiesPanel.elFormVersionLoadingPlaceholder",
+																				)
+																			: t(
+																					"propertiesPanel.elFormVersionPlaceholder",
+																				)
+																	}
+																/>
+															</SelectTrigger>
+															<SelectContent>
+																{elSelectedFormFull?.versions
+																	.slice()
+																	.sort((a, b) => b.version - a.version)
+																	.map((v) => (
+																		<SelectItem
+																			key={v.version}
+																			value={v.version.toString()}
+																		>
+																			v{v.version}
+																			{v.version ===
+																				elSelectedFormFull.currentVersion &&
+																				` ${t("propertiesPanel.elFormVersionLatest")}`}
+																		</SelectItem>
+																	))}
+															</SelectContent>
+														</Select>
+													</div>
+												)}
+										</div>
+									)}
+
+									{/* Challenge-specific config — shown right after mode */}
+									{elConfig.mode === "challenge" && (
+										<div className="space-y-2">
+											<Label>
+												{t("propertiesPanel.elChallengeTimeoutLabel")}
+											</Label>
+											<div className="flex items-center gap-2">
+												<Input
+													type="number"
+													min={1}
+													className="w-20"
+													value={elConfig.challengeConfig?.timeout?.value ?? 5}
+													onChange={(e) =>
+														updateElConfig({
+															challengeConfig: {
+																challengeType: "acceptance",
+																...elConfig.challengeConfig,
+																timeout: {
+																	value: Number(e.target.value),
+																	unit:
+																		elConfig.challengeConfig?.timeout?.unit ??
+																		"minutes",
+																},
+															},
+														})
+													}
+												/>
+												<Select
+													value={
+														elConfig.challengeConfig?.timeout?.unit ?? "minutes"
+													}
+													onValueChange={(v) =>
+														updateElConfig({
+															challengeConfig: {
+																challengeType: "acceptance",
+																...elConfig.challengeConfig,
+																timeout: {
+																	value:
+																		elConfig.challengeConfig?.timeout?.value ??
+																		5,
+																	unit: v as
+																		| "seconds"
+																		| "minutes"
+																		| "hours"
+																		| "days",
+																},
+															},
+														})
+													}
+												>
+													<SelectTrigger className="w-28">
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="seconds">
+															{t("propertiesPanel.elChallengeTimeoutSeconds")}
+														</SelectItem>
+														<SelectItem value="minutes">
+															{t("propertiesPanel.elChallengeTimeoutMinutes")}
+														</SelectItem>
+														<SelectItem value="hours">
+															{t("propertiesPanel.elChallengeTimeoutHours")}
+														</SelectItem>
+														<SelectItem value="days">
+															{t("propertiesPanel.elChallengeTimeoutDays")}
+														</SelectItem>
+													</SelectContent>
+												</Select>
+											</div>
+										</div>
+									)}
+
 									{/* Channels */}
 									<div className="space-y-2">
 										<Label>{t("propertiesPanel.elChannelsLabel")}</Label>
@@ -5953,210 +6157,6 @@ export function PropertiesPanel({
 											</Select>
 										</div>
 									</div>
-
-									{/* Form-specific config */}
-									{elConfig.mode === "form" && (
-										<div className="space-y-3">
-											<div className="space-y-2">
-												<Label htmlFor="el-form-select">
-													{t("propertiesPanel.elFormSelectLabel")}
-												</Label>
-												<Select
-													value={elConfig.formConfig?.formId ?? ""}
-													onValueChange={async (value) => {
-														const updates: Partial<ExternalLinkNodeConfig> = {
-															formConfig: {
-																...elConfig.formConfig,
-																formId: value,
-																formVersion: undefined,
-															},
-														};
-														try {
-															setElFormVersionsLoading(true);
-															const fullForm = await getFormAction(value);
-															setElSelectedFormFull(fullForm);
-															const latestVersion =
-																fullForm.versions.length > 0
-																	? fullForm.versions.reduce((a, b) =>
-																			a.version > b.version ? a : b,
-																		)
-																	: null;
-															if (latestVersion) {
-																updates.formConfig = {
-																	formId: value,
-																	...updates.formConfig,
-																	formVersion: latestVersion.version,
-																};
-															}
-														} catch {
-															setElSelectedFormFull(null);
-														} finally {
-															setElFormVersionsLoading(false);
-														}
-														updateElConfig(updates);
-													}}
-													disabled={elFormsLoading}
-												>
-													<SelectTrigger id="el-form-select">
-														<SelectValue
-															placeholder={
-																elFormsLoading
-																	? t(
-																			"propertiesPanel.elFormSelectLoadingPlaceholder",
-																		)
-																	: t("propertiesPanel.elFormSelectPlaceholder")
-															}
-														/>
-													</SelectTrigger>
-													<SelectContent>
-														{elAvailableForms.length === 0 &&
-														!elFormsLoading ? (
-															<SelectItem value="__empty__" disabled>
-																{t("propertiesPanel.elFormNoForms")}
-															</SelectItem>
-														) : (
-															elAvailableForms.map((form) => (
-																<SelectItem key={form.id} value={form.id}>
-																	{form.name}
-																</SelectItem>
-															))
-														)}
-													</SelectContent>
-												</Select>
-												{elAvailableForms.length === 0 && !elFormsLoading && (
-													<p className="text-xs text-muted-foreground">
-														{t("propertiesPanel.elFormNoFormsNote")}
-													</p>
-												)}
-											</div>
-											{!!elConfig.formConfig?.formId &&
-												(elSelectedFormFull?.versions?.length ?? 0) > 0 && (
-													<div className="space-y-2">
-														<Label htmlFor="el-form-version-select">
-															{t("propertiesPanel.elFormVersionLabel")}
-														</Label>
-														<Select
-															value={
-																elConfig.formConfig?.formVersion?.toString() ??
-																""
-															}
-															onValueChange={(val) => {
-																updateElConfig({
-																	formConfig: {
-																		formId: elConfig.formConfig?.formId ?? "",
-																		...elConfig.formConfig,
-																		formVersion: Number(val),
-																	},
-																});
-															}}
-															disabled={elFormVersionsLoading}
-														>
-															<SelectTrigger id="el-form-version-select">
-																<SelectValue
-																	placeholder={
-																		elFormVersionsLoading
-																			? t(
-																					"propertiesPanel.elFormVersionLoadingPlaceholder",
-																				)
-																			: t(
-																					"propertiesPanel.elFormVersionPlaceholder",
-																				)
-																	}
-																/>
-															</SelectTrigger>
-															<SelectContent>
-																{elSelectedFormFull?.versions
-																	.slice()
-																	.sort((a, b) => b.version - a.version)
-																	.map((v) => (
-																		<SelectItem
-																			key={v.version}
-																			value={v.version.toString()}
-																		>
-																			v{v.version}
-																			{v.version ===
-																				elSelectedFormFull.currentVersion &&
-																				` ${t("propertiesPanel.elFormVersionLatest")}`}
-																		</SelectItem>
-																	))}
-															</SelectContent>
-														</Select>
-													</div>
-												)}
-										</div>
-									)}
-
-									{/* Challenge-specific config */}
-									{elConfig.mode === "challenge" && (
-										<div className="space-y-2">
-											<Label>
-												{t("propertiesPanel.elChallengeTimeoutLabel")}
-											</Label>
-											<div className="flex items-center gap-2">
-												<Input
-													type="number"
-													min={1}
-													className="w-20"
-													value={elConfig.challengeConfig?.timeout?.value ?? 5}
-													onChange={(e) =>
-														updateElConfig({
-															challengeConfig: {
-																challengeType: "acceptance",
-																...elConfig.challengeConfig,
-																timeout: {
-																	value: Number(e.target.value),
-																	unit:
-																		elConfig.challengeConfig?.timeout?.unit ??
-																		"minutes",
-																},
-															},
-														})
-													}
-												/>
-												<Select
-													value={
-														elConfig.challengeConfig?.timeout?.unit ?? "minutes"
-													}
-													onValueChange={(v) =>
-														updateElConfig({
-															challengeConfig: {
-																challengeType: "acceptance",
-																...elConfig.challengeConfig,
-																timeout: {
-																	value:
-																		elConfig.challengeConfig?.timeout?.value ??
-																		5,
-																	unit: v as
-																		| "seconds"
-																		| "minutes"
-																		| "hours"
-																		| "days",
-																},
-															},
-														})
-													}
-												>
-													<SelectTrigger className="w-28">
-														<SelectValue />
-													</SelectTrigger>
-													<SelectContent>
-														<SelectItem value="seconds">
-															{t("propertiesPanel.elChallengeTimeoutSeconds")}
-														</SelectItem>
-														<SelectItem value="minutes">
-															{t("propertiesPanel.elChallengeTimeoutMinutes")}
-														</SelectItem>
-														<SelectItem value="hours">
-															{t("propertiesPanel.elChallengeTimeoutHours")}
-														</SelectItem>
-														<SelectItem value="days">
-															{t("propertiesPanel.elChallengeTimeoutDays")}
-														</SelectItem>
-													</SelectContent>
-												</Select>
-											</div>
-										</div>
-									)}
 
 									{/* Email config */}
 									{(elConfig.channels ?? []).includes("email") && (
