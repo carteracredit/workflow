@@ -2247,6 +2247,11 @@ function generateExternalLinkStep(
 		if (config.emailConfig.subject) {
 			code += `${indent}\t\t\tsubject: ${emitInterpolatedString(config.emailConfig.subject)},\n`;
 		}
+		const urlVarName = (config.emailConfig as { urlVarName?: string })
+			.urlVarName;
+		if (urlVarName !== undefined) {
+			code += `${indent}\t\t\turlVarName: "${escapeString(urlVarName)}",\n`;
+		}
 		const mergeVars = config.emailConfig.mergeVars ?? [];
 		if (mergeVars.length > 0) {
 			code += `${indent}\t\t\tmergeVars: {\n`;

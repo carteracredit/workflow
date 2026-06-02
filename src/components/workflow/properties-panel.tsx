@@ -6187,6 +6187,35 @@ export function PropertiesPanel({
 												/>
 											</div>
 											<div className="space-y-1">
+												<FieldLabel
+													description={t(
+														"propertiesPanel.elEmailUrlVarNameDesc",
+													)}
+												>
+													{t("propertiesPanel.elEmailUrlVarNameLabel")}
+												</FieldLabel>
+												<Input
+													value={elConfig.emailConfig?.urlVarName ?? "URL"}
+													onChange={(e) =>
+														updateElConfig({
+															emailConfig: {
+																...elConfig.emailConfig,
+																templateName:
+																	elConfig.emailConfig?.templateName ?? "",
+																subject: elConfig.emailConfig?.subject ?? "",
+																mergeVars:
+																	elConfig.emailConfig?.mergeVars ?? [],
+																urlVarName: e.target.value,
+															},
+														})
+													}
+													placeholder={t(
+														"propertiesPanel.elEmailUrlVarNamePlaceholder",
+													)}
+													className="font-mono uppercase"
+												/>
+											</div>
+											<div className="space-y-1">
 												<Label className="text-xs text-muted-foreground">
 													{t("propertiesPanel.elEmailSubjectLabel")}
 												</Label>

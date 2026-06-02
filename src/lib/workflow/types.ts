@@ -362,6 +362,12 @@ export interface ExternalLinkEmailConfig {
 	templateName: string;
 	subject: string;
 	mergeVars: MessageMergeVar[];
+	/**
+	 * Name of the Mandrill merge variable that will receive the generated
+	 * access link (e.g. *|URL|* in the template). Defaults to "URL".
+	 * Set to an empty string to skip automatic URL injection entirely.
+	 */
+	urlVarName?: string;
 }
 
 export interface ExternalLinkSmsConfig {

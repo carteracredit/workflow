@@ -735,6 +735,10 @@ export const translations = {
 			elEmailSectionLabel: "Email",
 			elEmailTemplateNameLabel: "Template name (Mandrill)",
 			elEmailTemplateNamePlaceholder: "cartera-external-link",
+			elEmailUrlVarNameLabel: "Link variable name",
+			elEmailUrlVarNameDesc:
+				"The merge variable in your Mandrill template that will receive the generated access link. Use *|KEY|* in your template. Leave blank to skip URL injection.",
+			elEmailUrlVarNamePlaceholder: "URL",
 			elEmailSubjectLabel: "Subject",
 			elEmailSubjectPlaceholder: "Action required: ...",
 			elEmailMergeVarsLabel: "Template variables",
@@ -1792,6 +1796,10 @@ export const translations = {
 			elEmailSectionLabel: "Email",
 			elEmailTemplateNameLabel: "Nombre del template (Mandrill)",
 			elEmailTemplateNamePlaceholder: "cartera-external-link",
+			elEmailUrlVarNameLabel: "Nombre de variable del link",
+			elEmailUrlVarNameDesc:
+				"La variable de merge en tu template de Mandrill que recibirá el link de acceso generado. Usa *|CLAVE|* en tu template. Deja vacío para no inyectar la URL.",
+			elEmailUrlVarNamePlaceholder: "URL",
 			elEmailSubjectLabel: "Asunto",
 			elEmailSubjectPlaceholder: "Acción requerida: ...",
 			elEmailMergeVarsLabel: "Variables del template",
