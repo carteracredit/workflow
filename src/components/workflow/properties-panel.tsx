@@ -6212,11 +6212,15 @@ export function PropertiesPanel({
 													)}
 												/>
 											</div>
-											<div className="space-y-1">
+											<div className="space-y-2">
 												<div className="flex items-center justify-between">
-													<Label className="text-xs text-muted-foreground">
+													<FieldLabel
+														description={t(
+															"propertiesPanel.elEmailMergeVarsDesc",
+														)}
+													>
 														{t("propertiesPanel.elEmailMergeVarsLabel")}
-													</Label>
+													</FieldLabel>
 													<Button
 														type="button"
 														variant="outline"
