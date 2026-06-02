@@ -2150,6 +2150,177 @@ function findConvergenceNode(
 }
 
 /**
+ * Generate code for an ExternalLink node.
+ * 1. step.do to dispatch the external link (calls CASES_SVC.dispatchExternalLink)
+ * 2. progress waiting_event
+ * 3. step.waitForEvent for the external user response
+ * 4. Persist output in case object
+ * 5. If challenge mode → branching with accepted/rejected
+ */
+function generateExternalLinkStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	const config = node.config as {
+		mode?: string;
+		linkTtl?: { value?: number; unit?: string };
+		recipient?: {
+			emailExpression?: string;
+			phoneExpression?: string;
+			nameExpression?: string;
+		};
+		channels?: string[];
+		formConfig?: { formId?: string; formVersion?: number };
+		challengeConfig?: { timeout?: { value?: number; unit?: string } };
+		emailConfig?: {
+			templateName?: string;
+			subject?: string;
+			mergeVars?: { key: string; value: string }[];
+		};
+		smsConfig?: { body?: string };
+	};
+	const mode = config.mode ?? "form";
+	const ttlValue = config.linkTtl?.value ?? 72;
+	const ttlUnit = config.linkTtl?.unit ?? "hours";
+	const ttlHours = ttlUnit === "days" ? ttlValue * 24 : ttlValue;
+	const graceHours = 1;
+	const waitTimeout = `${ttlHours + graceHours} hours`;
+
+	const eventType =
+		mode === "challenge"
+			? `external-acceptance-${stepName}`
+			: `external-form-${stepName}`;
+
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	const isChallenge = mode === "challenge";
+	const outputVar = getVarName(node.id);
+	const rawVar = isChallenge ? `_${outputVar}Evt` : outputVar;
+	const captureResult = nodeHasOutputSchema(node) || isChallenge;
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = captureResult
+		? isHoisted || isChallenge
+			? `${rawVar} = `
+			: `const ${rawVar} = `
+		: "";
+
+	let code = `${indent}// ExternalLink: ${node.title} (mode: ${mode})\n`;
+
+	// Step 1: dispatch the external link
+	code += `${indent}await step.do("dispatch-${stepName}", async () => {\n`;
+	const emailExpr = config.recipient?.emailExpression ?? "";
+	const phoneExpr = config.recipient?.phoneExpression ?? "";
+	const nameExpr = config.recipient?.nameExpression ?? "";
+	const channels = config.channels ?? ["email"];
+	const channelsLit = `[${channels.map((c) => `"${escapeString(c)}"`).join(", ")}]`;
+
+	code += `${indent}\tconst recipientEmail = ${emailExpr ? emitInterpolatedString(emailExpr) : "undefined"};\n`;
+	code += `${indent}\tconst recipientPhone = ${phoneExpr ? emitInterpolatedString(phoneExpr) : "undefined"};\n`;
+	code += `${indent}\tconst recipientName = ${nameExpr ? emitInterpolatedString(nameExpr) : "undefined"};\n`;
+	code += `${indent}\tawait this.env.CASES_SVC.dispatchExternalLink({\n`;
+	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
+	code += `${indent}\t\tinstanceId: event.instanceId,\n`;
+	code += `${indent}\t\tnodeId: "${escapeString(node.id)}",\n`;
+	code += `${indent}\t\tstepName: "${escapeString(stepName)}",\n`;
+	code += `${indent}\t\tmode: "${mode}",\n`;
+	code += `${indent}\t\teventType: "${escapeString(eventType)}",\n`;
+	code += `${indent}\t\trecipient: { email: recipientEmail, phone: recipientPhone, name: recipientName },\n`;
+	code += `${indent}\t\tchannels: ${channelsLit},\n`;
+	code += `${indent}\t\tttlSeconds: ${ttlHours * 3600},\n`;
+
+	if (mode === "form" && config.formConfig?.formId) {
+		code += `${indent}\t\tformId: "${escapeString(config.formConfig.formId)}",\n`;
+		if (config.formConfig.formVersion !== undefined) {
+			code += `${indent}\t\tformVersion: ${config.formConfig.formVersion},\n`;
+		}
+	}
+	if (mode === "challenge" && config.challengeConfig) {
+		code += `${indent}\t\tchallengeConfig: ${JSON.stringify({ challengeType: "acceptance", timeout: config.challengeConfig.timeout })},\n`;
+	}
+	if (config.emailConfig?.templateName) {
+		code += `${indent}\t\temailConfig: {\n`;
+		code += `${indent}\t\t\ttemplateName: "${escapeString(config.emailConfig.templateName)}",\n`;
+		if (config.emailConfig.subject) {
+			code += `${indent}\t\t\tsubject: ${emitInterpolatedString(config.emailConfig.subject)},\n`;
+		}
+		const mergeVars = config.emailConfig.mergeVars ?? [];
+		if (mergeVars.length > 0) {
+			code += `${indent}\t\t\tmergeVars: {\n`;
+			for (const mv of mergeVars) {
+				if (!mv.key) continue;
+				const key = escapeString(mv.key.toUpperCase());
+				const value = mv.value.trim();
+				let valueCode: string;
+				if (!value) {
+					valueCode = '""';
+				} else if (value.includes("${")) {
+					valueCode = emitInterpolatedString(value);
+				} else {
+					valueCode = `"${escapeString(value)}"`;
+				}
+				code += `${indent}\t\t\t\t${key}: ${valueCode},\n`;
+			}
+			code += `${indent}\t\t\t},\n`;
+		}
+		code += `${indent}\t\t},\n`;
+	}
+	if (config.smsConfig?.body) {
+		code += `${indent}\t\tsmsBody: ${emitInterpolatedString(config.smsConfig.body)},\n`;
+	}
+	code += `${indent}\t});\n`;
+	code += `${indent}});\n`;
+
+	// Step 2: progress waiting_event
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		eventType,
+		retryVarName,
+	);
+
+	// Step 3: waitForEvent
+	if (isChallenge) {
+		code += `${indent}${varDecl}await step.waitForEvent<{ accepted: boolean }>(\n`;
+	} else {
+		code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
+	}
+	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "${waitTimeout}" },\n`;
+	if (isChallenge) {
+		code += `${indent});\n`;
+	} else {
+		code += `${indent})).payload as Record<string, unknown>;\n`;
+	}
+
+	// Step 4: case object + progress
+	code += generateCaseObjectCall(
+		node,
+		indent,
+		captureResult ? rawVar : undefined,
+		retryVarName,
+	);
+
+	if (isChallenge) {
+		code += emitChallengeOutputAssignment(indent, rawVar, outputVar);
+	}
+
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
  * Internal traversal context to share state between recursive calls
  */
 interface TraversalContext {
@@ -2202,6 +2373,8 @@ function generateNodeCode(
 			return "";
 		case "NLS":
 			return generateNLSStep(node, indent, retryVar);
+		case "ExternalLink":
+			return generateExternalLinkStep(node, indent, retryVar);
 		case "FlagChange":
 			return generateFlagChangeStep(node, indent, retryVar);
 		case "Join":
@@ -2466,6 +2639,59 @@ function traverseBranch(
 				break;
 			}
 		}
+		// Handle ExternalLink nodes in challenge mode (branching)
+		else if (
+			node.type === "ExternalLink" &&
+			(node.config as { mode?: string }).mode === "challenge" &&
+			forwardOutgoing.length === 2
+		) {
+			const outputVar = getVarName(node.id);
+			const topEdge = forwardOutgoing.find(
+				(e: WorkflowEdge) => e.fromPort === "top",
+			);
+			const bottomEdge = forwardOutgoing.find(
+				(e: WorkflowEdge) => e.fromPort === "bottom",
+			);
+
+			const convergenceNodeId =
+				topEdge && bottomEdge
+					? findConvergenceNode(
+							topEdge.to,
+							bottomEdge.to,
+							ctx.outgoingMap,
+							ctx.retryZones,
+						)
+					: null;
+
+			const innerStop = convergenceNodeId ?? stopAtNodeId;
+
+			code += generateNodeCode(node, indent, ctx);
+			code += "\n";
+
+			code += `${indent}if (${outputVar}.accepted) {\n`;
+
+			if (topEdge && !ctx.visited.has(topEdge.to)) {
+				code += trimTrailingBlankLines(
+					traverseBranch(topEdge.to, indent + "\t", ctx, innerStop),
+				);
+			}
+
+			code += `${indent}} else {\n`;
+
+			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
+				code += trimTrailingBlankLines(
+					traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop),
+				);
+			}
+
+			code += `${indent}}\n\n`;
+
+			if (convergenceNodeId) {
+				currentNodeId = convergenceNodeId;
+			} else {
+				break;
+			}
+		}
 		// Linear flow
 		else {
 			code += generateNodeCode(node, indent, ctx);
@@ -2550,7 +2776,12 @@ function computeBranchScopedNodeIds(
 	const branchScoped = new Set<string>();
 
 	for (const node of nodes) {
-		if (node.type !== "Decision" && node.type !== "Challenge") continue;
+		const isBranchNode =
+			node.type === "Decision" ||
+			node.type === "Challenge" ||
+			(node.type === "ExternalLink" &&
+				(node.config as { mode?: string }).mode === "challenge");
+		if (!isBranchNode) continue;
 
 		const outgoing = outgoingMap.get(node.id) ?? [];
 		const topEdge = outgoing.find((e) => e.fromPort === "top");
@@ -2867,6 +3098,21 @@ export function generateWorkflowCode(
 	// generated if/else branch (varName.payload.accepted).
 	// Other output nodes (API, Form, Transform, Checkpoint) use inline const
 	// assignment inside their step.do() callback, so no hoisted let is needed.
+	const externalLinkChallengeNodes = nodes.filter(
+		(n) =>
+			n.type === "ExternalLink" &&
+			(n.config as { mode?: string }).mode === "challenge",
+	);
+	if (externalLinkChallengeNodes.length > 0) {
+		for (const node of externalLinkChallengeNodes) {
+			const outputVar = getVarName(node.id);
+			const rawVar = `_${outputVar}Evt`;
+			code += `\t\tlet ${rawVar}: unknown = null;\n`;
+			code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
+		}
+		code += `\n`;
+	}
+
 	const challengeNodes = nodes.filter((n) => n.type === "Challenge");
 	if (challengeNodes.length > 0) {
 		for (const node of challengeNodes) {

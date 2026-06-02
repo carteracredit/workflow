@@ -11,6 +11,7 @@ import type {
 	ChallengeType,
 	PromotionNodeConfig,
 	NLSNodeConfig,
+	ExternalLinkNodeConfig,
 } from "@/lib/workflow/types";
 import {
 	Play,
@@ -30,6 +31,7 @@ import {
 	Shield,
 	BadgePercent,
 	Banknote,
+	ExternalLink as ExternalLinkIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
@@ -73,6 +75,7 @@ const NODE_ICONS = {
 	Join: Merge,
 	FlagChange: Tag,
 	NLS: Banknote,
+	ExternalLink: ExternalLinkIcon,
 };
 
 export const NODE_BG_COLORS = {
@@ -90,6 +93,7 @@ export const NODE_BG_COLORS = {
 	Join: "var(--node-bg-join)",
 	FlagChange: "var(--node-bg-status)",
 	NLS: "var(--node-bg-nls)",
+	ExternalLink: "var(--node-bg-external-link)",
 };
 
 export const NODE_ICON_COLORS = {
@@ -107,6 +111,7 @@ export const NODE_ICON_COLORS = {
 	Join: "var(--node-icon-join)",
 	FlagChange: "var(--node-icon-status)",
 	NLS: "var(--node-icon-nls)",
+	ExternalLink: "var(--node-icon-external-link)",
 };
 
 export function NodeRenderer({
@@ -196,7 +201,11 @@ export function NodeRenderer({
 
 	const hasDecisionOutputs = node.type === "Decision";
 	const hasChallengeOutputs = isChallengeNode;
-	const hasTwoOutputs = hasDecisionOutputs || hasChallengeOutputs;
+	const isExternalLinkChallengeMode =
+		node.type === "ExternalLink" &&
+		(node.config as { mode?: string }).mode === "challenge";
+	const hasTwoOutputs =
+		hasDecisionOutputs || hasChallengeOutputs || isExternalLinkChallengeMode;
 	// Un nodo Reject es terminal solo si allowRetry es false o no está configurado
 	const isRejectWithRetry =
 		node.type === "Reject" && (node.config.allowRetry as boolean) === true;

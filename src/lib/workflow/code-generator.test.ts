@@ -5366,3 +5366,128 @@ describe("prequalification variable token rewriting", () => {
 		expect(result.code).toContain("event.payload.clientAddress.city");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// ExternalLink node code generation
+// ---------------------------------------------------------------------------
+
+describe("ExternalLink node code generation", () => {
+	it("should generate dispatchExternalLink call in form mode", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "el1",
+				type: "ExternalLink",
+				title: "Link Externo",
+				config: {
+					mode: "form",
+					linkTtl: { value: 48, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.clientEmail}",
+						nameExpression: "${start.clientName}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-abc", formVersion: 2 },
+					emailConfig: {
+						templateName: "my-form-template",
+						subject: "Please fill: ${start.clientName}",
+						mergeVars: [
+							{ key: "NOMBRE", value: "${start.clientName}" },
+							{ key: "STATIC", value: "hello" },
+						],
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "el1"), createEdge("el1", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("dispatchExternalLink");
+		expect(result.code).toContain('mode: "form"');
+		expect(result.code).toContain('formId: "form-abc"');
+		expect(result.code).toContain("formVersion: 2");
+		expect(result.code).toContain('templateName: "my-form-template"');
+		expect(result.code).toContain("NOMBRE:");
+		expect(result.code).toContain("STATIC:");
+		expect(result.code).toContain("external-form-link-externo");
+		expect(result.code).toContain("ttlSeconds: 172800");
+	});
+
+	it("should generate challenge mode with waitForEvent and result branching", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "elc",
+				type: "ExternalLink",
+				title: "Challenge Externo",
+				config: {
+					mode: "challenge",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.email}",
+						phoneExpression: "${start.phone}",
+					},
+					channels: ["email", "sms"],
+					challengeConfig: {
+						challengeType: "acceptance",
+						timeout: { value: 30, unit: "minutes" },
+					},
+					emailConfig: { templateName: "challenge-tpl", subject: "Approve" },
+					smsConfig: { body: "Click: {{URL}}" },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({ id: "rej", type: "Reject", title: "Rechazado" }),
+		];
+		const edges = [
+			createEdge("start", "elc"),
+			createEdge("elc", "end", { label: "accepted", fromPort: "top" }),
+			createEdge("elc", "rej", { label: "rejected", fromPort: "bottom" }),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('mode: "challenge"');
+		expect(result.code).toContain("external-acceptance-challenge-externo");
+		expect(result.code).toContain("waitForEvent");
+		expect(result.code).toContain("challengeConfig:");
+		expect(result.code).toContain('templateName: "challenge-tpl"');
+		expect(result.code).toContain("smsBody:");
+		expect(result.code).toContain("let _challengeExternoEvt");
+		expect(result.code).toContain("let challengeExterno:");
+	});
+
+	it("should generate SMS-only ExternalLink without emailConfig", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "smsonly",
+				type: "ExternalLink",
+				title: "SMS Only",
+				config: {
+					mode: "form",
+					linkTtl: { value: 2, unit: "days" },
+					recipient: {
+						source: "variable",
+						phoneExpression: "${start.phone}",
+					},
+					channels: ["sms"],
+					formConfig: { formId: "form-x" },
+					smsConfig: { body: "Hola, tu link: {{URL}}" },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [
+			createEdge("start", "smsonly"),
+			createEdge("smsonly", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("dispatchExternalLink");
+		expect(result.code).toContain('channels: ["sms"]');
+		expect(result.code).toContain("smsBody:");
+		expect(result.code).not.toContain("templateName:");
+		// TTL: 2 days = 48 hours = 172800 seconds
+		expect(result.code).toContain("ttlSeconds: 172800");
+	});
+});

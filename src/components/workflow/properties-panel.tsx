@@ -29,6 +29,9 @@ import type {
 	MessageMergeVar,
 	MessageChannel,
 	OutputSchema,
+	ExternalLinkNodeConfig,
+	ExternalLinkMode,
+	ExternalLinkChannel,
 } from "@/lib/workflow/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -5707,6 +5710,486 @@ export function PropertiesPanel({
 							})()}
 						</div>
 					)}
+
+					{/* ── ExternalLink Node ─────────────────────────────────── */}
+					{selectedNode.type === "ExternalLink" &&
+						(() => {
+							const elConfig = (selectedNode.config ??
+								{}) as ExternalLinkNodeConfig;
+							const updateElConfig = (
+								patch: Partial<ExternalLinkNodeConfig>,
+							) => {
+								onUpdateNode(selectedNode.id, {
+									config: { ...selectedNode.config, ...patch },
+								});
+							};
+							return (
+								<div className="space-y-4">
+									{/* Mode selector */}
+									<div className="space-y-2">
+										<Label>Mode</Label>
+										<Select
+											value={elConfig.mode ?? "form"}
+											onValueChange={(v) =>
+												updateElConfig({ mode: v as ExternalLinkMode })
+											}
+										>
+											<SelectTrigger>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="form">Form</SelectItem>
+												<SelectItem value="challenge">
+													Challenge (acceptance)
+												</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+
+									{/* Channels */}
+									<div className="space-y-2">
+										<Label>Channels</Label>
+										<div className="flex gap-4">
+											{(["email", "sms"] as ExternalLinkChannel[]).map((ch) => (
+												<label
+													key={ch}
+													className="flex items-center gap-2 text-sm"
+												>
+													<Checkbox
+														checked={(elConfig.channels ?? []).includes(ch)}
+														onCheckedChange={(checked) => {
+															const channels = [...(elConfig.channels ?? [])];
+															if (checked) {
+																if (!channels.includes(ch)) channels.push(ch);
+															} else {
+																const idx = channels.indexOf(ch);
+																if (idx >= 0) channels.splice(idx, 1);
+															}
+															updateElConfig({ channels });
+														}}
+													/>
+													{ch.toUpperCase()}
+												</label>
+											))}
+										</div>
+									</div>
+
+									{/* Recipient */}
+									<div className="space-y-2">
+										<Label>Recipient</Label>
+										{(elConfig.channels ?? []).includes("email") && (
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													Email expression
+												</Label>
+												<Input
+													value={elConfig.recipient?.emailExpression ?? ""}
+													onChange={(e) =>
+														updateElConfig({
+															recipient: {
+																...elConfig.recipient,
+																source: "variable",
+																emailExpression: e.target.value,
+															},
+														})
+													}
+													placeholder="${nodeAlias.email}"
+												/>
+											</div>
+										)}
+										{(elConfig.channels ?? []).includes("sms") && (
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													Phone expression
+												</Label>
+												<Input
+													value={elConfig.recipient?.phoneExpression ?? ""}
+													onChange={(e) =>
+														updateElConfig({
+															recipient: {
+																...elConfig.recipient,
+																source: "variable",
+																phoneExpression: e.target.value,
+															},
+														})
+													}
+													placeholder="${nodeAlias.phone}"
+												/>
+											</div>
+										)}
+										<div className="space-y-1">
+											<Label className="text-xs text-muted-foreground">
+												Name expression
+											</Label>
+											<Input
+												value={elConfig.recipient?.nameExpression ?? ""}
+												onChange={(e) =>
+													updateElConfig({
+														recipient: {
+															...elConfig.recipient,
+															source: "variable",
+															nameExpression: e.target.value,
+														},
+													})
+												}
+												placeholder="${nodeAlias.name}"
+											/>
+										</div>
+									</div>
+
+									{/* Link TTL */}
+									<div className="space-y-2">
+										<Label>Link TTL</Label>
+										<div className="flex items-center gap-2">
+											<Input
+												type="number"
+												min={1}
+												className="w-20"
+												value={elConfig.linkTtl?.value ?? 72}
+												onChange={(e) =>
+													updateElConfig({
+														linkTtl: {
+															...elConfig.linkTtl,
+															value: Number(e.target.value),
+															unit: elConfig.linkTtl?.unit ?? "hours",
+														},
+													})
+												}
+											/>
+											<Select
+												value={elConfig.linkTtl?.unit ?? "hours"}
+												onValueChange={(v) =>
+													updateElConfig({
+														linkTtl: {
+															...elConfig.linkTtl,
+															value: elConfig.linkTtl?.value ?? 72,
+															unit: v as "hours" | "days",
+														},
+													})
+												}
+											>
+												<SelectTrigger className="w-24">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="hours">Hours</SelectItem>
+													<SelectItem value="days">Days</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+									</div>
+
+									{/* Form-specific config */}
+									{elConfig.mode === "form" && (
+										<div className="space-y-2">
+											<Label>Form ID</Label>
+											<Input
+												value={elConfig.formConfig?.formId ?? ""}
+												onChange={(e) =>
+													updateElConfig({
+														formConfig: {
+															...elConfig.formConfig,
+															formId: e.target.value,
+														},
+													})
+												}
+												placeholder="Form UUID"
+											/>
+										</div>
+									)}
+
+									{/* Challenge-specific config */}
+									{elConfig.mode === "challenge" && (
+										<div className="space-y-2">
+											<Label>Challenge timeout</Label>
+											<div className="flex items-center gap-2">
+												<Input
+													type="number"
+													min={1}
+													className="w-20"
+													value={elConfig.challengeConfig?.timeout?.value ?? 5}
+													onChange={(e) =>
+														updateElConfig({
+															challengeConfig: {
+																challengeType: "acceptance",
+																...elConfig.challengeConfig,
+																timeout: {
+																	value: Number(e.target.value),
+																	unit:
+																		elConfig.challengeConfig?.timeout?.unit ??
+																		"minutes",
+																},
+															},
+														})
+													}
+												/>
+												<Select
+													value={
+														elConfig.challengeConfig?.timeout?.unit ?? "minutes"
+													}
+													onValueChange={(v) =>
+														updateElConfig({
+															challengeConfig: {
+																challengeType: "acceptance",
+																...elConfig.challengeConfig,
+																timeout: {
+																	value:
+																		elConfig.challengeConfig?.timeout?.value ??
+																		5,
+																	unit: v as
+																		| "seconds"
+																		| "minutes"
+																		| "hours"
+																		| "days",
+																},
+															},
+														})
+													}
+												>
+													<SelectTrigger className="w-28">
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="seconds">Seconds</SelectItem>
+														<SelectItem value="minutes">Minutes</SelectItem>
+														<SelectItem value="hours">Hours</SelectItem>
+														<SelectItem value="days">Days</SelectItem>
+													</SelectContent>
+												</Select>
+											</div>
+										</div>
+									)}
+
+									{/* Email config */}
+									{(elConfig.channels ?? []).includes("email") && (
+										<div className="space-y-2">
+											<Label className="font-medium">Email</Label>
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													Template name (Mandrill)
+												</Label>
+												<Input
+													value={elConfig.emailConfig?.templateName ?? ""}
+													onChange={(e) =>
+														updateElConfig({
+															emailConfig: {
+																...elConfig.emailConfig,
+																templateName: e.target.value,
+																subject: elConfig.emailConfig?.subject ?? "",
+																mergeVars:
+																	elConfig.emailConfig?.mergeVars ?? [],
+															},
+														})
+													}
+													placeholder="cartera-external-link"
+												/>
+											</div>
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													Subject
+												</Label>
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(
+														elConfig.emailConfig?.subject,
+													)}
+													onChange={(segs) =>
+														updateElConfig({
+															emailConfig: {
+																...elConfig.emailConfig,
+																templateName:
+																	elConfig.emailConfig?.templateName ?? "",
+																subject: segmentsToTemplateString(segs),
+																mergeVars:
+																	elConfig.emailConfig?.mergeVars ?? [],
+															},
+														})
+													}
+													placeholder="Action required: ..."
+												/>
+											</div>
+											<div className="space-y-1">
+												<div className="flex items-center justify-between">
+													<Label className="text-xs text-muted-foreground">
+														Merge variables
+													</Label>
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="h-7 px-2 text-xs"
+														onClick={() => {
+															const vars = [
+																...(elConfig.emailConfig?.mergeVars ?? []),
+																{ key: "", value: "" },
+															];
+															updateElConfig({
+																emailConfig: {
+																	...elConfig.emailConfig,
+																	templateName:
+																		elConfig.emailConfig?.templateName ?? "",
+																	subject: elConfig.emailConfig?.subject ?? "",
+																	mergeVars: vars,
+																},
+															});
+														}}
+													>
+														+ Add
+													</Button>
+												</div>
+												{(elConfig.emailConfig?.mergeVars ?? []).length ===
+													0 && (
+													<p className="text-xs text-muted-foreground italic">
+														No merge variables defined.
+													</p>
+												)}
+												<div className="space-y-2">
+													{(elConfig.emailConfig?.mergeVars ?? []).map(
+														(mv, index) => (
+															<div
+																key={index}
+																className="rounded-md border border-border/60 p-2 space-y-1.5 bg-muted/20"
+															>
+																<div className="flex items-center gap-1.5">
+																	<Input
+																		value={mv.key}
+																		onChange={(e) => {
+																			const vars = [
+																				...(elConfig.emailConfig?.mergeVars ??
+																					[]),
+																			];
+																			vars[index] = {
+																				...vars[index],
+																				key: e.target.value,
+																			};
+																			updateElConfig({
+																				emailConfig: {
+																					...elConfig.emailConfig,
+																					templateName:
+																						elConfig.emailConfig
+																							?.templateName ?? "",
+																					subject:
+																						elConfig.emailConfig?.subject ?? "",
+																					mergeVars: vars,
+																				},
+																			});
+																		}}
+																		placeholder="KEY"
+																		className="h-7 flex-1 font-mono text-xs uppercase"
+																	/>
+																	<Button
+																		type="button"
+																		variant="ghost"
+																		size="icon"
+																		className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
+																		onClick={() => {
+																			const vars = [
+																				...(elConfig.emailConfig?.mergeVars ??
+																					[]),
+																			];
+																			vars.splice(index, 1);
+																			updateElConfig({
+																				emailConfig: {
+																					...elConfig.emailConfig,
+																					templateName:
+																						elConfig.emailConfig
+																							?.templateName ?? "",
+																					subject:
+																						elConfig.emailConfig?.subject ?? "",
+																					mergeVars: vars,
+																				},
+																			});
+																		}}
+																		aria-label="Remove variable"
+																	>
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			className="h-3.5 w-3.5"
+																			viewBox="0 0 24 24"
+																			fill="none"
+																			stroke="currentColor"
+																			strokeWidth="2"
+																			strokeLinecap="round"
+																			strokeLinejoin="round"
+																		>
+																			<path d="M18 6 6 18" />
+																			<path d="m6 6 12 12" />
+																		</svg>
+																	</Button>
+																</div>
+																<div className="flex items-start gap-1.5">
+																	<span className="text-muted-foreground text-xs pt-2 shrink-0">
+																		=
+																	</span>
+																	<div className="flex-1 min-w-0">
+																		<VariableTemplateInput
+																			nodes={upstreamVariableNodes}
+																			value={parseTemplateStringToSegments(
+																				mv.value,
+																			)}
+																			onChange={(segs) => {
+																				const vars = [
+																					...(elConfig.emailConfig?.mergeVars ??
+																						[]),
+																				];
+																				vars[index] = {
+																					...vars[index],
+																					value: segmentsToTemplateString(segs),
+																				};
+																				updateElConfig({
+																					emailConfig: {
+																						...elConfig.emailConfig,
+																						templateName:
+																							elConfig.emailConfig
+																								?.templateName ?? "",
+																						subject:
+																							elConfig.emailConfig?.subject ??
+																							"",
+																						mergeVars: vars,
+																					},
+																				});
+																			}}
+																			placeholder="value or variable..."
+																			className="text-xs"
+																		/>
+																	</div>
+																</div>
+															</div>
+														),
+													)}
+												</div>
+											</div>
+										</div>
+									)}
+
+									{/* SMS config */}
+									{(elConfig.channels ?? []).includes("sms") && (
+										<div className="space-y-2">
+											<Label className="font-medium">SMS</Label>
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													Body
+												</Label>
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(
+														elConfig.smsConfig?.body,
+													)}
+													onChange={(segs) =>
+														updateElConfig({
+															smsConfig: {
+																body: segmentsToTemplateString(segs),
+															},
+														})
+													}
+													placeholder="Complete your pending action: (link is appended automatically)"
+												/>
+											</div>
+										</div>
+									)}
+								</div>
+							);
+						})()}
 
 					{selectedNode.type === "Reject" &&
 						(() => {

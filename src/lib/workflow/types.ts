@@ -10,9 +10,10 @@ export type NodeType =
 	| "Challenge"
 	| "Promotion"
 	| "Checkpoint"
-	| "Join" // Added Join node type for merging multiple flows
-	| "FlagChange" // Nodo para cambiar flags del workflow
-	| "NLS"; // NLS integration node (createLoan, cancelLoan, getAmortization)
+	| "Join"
+	| "FlagChange"
+	| "NLS"
+	| "ExternalLink";
 
 export type CheckpointType = "normal" | "safe";
 
@@ -282,6 +283,7 @@ export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"Challenge",
 	"Promotion",
 	"NLS",
+	"ExternalLink",
 ];
 
 export interface StaleTimeoutConfig {
@@ -337,6 +339,70 @@ export function isMessageNode(
 	node: WorkflowNode,
 ): node is WorkflowNode & { type: "Message"; config: MessageNodeConfig } {
 	return node.type === "Message";
+}
+
+// ─── ExternalLink Node Config ────────────────────────────────────────────────
+
+export type ExternalLinkMode = "form" | "challenge";
+export type ExternalLinkChannel = "email" | "sms";
+
+export interface ExternalRecipientConfig {
+	source: "variable" | "literal";
+	emailExpression?: string;
+	phoneExpression?: string;
+	nameExpression?: string;
+}
+
+export interface ExternalLinkTtlConfig {
+	value: number;
+	unit: "hours" | "days";
+}
+
+export interface ExternalLinkEmailConfig {
+	templateName: string;
+	subject: string;
+	mergeVars: MessageMergeVar[];
+}
+
+export interface ExternalLinkSmsConfig {
+	body: string;
+}
+
+export interface ExternalLinkNodeConfig extends Record<string, unknown> {
+	mode: ExternalLinkMode;
+	linkTtl: ExternalLinkTtlConfig;
+	recipient: ExternalRecipientConfig;
+	channels: ExternalLinkChannel[];
+	emailConfig?: ExternalLinkEmailConfig;
+	smsConfig?: ExternalLinkSmsConfig;
+	formConfig?: {
+		formId: string;
+		formVersion?: number;
+		outputSchema?: OutputSchema;
+	};
+	challengeConfig?: {
+		challengeType: "acceptance";
+		labels?: ChallengeLabels;
+		timeout: ChallengeTimeoutConfig;
+	};
+}
+
+export function isExternalLinkNode(node: WorkflowNode): node is WorkflowNode & {
+	type: "ExternalLink";
+	config: ExternalLinkNodeConfig;
+} {
+	return node.type === "ExternalLink";
+}
+
+export function createDefaultExternalLinkConfig(): ExternalLinkNodeConfig {
+	return {
+		mode: "form",
+		linkTtl: { value: 72, unit: "hours" },
+		recipient: { source: "variable" },
+		channels: ["email"],
+		emailConfig: { templateName: "", subject: "", mergeVars: [] },
+		formConfig: { formId: "" },
+	};
 }
 
 export interface WorkflowEdge {
