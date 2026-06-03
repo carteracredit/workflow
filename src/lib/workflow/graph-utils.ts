@@ -334,6 +334,14 @@ export function buildVariableSourceNodes(
 				),
 				customProps,
 			);
+		} else if (
+			node.type === "ExternalLink" &&
+			(node.config as { mode?: string }).mode === "challenge"
+		) {
+			properties = mergePropertiesByName(
+				cloneChallengeOutputSchemaForType("acceptance"),
+				customProps,
+			);
 		} else if (node.type === "Promotion") {
 			properties = mergePropertiesByName(
 				clonePromotionOutputSchema(),

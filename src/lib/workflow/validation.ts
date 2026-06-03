@@ -7,6 +7,7 @@ import type {
 	Flag,
 	MessageNodeConfig,
 	NLSNodeConfig,
+	ExternalLinkNodeConfig,
 } from "./types";
 import { MAX_CHALLENGE_RETRIES } from "./types";
 import { findNearestPreviousCheckpoint } from "./graph-utils";
@@ -110,10 +111,14 @@ export function validateWorkflow(
 	nodes.forEach((node) => {
 		const allowRetry = (node.config.allowRetry as boolean) === true;
 
+		const isExternalLinkChallenge =
+			node.type === "ExternalLink" &&
+			(node.config as ExternalLinkNodeConfig | undefined)?.mode === "challenge";
 		if (
 			node.type !== "End" &&
 			node.type !== "Reject" &&
-			node.type !== "Challenge"
+			node.type !== "Challenge" &&
+			!isExternalLinkChallenge
 		) {
 			const hasOutgoing = edges.some((e) => e.from === node.id);
 			if (!hasOutgoing) {
@@ -543,6 +548,95 @@ export function validateWorkflow(
 			}
 
 			validateChallengeResultConnections(node, config, edges, errors);
+		}
+
+		if (node.type === "ExternalLink") {
+			const config = node.config as ExternalLinkNodeConfig | undefined;
+			if (!config) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener una configuración definida`,
+					severity: "error",
+				});
+			} else {
+				if (!config.channels || config.channels.length === 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener al menos un canal de entrega (email/sms)`,
+						severity: "error",
+					});
+				}
+
+				if (config.channels?.includes("email")) {
+					if (!config.recipient?.emailExpression?.trim()) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" requiere una expresión de email cuando el canal email está activo`,
+							severity: "error",
+						});
+					}
+					if (!config.emailConfig?.templateName?.trim()) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe tener un nombre de template de Mandrill`,
+							severity: "error",
+						});
+					}
+				}
+
+				if (config.channels?.includes("sms")) {
+					if (!config.recipient?.phoneExpression?.trim()) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" requiere una expresión de teléfono cuando el canal SMS está activo`,
+							severity: "error",
+						});
+					}
+				}
+
+				if (config.mode === "form") {
+					if (!config.formConfig?.formId) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe tener un formulario seleccionado`,
+							severity: "error",
+						});
+					}
+				}
+
+				if (config.mode === "challenge") {
+					if (
+						!config.challengeConfig?.timeout ||
+						config.challengeConfig.timeout.value <= 0
+					) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe definir un timeout válido para el challenge`,
+							severity: "error",
+						});
+					}
+				}
+
+				if (!config.linkTtl || config.linkTtl.value <= 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener un TTL de link válido`,
+						severity: "error",
+					});
+				} else {
+					const ttlHours =
+						config.linkTtl.unit === "days"
+							? config.linkTtl.value * 24
+							: config.linkTtl.value;
+					if (ttlHours < 1 || ttlHours > 720) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" el TTL del link debe estar entre 1 hora y 30 días`,
+							severity: "error",
+						});
+					}
+				}
+			}
 		}
 
 		if (node.type === "Promotion") {

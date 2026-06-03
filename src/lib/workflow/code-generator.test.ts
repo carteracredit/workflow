@@ -5366,3 +5366,228 @@ describe("prequalification variable token rewriting", () => {
 		expect(result.code).toContain("event.payload.clientAddress.city");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// ExternalLink node code generation
+// ---------------------------------------------------------------------------
+
+describe("ExternalLink node code generation", () => {
+	it("should generate dispatchExternalLink call in form mode", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "el1",
+				type: "ExternalLink",
+				title: "Link Externo",
+				config: {
+					mode: "form",
+					linkTtl: { value: 48, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.clientEmail}",
+						nameExpression: "${start.clientName}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-abc", formVersion: 2 },
+					emailConfig: {
+						templateName: "my-form-template",
+						subject: "Please fill: ${start.clientName}",
+						mergeVars: [
+							{ key: "NOMBRE", value: "${start.clientName}" },
+							{ key: "STATIC", value: "hello" },
+						],
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "el1"), createEdge("el1", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("dispatchExternalLink");
+		expect(result.code).toContain('mode: "form"');
+		expect(result.code).toContain('formId: "form-abc"');
+		expect(result.code).toContain("formVersion: 2");
+		expect(result.code).toContain('templateName: "my-form-template"');
+		expect(result.code).toContain("NOMBRE:");
+		expect(result.code).toContain("STATIC:");
+		expect(result.code).toContain("external-form-link-externo");
+		expect(result.code).toContain("ttlSeconds: 172800");
+	});
+
+	it("should always capture form payload even without an outputSchema configured", () => {
+		// Regression: without outputSchema the result was discarded ({_status, _type} only).
+		// ExternalLink form mode must ALWAYS persist the submitted payload so it
+		// appears in WorkflowNodeOutputs in the cases frontend.
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "elForm",
+				type: "ExternalLink",
+				title: "Formulario Externo",
+				config: {
+					mode: "form",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.email}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-xyz" },
+					emailConfig: { templateName: "tpl", subject: "Fill it" },
+					// Note: no outputSchema key — should still capture
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "elForm"), createEdge("elForm", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		// Must assign the waitForEvent result to a variable (not discard it)
+		expect(result.code).toContain("const formularioExterno =");
+		// Must pass that variable to updateCaseObject (NOT just {_status, _type})
+		expect(result.code).not.toContain(
+			'_status: "completed", _type: "ExternalLink"',
+		);
+		// Variable name is derived from node title: "formularioExterno"
+		expect(result.code).toContain("formularioExterno");
+	});
+
+	it("should generate challenge mode with waitForEvent and result branching", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "elc",
+				type: "ExternalLink",
+				title: "Challenge Externo",
+				config: {
+					mode: "challenge",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.email}",
+						phoneExpression: "${start.phone}",
+					},
+					channels: ["email", "sms"],
+					challengeConfig: {
+						challengeType: "acceptance",
+						timeout: { value: 30, unit: "minutes" },
+					},
+					emailConfig: { templateName: "challenge-tpl", subject: "Approve" },
+					smsConfig: { body: "Click: {{URL}}" },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({ id: "rej", type: "Reject", title: "Rechazado" }),
+		];
+		const edges = [
+			createEdge("start", "elc"),
+			createEdge("elc", "end", { label: "accepted", fromPort: "top" }),
+			createEdge("elc", "rej", { label: "rejected", fromPort: "bottom" }),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('mode: "challenge"');
+		expect(result.code).toContain("external-acceptance-challenge-externo");
+		expect(result.code).toContain("waitForEvent");
+		expect(result.code).toContain("challengeConfig:");
+		expect(result.code).toContain('templateName: "challenge-tpl"');
+		expect(result.code).toContain("smsBody:");
+		expect(result.code).toContain("let _challengeExternoEvt");
+		expect(result.code).toContain("let challengeExterno:");
+	});
+
+	it("should emit urlVarName in emailConfig when explicitly set", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "el2",
+				type: "ExternalLink",
+				title: "Link Custom URL",
+				config: {
+					mode: "form",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.clientEmail}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-url" },
+					emailConfig: {
+						templateName: "my-tpl",
+						subject: "Complete form",
+						mergeVars: [],
+						urlVarName: "LINK",
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "el2"), createEdge("el2", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('urlVarName: "LINK"');
+	});
+
+	it("should not emit urlVarName when it is undefined (defaults to URL server-side)", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "el3",
+				type: "ExternalLink",
+				title: "Link Default URL",
+				config: {
+					mode: "form",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.clientEmail}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-def" },
+					emailConfig: {
+						templateName: "my-tpl",
+						subject: "Complete form",
+						mergeVars: [],
+						// urlVarName deliberately omitted
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "el3"), createEdge("el3", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		// urlVarName not set → should not appear in generated code
+		expect(result.code).not.toContain("urlVarName");
+	});
+
+	it("should generate SMS-only ExternalLink without emailConfig", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "smsonly",
+				type: "ExternalLink",
+				title: "SMS Only",
+				config: {
+					mode: "form",
+					linkTtl: { value: 2, unit: "days" },
+					recipient: {
+						source: "variable",
+						phoneExpression: "${start.phone}",
+					},
+					channels: ["sms"],
+					formConfig: { formId: "form-x" },
+					smsConfig: { body: "Hola, tu link: {{URL}}" },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [
+			createEdge("start", "smsonly"),
+			createEdge("smsonly", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("dispatchExternalLink");
+		expect(result.code).toContain('channels: ["sms"]');
+		expect(result.code).toContain("smsBody:");
+		expect(result.code).not.toContain("templateName:");
+		// TTL: 2 days = 48 hours = 172800 seconds
+		expect(result.code).toContain("ttlSeconds: 172800");
+	});
+});

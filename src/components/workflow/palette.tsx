@@ -7,6 +7,7 @@ import {
 	createDefaultChallengeConfig,
 	createDefaultPromotionConfig,
 	createDefaultNLSConfig,
+	createDefaultExternalLinkConfig,
 } from "@/lib/workflow/types";
 import {
 	XCircle,
@@ -23,6 +24,7 @@ import {
 	Shield,
 	BadgePercent,
 	Banknote,
+	ExternalLink,
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 import {
@@ -132,6 +134,13 @@ const NODE_CATEGORIES = [
 				bgColor: "var(--node-bg-promotion)",
 				iconColorVar: "--node-icon-promotion",
 			},
+			{
+				type: "ExternalLink" as NodeType,
+				labelKey: "palette.nodeExternalLink",
+				icon: <ExternalLink className="h-4 w-4" />,
+				bgColor: "var(--node-bg-external-link)",
+				iconColorVar: "--node-icon-external-link",
+			},
 		],
 	},
 	{
@@ -181,6 +190,9 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	}
 	if (type === "NLS") {
 		return createDefaultNLSConfig();
+	}
+	if (type === "ExternalLink") {
+		return createDefaultExternalLinkConfig();
 	}
 	return {};
 };

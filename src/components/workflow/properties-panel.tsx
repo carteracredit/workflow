@@ -29,6 +29,9 @@ import type {
 	MessageMergeVar,
 	MessageChannel,
 	OutputSchema,
+	ExternalLinkNodeConfig,
+	ExternalLinkMode,
+	ExternalLinkChannel,
 } from "@/lib/workflow/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -386,6 +389,13 @@ export function PropertiesPanel({
 	);
 	const [formVersionsLoading, setFormVersionsLoading] = useState(false);
 
+	// Estado para formularios disponibles (nodo ExternalLink)
+	const [elAvailableForms, setElAvailableForms] = useState<WorkflowForm[]>([]);
+	const [elFormsLoading, setElFormsLoading] = useState(false);
+	const [elSelectedFormFull, setElSelectedFormFull] =
+		useState<WorkflowForm | null>(null);
+	const [elFormVersionsLoading, setElFormVersionsLoading] = useState(false);
+
 	// Cargar forms publicados cuando hay un nodo Form seleccionado
 	useEffect(() => {
 		if (selectedNode?.type !== "Form") return;
@@ -395,6 +405,53 @@ export function PropertiesPanel({
 			.catch(() => setAvailableForms([]))
 			.finally(() => setFormsLoading(false));
 	}, [selectedNode?.type]);
+
+	// Cargar forms publicados cuando hay un nodo ExternalLink en modo form seleccionado
+	useEffect(() => {
+		if (
+			selectedNode?.type !== "ExternalLink" ||
+			(selectedNode?.config as { mode?: string } | undefined)?.mode !== "form"
+		) {
+			setElAvailableForms([]);
+			setElSelectedFormFull(null);
+			return;
+		}
+		setElFormsLoading(true);
+		listFormsAction({ status: "published" })
+			.then((forms) => setElAvailableForms(forms))
+			.catch(() => setElAvailableForms([]))
+			.finally(() => setElFormsLoading(false));
+	}, [
+		selectedNode?.type,
+		(selectedNode?.config as { mode?: string } | undefined)?.mode,
+	]);
+
+	// Cargar el formulario completo para ExternalLink cuando ya hay un formId en el config
+	useEffect(() => {
+		if (
+			selectedNode?.type !== "ExternalLink" ||
+			(selectedNode?.config as { mode?: string } | undefined)?.mode !== "form"
+		) {
+			setElSelectedFormFull(null);
+			return;
+		}
+		const formId = (selectedNode.config as { formConfig?: { formId?: string } })
+			?.formConfig?.formId;
+		if (!formId) {
+			setElSelectedFormFull(null);
+			return;
+		}
+		setElFormVersionsLoading(true);
+		getFormAction(formId)
+			.then((form) => setElSelectedFormFull(form))
+			.catch(() => setElSelectedFormFull(null))
+			.finally(() => setElFormVersionsLoading(false));
+	}, [
+		selectedNode?.type,
+		selectedNode?.id,
+		(selectedNode?.config as { formConfig?: { formId?: string } } | undefined)
+			?.formConfig?.formId,
+	]);
 
 	// Cargar templates de Dropbox Sign cuando hay un nodo Challenge con tipo signature seleccionado
 	useEffect(() => {
@@ -5707,6 +5764,701 @@ export function PropertiesPanel({
 							})()}
 						</div>
 					)}
+
+					{/* ── ExternalLink Node ─────────────────────────────────── */}
+					{selectedNode.type === "ExternalLink" &&
+						(() => {
+							const elConfig = (selectedNode.config ??
+								{}) as ExternalLinkNodeConfig;
+							const updateElConfig = (
+								patch: Partial<ExternalLinkNodeConfig>,
+							) => {
+								onUpdateNode(selectedNode.id, {
+									config: { ...selectedNode.config, ...patch },
+								});
+							};
+							return (
+								<div className="space-y-4">
+									{/* Mode selector */}
+									<div className="space-y-2">
+										<Label>{t("propertiesPanel.elModeLabel")}</Label>
+										<Select
+											value={elConfig.mode ?? "form"}
+											onValueChange={(v) =>
+												updateElConfig({ mode: v as ExternalLinkMode })
+											}
+										>
+											<SelectTrigger>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="form">
+													{t("propertiesPanel.elModeForm")}
+												</SelectItem>
+												<SelectItem value="challenge">
+													{t("propertiesPanel.elModeChallenge")}
+												</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+
+									{/* Form-specific config — shown right after mode */}
+									{elConfig.mode === "form" && (
+										<div className="space-y-3">
+											<div className="space-y-2">
+												<Label htmlFor="el-form-select">
+													{t("propertiesPanel.elFormSelectLabel")}
+												</Label>
+												<Select
+													value={elConfig.formConfig?.formId ?? ""}
+													onValueChange={async (value) => {
+														const updates: Partial<ExternalLinkNodeConfig> = {
+															formConfig: {
+																...elConfig.formConfig,
+																formId: value,
+																formVersion: undefined,
+															},
+														};
+														try {
+															setElFormVersionsLoading(true);
+															const fullForm = await getFormAction(value);
+															setElSelectedFormFull(fullForm);
+															const latestVersion =
+																fullForm.versions.length > 0
+																	? fullForm.versions.reduce((a, b) =>
+																			a.version > b.version ? a : b,
+																		)
+																	: null;
+															if (latestVersion) {
+																updates.formConfig = {
+																	formId: value,
+																	...updates.formConfig,
+																	formVersion: latestVersion.version,
+																};
+																if (latestVersion.fields) {
+																	(
+																		updates as Record<string, unknown>
+																	).outputSchema = buildOutputSchemaFromFields(
+																		latestVersion.fields,
+																		fullForm.name,
+																	);
+																}
+															}
+														} catch {
+															setElSelectedFormFull(null);
+														} finally {
+															setElFormVersionsLoading(false);
+														}
+														updateElConfig(updates);
+													}}
+													disabled={elFormsLoading}
+												>
+													<SelectTrigger id="el-form-select">
+														<SelectValue
+															placeholder={
+																elFormsLoading
+																	? t(
+																			"propertiesPanel.elFormSelectLoadingPlaceholder",
+																		)
+																	: t("propertiesPanel.elFormSelectPlaceholder")
+															}
+														/>
+													</SelectTrigger>
+													<SelectContent>
+														{elAvailableForms.length === 0 &&
+														!elFormsLoading ? (
+															<SelectItem value="__empty__" disabled>
+																{t("propertiesPanel.elFormNoForms")}
+															</SelectItem>
+														) : (
+															elAvailableForms.map((form) => (
+																<SelectItem key={form.id} value={form.id}>
+																	{form.name}
+																</SelectItem>
+															))
+														)}
+													</SelectContent>
+												</Select>
+												{elAvailableForms.length === 0 && !elFormsLoading && (
+													<p className="text-xs text-muted-foreground">
+														{t("propertiesPanel.elFormNoFormsNote")}
+													</p>
+												)}
+											</div>
+											{!!elConfig.formConfig?.formId &&
+												(elSelectedFormFull?.versions?.length ?? 0) > 0 && (
+													<div className="space-y-2">
+														<Label htmlFor="el-form-version-select">
+															{t("propertiesPanel.elFormVersionLabel")}
+														</Label>
+														<Select
+															value={
+																elConfig.formConfig?.formVersion?.toString() ??
+																""
+															}
+															onValueChange={(val) => {
+																const versionNumber = Number(val);
+																const version =
+																	elSelectedFormFull?.versions.find(
+																		(v) => v.version === versionNumber,
+																	);
+																const patch: Partial<ExternalLinkNodeConfig> = {
+																	formConfig: {
+																		formId: elConfig.formConfig?.formId ?? "",
+																		...elConfig.formConfig,
+																		formVersion: versionNumber,
+																	},
+																};
+																if (version?.fields) {
+																	(
+																		patch as Record<string, unknown>
+																	).outputSchema = buildOutputSchemaFromFields(
+																		version.fields,
+																		elSelectedFormFull?.name ?? "Form",
+																	);
+																}
+																updateElConfig(patch);
+															}}
+															disabled={elFormVersionsLoading}
+														>
+															<SelectTrigger id="el-form-version-select">
+																<SelectValue
+																	placeholder={
+																		elFormVersionsLoading
+																			? t(
+																					"propertiesPanel.elFormVersionLoadingPlaceholder",
+																				)
+																			: t(
+																					"propertiesPanel.elFormVersionPlaceholder",
+																				)
+																	}
+																/>
+															</SelectTrigger>
+															<SelectContent>
+																{elSelectedFormFull?.versions
+																	.slice()
+																	.sort((a, b) => b.version - a.version)
+																	.map((v) => (
+																		<SelectItem
+																			key={v.version}
+																			value={v.version.toString()}
+																		>
+																			v{v.version}
+																			{v.version ===
+																				elSelectedFormFull.currentVersion &&
+																				` ${t("propertiesPanel.elFormVersionLatest")}`}
+																		</SelectItem>
+																	))}
+															</SelectContent>
+														</Select>
+													</div>
+												)}
+										</div>
+									)}
+
+									{/* Challenge-specific config — shown right after mode */}
+									{elConfig.mode === "challenge" && (
+										<div className="space-y-2">
+											<Label>
+												{t("propertiesPanel.elChallengeTimeoutLabel")}
+											</Label>
+											<div className="flex items-center gap-2">
+												<Input
+													type="number"
+													min={1}
+													className="w-20"
+													value={elConfig.challengeConfig?.timeout?.value ?? 5}
+													onChange={(e) =>
+														updateElConfig({
+															challengeConfig: {
+																challengeType: "acceptance",
+																...elConfig.challengeConfig,
+																timeout: {
+																	value: Number(e.target.value),
+																	unit:
+																		elConfig.challengeConfig?.timeout?.unit ??
+																		"minutes",
+																},
+															},
+														})
+													}
+												/>
+												<Select
+													value={
+														elConfig.challengeConfig?.timeout?.unit ?? "minutes"
+													}
+													onValueChange={(v) =>
+														updateElConfig({
+															challengeConfig: {
+																challengeType: "acceptance",
+																...elConfig.challengeConfig,
+																timeout: {
+																	value:
+																		elConfig.challengeConfig?.timeout?.value ??
+																		5,
+																	unit: v as
+																		| "seconds"
+																		| "minutes"
+																		| "hours"
+																		| "days",
+																},
+															},
+														})
+													}
+												>
+													<SelectTrigger className="w-28">
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="seconds">
+															{t("propertiesPanel.elChallengeTimeoutSeconds")}
+														</SelectItem>
+														<SelectItem value="minutes">
+															{t("propertiesPanel.elChallengeTimeoutMinutes")}
+														</SelectItem>
+														<SelectItem value="hours">
+															{t("propertiesPanel.elChallengeTimeoutHours")}
+														</SelectItem>
+														<SelectItem value="days">
+															{t("propertiesPanel.elChallengeTimeoutDays")}
+														</SelectItem>
+													</SelectContent>
+												</Select>
+											</div>
+										</div>
+									)}
+
+									{/* Channels */}
+									<div className="space-y-2">
+										<Label>{t("propertiesPanel.elChannelsLabel")}</Label>
+										<div className="flex gap-4">
+											{(["email", "sms"] as ExternalLinkChannel[]).map((ch) => (
+												<label
+													key={ch}
+													className="flex items-center gap-2 text-sm"
+												>
+													<Checkbox
+														checked={(elConfig.channels ?? []).includes(ch)}
+														onCheckedChange={(checked) => {
+															const channels = [...(elConfig.channels ?? [])];
+															if (checked) {
+																if (!channels.includes(ch)) channels.push(ch);
+															} else {
+																const idx = channels.indexOf(ch);
+																if (idx >= 0) channels.splice(idx, 1);
+															}
+															updateElConfig({ channels });
+														}}
+													/>
+													{ch.toUpperCase()}
+												</label>
+											))}
+										</div>
+									</div>
+
+									{/* Recipient */}
+									<div className="space-y-2">
+										<Label>{t("propertiesPanel.elRecipientLabel")}</Label>
+										{(elConfig.channels ?? []).includes("email") && (
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													{t("propertiesPanel.elEmailExpressionLabel")}
+												</Label>
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(
+														elConfig.recipient?.emailExpression,
+													)}
+													onChange={(segs) =>
+														updateElConfig({
+															recipient: {
+																...elConfig.recipient,
+																source: "variable",
+																emailExpression: segmentsToTemplateString(segs),
+															},
+														})
+													}
+													placeholder={t(
+														"propertiesPanel.elEmailExpressionPlaceholder",
+													)}
+												/>
+											</div>
+										)}
+										{(elConfig.channels ?? []).includes("sms") && (
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													{t("propertiesPanel.elPhoneExpressionLabel")}
+												</Label>
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(
+														elConfig.recipient?.phoneExpression,
+													)}
+													onChange={(segs) =>
+														updateElConfig({
+															recipient: {
+																...elConfig.recipient,
+																source: "variable",
+																phoneExpression: segmentsToTemplateString(segs),
+															},
+														})
+													}
+													placeholder={t(
+														"propertiesPanel.elPhoneExpressionPlaceholder",
+													)}
+												/>
+											</div>
+										)}
+										<div className="space-y-1">
+											<Label className="text-xs text-muted-foreground">
+												{t("propertiesPanel.elNameExpressionLabel")}
+											</Label>
+											<VariableTemplateInput
+												nodes={upstreamVariableNodes}
+												value={parseTemplateStringToSegments(
+													elConfig.recipient?.nameExpression,
+												)}
+												onChange={(segs) =>
+													updateElConfig({
+														recipient: {
+															...elConfig.recipient,
+															source: "variable",
+															nameExpression: segmentsToTemplateString(segs),
+														},
+													})
+												}
+												placeholder={t(
+													"propertiesPanel.elNameExpressionPlaceholder",
+												)}
+											/>
+										</div>
+									</div>
+
+									{/* Link TTL */}
+									<div className="space-y-2">
+										<Label>{t("propertiesPanel.elLinkTtlLabel")}</Label>
+										<div className="flex items-center gap-2">
+											<Input
+												type="number"
+												min={1}
+												className="w-20"
+												value={elConfig.linkTtl?.value ?? 72}
+												onChange={(e) =>
+													updateElConfig({
+														linkTtl: {
+															...elConfig.linkTtl,
+															value: Number(e.target.value),
+															unit: elConfig.linkTtl?.unit ?? "hours",
+														},
+													})
+												}
+											/>
+											<Select
+												value={elConfig.linkTtl?.unit ?? "hours"}
+												onValueChange={(v) =>
+													updateElConfig({
+														linkTtl: {
+															...elConfig.linkTtl,
+															value: elConfig.linkTtl?.value ?? 72,
+															unit: v as "hours" | "days",
+														},
+													})
+												}
+											>
+												<SelectTrigger className="w-24">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="hours">
+														{t("propertiesPanel.elLinkTtlHours")}
+													</SelectItem>
+													<SelectItem value="days">
+														{t("propertiesPanel.elLinkTtlDays")}
+													</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+									</div>
+
+									{/* Email config */}
+									{(elConfig.channels ?? []).includes("email") && (
+										<div className="space-y-2">
+											<Label className="font-medium">
+												{t("propertiesPanel.elEmailSectionLabel")}
+											</Label>
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													{t("propertiesPanel.elEmailTemplateNameLabel")}
+												</Label>
+												<Input
+													value={elConfig.emailConfig?.templateName ?? ""}
+													onChange={(e) =>
+														updateElConfig({
+															emailConfig: {
+																...elConfig.emailConfig,
+																templateName: e.target.value,
+																subject: elConfig.emailConfig?.subject ?? "",
+																mergeVars:
+																	elConfig.emailConfig?.mergeVars ?? [],
+															},
+														})
+													}
+													placeholder={t(
+														"propertiesPanel.elEmailTemplateNamePlaceholder",
+													)}
+												/>
+											</div>
+											<div className="space-y-1">
+												<FieldLabel
+													description={t(
+														"propertiesPanel.elEmailUrlVarNameDesc",
+													)}
+												>
+													{t("propertiesPanel.elEmailUrlVarNameLabel")}
+												</FieldLabel>
+												<Input
+													value={elConfig.emailConfig?.urlVarName ?? "URL"}
+													onChange={(e) =>
+														updateElConfig({
+															emailConfig: {
+																...elConfig.emailConfig,
+																templateName:
+																	elConfig.emailConfig?.templateName ?? "",
+																subject: elConfig.emailConfig?.subject ?? "",
+																mergeVars:
+																	elConfig.emailConfig?.mergeVars ?? [],
+																urlVarName: e.target.value,
+															},
+														})
+													}
+													placeholder={t(
+														"propertiesPanel.elEmailUrlVarNamePlaceholder",
+													)}
+													className="font-mono uppercase"
+												/>
+											</div>
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													{t("propertiesPanel.elEmailSubjectLabel")}
+												</Label>
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(
+														elConfig.emailConfig?.subject,
+													)}
+													onChange={(segs) =>
+														updateElConfig({
+															emailConfig: {
+																...elConfig.emailConfig,
+																templateName:
+																	elConfig.emailConfig?.templateName ?? "",
+																subject: segmentsToTemplateString(segs),
+																mergeVars:
+																	elConfig.emailConfig?.mergeVars ?? [],
+															},
+														})
+													}
+													placeholder={t(
+														"propertiesPanel.elEmailSubjectPlaceholder",
+													)}
+												/>
+											</div>
+											<div className="space-y-2">
+												<div className="flex items-center justify-between">
+													<FieldLabel
+														description={t(
+															"propertiesPanel.elEmailMergeVarsDesc",
+														)}
+													>
+														{t("propertiesPanel.elEmailMergeVarsLabel")}
+													</FieldLabel>
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="h-7 px-2 text-xs"
+														onClick={() => {
+															const vars = [
+																...(elConfig.emailConfig?.mergeVars ?? []),
+																{ key: "", value: "" },
+															];
+															updateElConfig({
+																emailConfig: {
+																	...elConfig.emailConfig,
+																	templateName:
+																		elConfig.emailConfig?.templateName ?? "",
+																	subject: elConfig.emailConfig?.subject ?? "",
+																	mergeVars: vars,
+																},
+															});
+														}}
+													>
+														{t("propertiesPanel.elEmailMergeVarsAddBtn")}
+													</Button>
+												</div>
+												{(elConfig.emailConfig?.mergeVars ?? []).length ===
+													0 && (
+													<p className="text-xs text-muted-foreground italic">
+														{t("propertiesPanel.elEmailMergeVarsEmpty")}
+													</p>
+												)}
+												<div className="space-y-2">
+													{(elConfig.emailConfig?.mergeVars ?? []).map(
+														(mv, index) => (
+															<div
+																key={index}
+																className="rounded-md border border-border/60 p-2 space-y-1.5 bg-muted/20"
+															>
+																<div className="flex items-center gap-1.5">
+																	<Input
+																		value={mv.key}
+																		onChange={(e) => {
+																			const vars = [
+																				...(elConfig.emailConfig?.mergeVars ??
+																					[]),
+																			];
+																			vars[index] = {
+																				...vars[index],
+																				key: e.target.value,
+																			};
+																			updateElConfig({
+																				emailConfig: {
+																					...elConfig.emailConfig,
+																					templateName:
+																						elConfig.emailConfig
+																							?.templateName ?? "",
+																					subject:
+																						elConfig.emailConfig?.subject ?? "",
+																					mergeVars: vars,
+																				},
+																			});
+																		}}
+																		placeholder={t(
+																			"propertiesPanel.elEmailMergeVarKeyPlaceholder",
+																		)}
+																		className="h-7 flex-1 font-mono text-xs uppercase"
+																	/>
+																	<Button
+																		type="button"
+																		variant="ghost"
+																		size="icon"
+																		className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
+																		onClick={() => {
+																			const vars = [
+																				...(elConfig.emailConfig?.mergeVars ??
+																					[]),
+																			];
+																			vars.splice(index, 1);
+																			updateElConfig({
+																				emailConfig: {
+																					...elConfig.emailConfig,
+																					templateName:
+																						elConfig.emailConfig
+																							?.templateName ?? "",
+																					subject:
+																						elConfig.emailConfig?.subject ?? "",
+																					mergeVars: vars,
+																				},
+																			});
+																		}}
+																		aria-label={t(
+																			"propertiesPanel.elEmailMergeVarRemoveAriaLabel",
+																		)}
+																	>
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			className="h-3.5 w-3.5"
+																			viewBox="0 0 24 24"
+																			fill="none"
+																			stroke="currentColor"
+																			strokeWidth="2"
+																			strokeLinecap="round"
+																			strokeLinejoin="round"
+																		>
+																			<path d="M18 6 6 18" />
+																			<path d="m6 6 12 12" />
+																		</svg>
+																	</Button>
+																</div>
+																<div className="flex items-start gap-1.5">
+																	<span className="text-muted-foreground text-xs pt-2 shrink-0">
+																		=
+																	</span>
+																	<div className="flex-1 min-w-0">
+																		<VariableTemplateInput
+																			nodes={upstreamVariableNodes}
+																			value={parseTemplateStringToSegments(
+																				mv.value,
+																			)}
+																			onChange={(segs) => {
+																				const vars = [
+																					...(elConfig.emailConfig?.mergeVars ??
+																						[]),
+																				];
+																				vars[index] = {
+																					...vars[index],
+																					value: segmentsToTemplateString(segs),
+																				};
+																				updateElConfig({
+																					emailConfig: {
+																						...elConfig.emailConfig,
+																						templateName:
+																							elConfig.emailConfig
+																								?.templateName ?? "",
+																						subject:
+																							elConfig.emailConfig?.subject ??
+																							"",
+																						mergeVars: vars,
+																					},
+																				});
+																			}}
+																			placeholder={t(
+																				"propertiesPanel.elEmailMergeVarValuePlaceholder",
+																			)}
+																			className="text-xs"
+																		/>
+																	</div>
+																</div>
+															</div>
+														),
+													)}
+												</div>
+											</div>
+										</div>
+									)}
+
+									{/* SMS config */}
+									{(elConfig.channels ?? []).includes("sms") && (
+										<div className="space-y-2">
+											<Label className="font-medium">
+												{t("propertiesPanel.elSmsSectionLabel")}
+											</Label>
+											<div className="space-y-1">
+												<Label className="text-xs text-muted-foreground">
+													{t("propertiesPanel.elSmsBodyLabel")}
+												</Label>
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(
+														elConfig.smsConfig?.body,
+													)}
+													onChange={(segs) =>
+														updateElConfig({
+															smsConfig: {
+																body: segmentsToTemplateString(segs),
+															},
+														})
+													}
+													placeholder={t(
+														"propertiesPanel.elSmsBodyPlaceholder",
+													)}
+												/>
+											</div>
+										</div>
+									)}
+								</div>
+							);
+						})()}
 
 					{selectedNode.type === "Reject" &&
 						(() => {

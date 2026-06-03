@@ -6,11 +6,18 @@ function isMultiOutputNode(type: NodeType): boolean {
 	return MULTI_OUTPUT_NODE_TYPES.includes(type);
 }
 
+function isNodeMultiOutput(node: WorkflowNode): boolean {
+	if (MULTI_OUTPUT_NODE_TYPES.includes(node.type)) return true;
+	if (node.type === "ExternalLink") {
+		return (node.config as { mode?: string }).mode === "challenge";
+	}
+	return false;
+}
+
 function getPortName(type: NodeType, port: "top" | "bottom"): string {
-	if (type === "Challenge") {
+	if (type === "Challenge" || type === "ExternalLink") {
 		return port === "top" ? "accepted" : "rejected";
 	}
-	// Decision mantiene la terminología original
 	return port === "top" ? "verde (positiva)" : "roja (negativa)";
 }
 
@@ -42,19 +49,23 @@ export function isRetryEdge(edge: WorkflowEdge): boolean {
  * @param nodeType - Tipo de nodo
  * @returns Número máximo de conexiones de salida permitidas
  */
-export function getMaxOutgoingConnections(nodeType: NodeType): number {
-	// Nodos de decisión: máximo 2 salidas
+export function getMaxOutgoingConnections(
+	nodeType: NodeType,
+	node?: WorkflowNode,
+): number {
 	if (nodeType === "Decision" || nodeType === "Challenge") {
 		return 2;
 	}
 
-	// Nodo unión: máximo 1 salida
+	if (nodeType === "ExternalLink") {
+		const mode = (node?.config as { mode?: string } | undefined)?.mode;
+		return mode === "challenge" ? 2 : 1;
+	}
+
 	if (nodeType === "Join") {
 		return 1;
 	}
 
-	// Nodos normales: máximo 1 salida
-	// (Start, Form, Transform, API, Message, Checkpoint, FlagChange, etc.)
 	return 1;
 }
 
@@ -147,7 +158,7 @@ export function canCreateConnection(
 	}
 
 	// Para nodos Decision, validar por puerto (cada puerto solo puede tener 1 conexión)
-	const isNodeWithPortLimit = isMultiOutputNode(sourceNode.type);
+	const isNodeWithPortLimit = isNodeMultiOutput(sourceNode);
 	if (isNodeWithPortLimit && fromPort) {
 		// Verificar si ya existe una conexión en este puerto específico
 		const existingConnectionOnPort = edges.find(
@@ -163,7 +174,7 @@ export function canCreateConnection(
 	}
 
 	// Verificar límite total de conexiones de salida del nodo origen
-	const maxOutgoing = getMaxOutgoingConnections(sourceNode.type);
+	const maxOutgoing = getMaxOutgoingConnections(sourceNode.type, sourceNode);
 	const currentOutgoing = edges.filter((e) => e.from === sourceNode.id).length;
 
 	if (currentOutgoing >= maxOutgoing) {
