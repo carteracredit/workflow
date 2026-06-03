@@ -5953,6 +5953,16 @@ export function PropertiesPanel({
 														</Select>
 													</div>
 												)}
+											{/* Output schema — auto-generated from selected form fields */}
+											<OutputSchemaEditor
+												value={
+													selectedNode.config.outputSchema as
+														| OutputSchema
+														| undefined
+												}
+												onChange={handleUpdateOutputSchema}
+												label={t("propertiesPanel.outputSchemaLabel")}
+											/>
 										</div>
 									)}
 
