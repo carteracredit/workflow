@@ -1,3 +1,10 @@
+# [1.3.0-rc.30](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.29...v1.3.0-rc.30) (2026-06-03)
+
+
+### Features
+
+* add OutputSchemaEditor to PropertiesPanel for dynamic schema updates ([14d2fb6](https://github.com/carteracredit/workflow/commit/14d2fb650cf4592977f9d656459a8aece0af4e89))
+
 # [1.3.0-rc.29](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.28...v1.3.0-rc.29) (2026-06-03)
 
 
