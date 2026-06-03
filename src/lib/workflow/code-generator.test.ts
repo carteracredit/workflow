@@ -5414,6 +5414,43 @@ describe("ExternalLink node code generation", () => {
 		expect(result.code).toContain("ttlSeconds: 172800");
 	});
 
+	it("should always capture form payload even without an outputSchema configured", () => {
+		// Regression: without outputSchema the result was discarded ({_status, _type} only).
+		// ExternalLink form mode must ALWAYS persist the submitted payload so it
+		// appears in WorkflowNodeOutputs in the cases frontend.
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "elForm",
+				type: "ExternalLink",
+				title: "Formulario Externo",
+				config: {
+					mode: "form",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.email}",
+					},
+					channels: ["email"],
+					formConfig: { formId: "form-xyz" },
+					emailConfig: { templateName: "tpl", subject: "Fill it" },
+					// Note: no outputSchema key — should still capture
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges = [createEdge("start", "elForm"), createEdge("elForm", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		// Must assign the waitForEvent result to a variable (not discard it)
+		expect(result.code).toContain("const formularioExterno =");
+		// Must pass that variable to updateCaseObject (NOT just {_status, _type})
+		expect(result.code).not.toContain(
+			'_status: "completed", _type: "ExternalLink"',
+		);
+		// Variable name is derived from node title: "formularioExterno"
+		expect(result.code).toContain("formularioExterno");
+	});
+
 	it("should generate challenge mode with waitForEvent and result branching", () => {
 		const nodes = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),

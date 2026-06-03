@@ -2200,7 +2200,9 @@ function generateExternalLinkStep(
 	const isChallenge = mode === "challenge";
 	const outputVar = getVarName(node.id);
 	const rawVar = isChallenge ? `_${outputVar}Evt` : outputVar;
-	const captureResult = nodeHasOutputSchema(node) || isChallenge;
+	// Always capture: form mode stores the external user's payload; challenge mode
+	// stores accepted/rejected. Both are the primary output of this node.
+	const captureResult = true;
 	const isHoisted = _hoistedNodeIds.has(node.id);
 	const varDecl = captureResult
 		? isHoisted || isChallenge
@@ -2840,6 +2842,7 @@ function computeHoistedNodeIds(
 		"Form",
 		"API",
 		"Transform",
+		"ExternalLink",
 	]);
 
 	const branchScopedIds = computeBranchScopedNodeIds(nodes, edges);
