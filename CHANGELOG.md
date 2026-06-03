@@ -1,3 +1,18 @@
+# [1.3.0-rc.29](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.28...v1.3.0-rc.29) (2026-06-03)
+
+
+### Bug Fixes
+
+* update email merge variable labels and descriptions in PropertiesPanel ([3c88408](https://github.com/carteracredit/workflow/commit/3c8840813ac9143b680630482f9cf52cafbca7f1))
+
+
+### Features
+
+* add URL variable name configuration to PropertiesPanel for email settings ([388ceb0](https://github.com/carteracredit/workflow/commit/388ceb0902ab42dc2eda4922c62636649e4535f3))
+* enhance PropertiesPanel for ExternalLink node configuration ([30ef242](https://github.com/carteracredit/workflow/commit/30ef2425b52f7a5f02121d8566f3565213c98b1c))
+* enhance PropertiesPanel to support dynamic output schema updates ([c88d723](https://github.com/carteracredit/workflow/commit/c88d72349373258bc39caf574a1479410b3e8a24))
+* introduce ExternalLink node with configuration and validation ([c83b584](https://github.com/carteracredit/workflow/commit/c83b584fd8f927cb0949b6eb1543d550f0824e4f))
+
 # [1.3.0-rc.28](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.27...v1.3.0-rc.28) (2026-05-27)
 
 
