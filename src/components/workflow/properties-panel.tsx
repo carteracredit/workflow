@@ -5835,6 +5835,14 @@ export function PropertiesPanel({
 																	...updates.formConfig,
 																	formVersion: latestVersion.version,
 																};
+																if (latestVersion.fields) {
+																	(
+																		updates as Record<string, unknown>
+																	).outputSchema = buildOutputSchemaFromFields(
+																		latestVersion.fields,
+																		fullForm.name,
+																	);
+																}
 															}
 														} catch {
 															setElSelectedFormFull(null);
@@ -5889,13 +5897,27 @@ export function PropertiesPanel({
 																""
 															}
 															onValueChange={(val) => {
-																updateElConfig({
+																const versionNumber = Number(val);
+																const version =
+																	elSelectedFormFull?.versions.find(
+																		(v) => v.version === versionNumber,
+																	);
+																const patch: Partial<ExternalLinkNodeConfig> = {
 																	formConfig: {
 																		formId: elConfig.formConfig?.formId ?? "",
 																		...elConfig.formConfig,
-																		formVersion: Number(val),
+																		formVersion: versionNumber,
 																	},
-																});
+																};
+																if (version?.fields) {
+																	(
+																		patch as Record<string, unknown>
+																	).outputSchema = buildOutputSchemaFromFields(
+																		version.fields,
+																		elSelectedFormFull?.name ?? "Form",
+																	);
+																}
+																updateElConfig(patch);
 															}}
 															disabled={elFormVersionsLoading}
 														>
