@@ -6456,6 +6456,19 @@ export function PropertiesPanel({
 											</div>
 										</div>
 									)}
+
+									{/* Output schema — shown at the bottom when mode is form */}
+									{elConfig.mode === "form" && (
+										<OutputSchemaEditor
+											value={
+												selectedNode.config.outputSchema as
+													| OutputSchema
+													| undefined
+											}
+											onChange={handleUpdateOutputSchema}
+											label={t("propertiesPanel.outputSchemaLabel")}
+										/>
+									)}
 								</div>
 							);
 						})()}
