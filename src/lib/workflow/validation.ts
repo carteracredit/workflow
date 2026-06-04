@@ -116,6 +116,21 @@ export function validateWorkflow(
 		}
 	});
 
+	// Validación 2d: responsible roles must be included in visibility roles
+	nodes.forEach((node) => {
+		if (node.visibilityRoles === undefined) return;
+		if (node.roles.length === 0) return;
+		const visSet = new Set(node.visibilityRoles);
+		const missing = node.roles.filter((r) => !visSet.has(r));
+		if (missing.length > 0) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" tiene roles responsables que no están en roles de visibilidad: ${missing.join(", ")}`,
+				severity: "error",
+			});
+		}
+	});
+
 	// Validación 3: Nodos de decisión deben tener ambas ramas
 	nodes
 		.filter((n) => n.type === "Decision")

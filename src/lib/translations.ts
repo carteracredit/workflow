@@ -542,6 +542,8 @@ export const translations = {
 			visibilityRolesLabel: "Visibility Roles",
 			visibilityRolesHelp:
 				"Select which roles can see this node in the case. If no roles are selected, no one will see it. By default, all roles can see it.",
+			visibilityRolesLocked:
+				"This role is responsible for this node and cannot be hidden from it.",
 			startSchemaLabel: "Workflow Input Schema",
 			caseVariablesLabel: "Case data",
 			caseVariablesHint:
@@ -1604,6 +1606,8 @@ export const translations = {
 			visibilityRolesLabel: "Roles de Visibilidad",
 			visibilityRolesHelp:
 				"Selecciona qué roles pueden ver este nodo en el caso. Si no seleccionas ningún rol, nadie lo verá. Por defecto todos los roles pueden verlo.",
+			visibilityRolesLocked:
+				"Este rol es responsable de este nodo y no puede ocultarse de él.",
 			startSchemaLabel: "Esquema de Entrada del Workflow",
 			caseVariablesLabel: "Datos del caso",
 			caseVariablesHint:
