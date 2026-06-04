@@ -238,6 +238,19 @@ interface PropertiesPanelProps {
 }
 
 const NODES_WITH_ROLES = ["Form", "Challenge", "Message", "Promotion"];
+const NODES_WITH_VISIBILITY_ROLES = [
+	"Form",
+	"Challenge",
+	"Message",
+	"Promotion",
+	"Decision",
+	"Transform",
+	"API",
+	"Checkpoint",
+	"FlagChange",
+	"NLS",
+	"ExternalLink",
+];
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 560;
 
@@ -1322,7 +1335,30 @@ export function PropertiesPanel({
 		const newRoles = selectedNode.roles.includes(role)
 			? selectedNode.roles.filter((r) => r !== role)
 			: [...selectedNode.roles, role];
-		onUpdateNode(selectedNode.id, { roles: newRoles });
+
+		const updates: Partial<WorkflowNode> = { roles: newRoles };
+
+		if (
+			!selectedNode.roles.includes(role) &&
+			selectedNode.visibilityRoles !== undefined
+		) {
+			const visRoles = selectedNode.visibilityRoles;
+			if (!visRoles.includes(role)) {
+				updates.visibilityRoles = [...visRoles, role];
+			}
+		}
+
+		onUpdateNode(selectedNode.id, updates);
+	};
+
+	const handleVisibilityRoleToggle = (role: Role) => {
+		if (selectedNode.roles.includes(role)) return;
+
+		const current: Role[] = selectedNode.visibilityRoles ?? [...ROLE_OPTIONS];
+		const newRoles = current.includes(role)
+			? current.filter((r) => r !== role)
+			: [...current, role];
+		onUpdateNode(selectedNode.id, { visibilityRoles: newRoles });
 	};
 
 	const supportsStaleTimeout = STALE_SUPPORTED_NODE_TYPES.includes(
@@ -2086,6 +2122,55 @@ export function PropertiesPanel({
 									</div>
 								))}
 							</div>
+						</div>
+					)}
+
+					{NODES_WITH_VISIBILITY_ROLES.includes(selectedNode.type) && (
+						<div className="space-y-2">
+							<Label>{t("propertiesPanel.visibilityRolesLabel")}</Label>
+							<div className="space-y-2">
+								{ROLE_OPTIONS.map((role) => {
+									const effectiveRoles: Role[] =
+										selectedNode.visibilityRoles ?? [...ROLE_OPTIONS];
+									const isResponsibleRole = selectedNode.roles.includes(role);
+									return (
+										<div key={role} className="flex items-center space-x-2">
+											<Checkbox
+												id={`visibility-role-${role}`}
+												checked={effectiveRoles.includes(role)}
+												disabled={isResponsibleRole}
+												onCheckedChange={() => handleVisibilityRoleToggle(role)}
+											/>
+											<label
+												htmlFor={`visibility-role-${role}`}
+												className={`text-sm leading-none ${isResponsibleRole ? "cursor-not-allowed opacity-70" : "peer-disabled:cursor-not-allowed peer-disabled:opacity-70"}`}
+												title={
+													isResponsibleRole
+														? t("propertiesPanel.visibilityRolesLocked")
+														: undefined
+												}
+											>
+												{t(`propertiesPanel.roleNames.${role}`)}
+												{isResponsibleRole && (
+													<span className="ml-1 text-xs text-muted-foreground">
+														🔒
+													</span>
+												)}
+											</label>
+										</div>
+									);
+								})}
+							</div>
+							<p
+								className={`text-xs ${
+									(selectedNode.visibilityRoles?.length ??
+										ROLE_OPTIONS.length) === 0
+										? "text-destructive"
+										: "text-muted-foreground"
+								}`}
+							>
+								{t("propertiesPanel.visibilityRolesHelp")}
+							</p>
 						</div>
 					)}
 

@@ -167,6 +167,244 @@ describe("validateWorkflow", () => {
 		});
 	});
 
+	describe("Visibility roles validation", () => {
+		const startNode: WorkflowNode = {
+			id: "start-1",
+			type: "Start",
+			title: "Start",
+			description: "",
+			roles: [],
+			config: {},
+			position: { x: 0, y: 0 },
+			groupId: null,
+		};
+
+		it("should not error when visibilityRoles is undefined (back-compat)", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) => e.nodeId === "form-1" && e.message.includes("visib"),
+				),
+			).toBe(false);
+		});
+
+		it("should not error when visibilityRoles is an empty array", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "nls-1",
+					type: "NLS",
+					title: "NLS",
+					description: "",
+					roles: [],
+					visibilityRoles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) => e.nodeId === "nls-1" && e.message.includes("no válidos"),
+				),
+			).toBe(false);
+		});
+
+		it("should warn when Form/Challenge/Promotion have visibilityRoles: []", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Mi Formulario",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: [],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			const warn = errors.find(
+				(e) => e.nodeId === "form-1" && e.severity === "warning",
+			);
+			expect(warn).toBeDefined();
+			expect(warn?.message).toContain("nadie podrá ver");
+		});
+
+		it("should error when visibilityRoles contains invalid values", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Mi Formulario",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: ["seller", "unknown_role" as never],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			const err = errors.find(
+				(e) => e.nodeId === "form-1" && e.message.includes("no válidos"),
+			);
+			expect(err).toBeDefined();
+			expect(err?.severity).toBe("error");
+		});
+
+		it("should not error when visibilityRoles has valid subset of roles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Mi Formulario",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) => e.nodeId === "form-1" && e.message.includes("visib"),
+				),
+			).toBe(false);
+		});
+	});
+
+	describe("Responsible roles must be in visibility roles", () => {
+		const startNode: WorkflowNode = {
+			id: "start-1",
+			type: "Start",
+			title: "Start",
+			description: "",
+			roles: [],
+			config: {},
+			position: { x: 0, y: 0 },
+			groupId: null,
+		};
+
+		it("should error when a responsible role is not in visibilityRoles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Coapplicant",
+					description: "",
+					roles: ["client", "seller", "credit_agent", "org_manager"],
+					visibilityRoles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			const err = errors.find(
+				(e) =>
+					e.nodeId === "form-1" &&
+					e.severity === "error" &&
+					e.message.includes("roles responsables"),
+			);
+			expect(err).toBeDefined();
+			expect(err?.message).toContain("client");
+			expect(err?.message).toContain("org_manager");
+		});
+
+		it("should not error when all responsible roles are in visibilityRoles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "form-1" && e.message.includes("roles responsables"),
+				),
+			).toBe(false);
+		});
+
+		it("should not error when visibilityRoles is undefined (back-compat)", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "form-1" && e.message.includes("roles responsables"),
+				),
+			).toBe(false);
+		});
+
+		it("should not error when node has no responsible roles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "api-1",
+					type: "API",
+					title: "API",
+					description: "",
+					roles: [],
+					visibilityRoles: ["seller"],
+					config: { url: "https://example.com" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "api-1" && e.message.includes("roles responsables"),
+				),
+			).toBe(false);
+		});
+	});
+
 	describe("Decision node validation", () => {
 		it("should error when Decision node has less than 2 outgoing edges", () => {
 			const nodes: WorkflowNode[] = [

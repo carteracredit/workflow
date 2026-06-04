@@ -9,7 +9,7 @@ import type {
 	NLSNodeConfig,
 	ExternalLinkNodeConfig,
 } from "./types";
-import { MAX_CHALLENGE_RETRIES } from "./types";
+import { MAX_CHALLENGE_RETRIES, ROLE_OPTIONS } from "./types";
 import { findNearestPreviousCheckpoint } from "./graph-utils";
 import {
 	validateTransformCode,
@@ -77,6 +77,55 @@ export function validateWorkflow(
 			errors.push({
 				nodeId: node.id,
 				message: `"${node.title}" debe tener al menos un rol asignado`,
+				severity: "error",
+			});
+		}
+	});
+
+	// Validación 2b: visibilityRoles solo puede contener valores permitidos
+	const VALID_ROLES = new Set(ROLE_OPTIONS);
+	nodes.forEach((node) => {
+		if (node.visibilityRoles === undefined) return;
+		const invalid = node.visibilityRoles.filter((r) => !VALID_ROLES.has(r));
+		if (invalid.length > 0) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" tiene roles de visibilidad no válidos: ${invalid.join(", ")}`,
+				severity: "error",
+			});
+		}
+	});
+
+	// Validación 2c: warning si nodos con Responsible Roles tienen visibilityRoles vacío
+	const NODES_WITH_REQUIRED_INTERACTION_ROLES = [
+		"Form",
+		"Challenge",
+		"Promotion",
+	];
+	nodes.forEach((node) => {
+		if (
+			NODES_WITH_REQUIRED_INTERACTION_ROLES.includes(node.type) &&
+			node.visibilityRoles !== undefined &&
+			node.visibilityRoles.length === 0
+		) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" no tiene roles de visibilidad asignados, nadie podrá ver este nodo en el caso`,
+				severity: "warning",
+			});
+		}
+	});
+
+	// Validación 2d: responsible roles must be included in visibility roles
+	nodes.forEach((node) => {
+		if (node.visibilityRoles === undefined) return;
+		if (node.roles.length === 0) return;
+		const visSet = new Set(node.visibilityRoles);
+		const missing = node.roles.filter((r) => !visSet.has(r));
+		if (missing.length > 0) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" tiene roles responsables que no están en roles de visibilidad: ${missing.join(", ")}`,
 				severity: "error",
 			});
 		}

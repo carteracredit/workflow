@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
 import {
+	ROLE_OPTIONS,
 	createDefaultChallengeConfig,
 	createDefaultPromotionConfig,
 	createDefaultNLSConfig,
@@ -32,6 +33,20 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+const NODES_WITH_VISIBILITY_ROLES = new Set<NodeType>([
+	"Form",
+	"Challenge",
+	"Message",
+	"Promotion",
+	"Decision",
+	"Transform",
+	"API",
+	"Checkpoint",
+	"FlagChange",
+	"NLS",
+	"ExternalLink",
+]);
 
 interface PaletteProps {
 	onAddNode: (node: WorkflowNode) => void;
@@ -234,6 +249,9 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 			titleEs,
 			description: "",
 			roles: [],
+			visibilityRoles: NODES_WITH_VISIBILITY_ROLES.has(type)
+				? [...ROLE_OPTIONS]
+				: undefined,
 			config: getDefaultConfigForType(type),
 			staleTimeout: null,
 			position: { x: centerX, y: centerY },

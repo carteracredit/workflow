@@ -300,6 +300,7 @@ export interface WorkflowNode {
 	description: string;
 	descriptionEs?: string;
 	roles: Role[];
+	visibilityRoles?: Role[];
 	config: Record<string, unknown>;
 	staleTimeout?: StaleTimeoutConfig | null;
 	position: { x: number; y: number };
