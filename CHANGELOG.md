@@ -1,3 +1,11 @@
+# [1.3.0-rc.31](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.30...v1.3.0-rc.31) (2026-06-04)
+
+
+### Features
+
+* add visibility roles management to workflow nodes ([c9c56ec](https://github.com/carteracredit/workflow/commit/c9c56ec67fb0566cea6fb0fed604124453194ed6))
+* enforce visibility roles validation for responsible roles in workflow nodes ([7e9567e](https://github.com/carteracredit/workflow/commit/7e9567ec75a7cf433e95f329b1e6430abfc52c35))
+
 # [1.3.0-rc.30](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.29...v1.3.0-rc.30) (2026-06-03)
 
 
