@@ -22,6 +22,7 @@ const mockNode: WorkflowNode = {
 	title: "Formulario de Solicitud",
 	description: "Captura de datos del solicitante",
 	roles: ["client", "seller"],
+	visibilityRoles: ["client", "seller", "credit_agent", "org_manager"],
 	config: { formId: "form-1" },
 	staleTimeout: null,
 	position: { x: 100, y: 200 },
@@ -79,6 +80,32 @@ export const NoSelection: Story = {
 export const NodeSelected: Story = {
 	args: {
 		selectedNodes: [mockNode],
+		selectedEdges: [],
+	},
+};
+
+export const NodeWithPartialVisibility: Story = {
+	name: "Form — Visibility roles (partial)",
+	args: {
+		selectedNodes: [
+			{
+				...mockNode,
+				visibilityRoles: ["seller"],
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+export const NodeWithNoVisibility: Story = {
+	name: "Form — Visibility roles (none, warning)",
+	args: {
+		selectedNodes: [
+			{
+				...mockNode,
+				visibilityRoles: [],
+			},
+		],
 		selectedEdges: [],
 	},
 };

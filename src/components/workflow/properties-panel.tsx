@@ -238,6 +238,19 @@ interface PropertiesPanelProps {
 }
 
 const NODES_WITH_ROLES = ["Form", "Challenge", "Message", "Promotion"];
+const NODES_WITH_VISIBILITY_ROLES = [
+	"Form",
+	"Challenge",
+	"Message",
+	"Promotion",
+	"Decision",
+	"Transform",
+	"API",
+	"Checkpoint",
+	"FlagChange",
+	"NLS",
+	"ExternalLink",
+];
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 560;
 
@@ -1325,6 +1338,14 @@ export function PropertiesPanel({
 		onUpdateNode(selectedNode.id, { roles: newRoles });
 	};
 
+	const handleVisibilityRoleToggle = (role: Role) => {
+		const current: Role[] = selectedNode.visibilityRoles ?? [...ROLE_OPTIONS];
+		const newRoles = current.includes(role)
+			? current.filter((r) => r !== role)
+			: [...current, role];
+		onUpdateNode(selectedNode.id, { visibilityRoles: newRoles });
+	};
+
 	const supportsStaleTimeout = STALE_SUPPORTED_NODE_TYPES.includes(
 		selectedNode.type,
 	);
@@ -2086,6 +2107,43 @@ export function PropertiesPanel({
 									</div>
 								))}
 							</div>
+						</div>
+					)}
+
+					{NODES_WITH_VISIBILITY_ROLES.includes(selectedNode.type) && (
+						<div className="space-y-2">
+							<Label>{t("propertiesPanel.visibilityRolesLabel")}</Label>
+							<div className="space-y-2">
+								{ROLE_OPTIONS.map((role) => {
+									const effectiveRoles: Role[] =
+										selectedNode.visibilityRoles ?? [...ROLE_OPTIONS];
+									return (
+										<div key={role} className="flex items-center space-x-2">
+											<Checkbox
+												id={`visibility-role-${role}`}
+												checked={effectiveRoles.includes(role)}
+												onCheckedChange={() => handleVisibilityRoleToggle(role)}
+											/>
+											<label
+												htmlFor={`visibility-role-${role}`}
+												className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+											>
+												{t(`propertiesPanel.roleNames.${role}`)}
+											</label>
+										</div>
+									);
+								})}
+							</div>
+							<p
+								className={`text-xs ${
+									(selectedNode.visibilityRoles?.length ??
+										ROLE_OPTIONS.length) === 0
+										? "text-destructive"
+										: "text-muted-foreground"
+								}`}
+							>
+								{t("propertiesPanel.visibilityRolesHelp")}
+							</p>
 						</div>
 					)}
 
