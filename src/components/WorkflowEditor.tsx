@@ -97,14 +97,16 @@ function migrateLegacyNodes(
 ): WorkflowNode[] {
 	return nodes.map((node) => {
 		const nodeType = node.type as string;
-		// Migrar Status a FlagChange
+		// Migrar Status a FlagChange (preserve existing flagChanges if present)
 		if (nodeType === "Status") {
 			return {
 				...node,
 				type: "FlagChange" as const,
 				config: {
 					...node.config,
-					flagChanges: [],
+					flagChanges: Array.isArray(node.config.flagChanges)
+						? node.config.flagChanges
+						: [],
 				},
 			};
 		}
@@ -1568,23 +1570,39 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						nodes: workflowState.nodes,
 						edges: workflowState.edges,
 						flags: workflowState.flags,
+						zoom: workflowState.zoom,
+						pan: workflowState.pan,
+						metadata: {
+							nameEs: workflowState.metadata.nameEs,
+							descriptionEs: workflowState.metadata.descriptionEs,
+						},
 					}}
 					onClose={() => setShowJSON(false)}
 					onImport={(data) => {
-						// Migrar nodos legacy antes de importar
-						const migratedNodes = migrateLegacyNodes(data.nodes);
+						const parsed = parseDefinitionJson(data);
+						if (!parsed) {
+							toast.error(t("jsonModal.errorParseJson"));
+							return;
+						}
 						applyHistoryChange((prev) => ({
-							nodes: migratedNodes.map(withDefaultStaleTimeout),
-							edges: data.edges,
+							nodes: parsed.nodes,
+							edges: parsed.edges,
 							selectedNodeIds: [],
 							selectedEdgeIds: [],
 						}));
-						// Also restore flags from the imported JSON (backwards-compatible: defaults to [])
-						setWorkflowState((prev) => ({ ...prev, flags: data.flags }));
+						setWorkflowState((prev) => ({
+							...prev,
+							flags: parsed.flags,
+							zoom: parsed.zoom ?? prev.zoom,
+							pan: parsed.pan ?? prev.pan,
+						}));
 						setShowJSON(false);
 						setValidationErrors([]);
 						setValidationStatus("idle");
 						setLastValidationErrorCount(0);
+						if (parsed.migratedTokens) {
+							toast.info(t("jsonModal.tokensMigrated"));
+						}
 					}}
 				/>
 			)}

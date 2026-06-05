@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { WorkflowNode, WorkflowEdge, Flag } from "@/lib/workflow/types";
 import {
 	Dialog,
@@ -10,18 +10,77 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Download, Upload } from "lucide-react";
+import { Download, Upload, FileUp } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
+
+export interface WorkflowExportData {
+	nodes: WorkflowNode[];
+	edges: WorkflowEdge[];
+	flags: Flag[];
+	zoom?: number;
+	pan?: { x: number; y: number };
+	metadata?: { nameEs?: string; descriptionEs?: string };
+}
 
 interface JSONModalProps {
 	mode: "export" | "import";
-	workflow: { nodes: WorkflowNode[]; edges: WorkflowEdge[]; flags: Flag[] };
+	workflow: WorkflowExportData;
 	onClose: () => void;
-	onImport: (data: {
-		nodes: WorkflowNode[];
-		edges: WorkflowEdge[];
-		flags: Flag[];
-	}) => void;
+	onImport: (data: Record<string, unknown>) => void;
+}
+
+function buildCanonicalExport(workflow: WorkflowExportData): object {
+	return {
+		metadata: {
+			version: "2.0",
+			kind: "workflow",
+			exportedAt: new Date().toISOString(),
+		},
+		definition: {
+			nodes: workflow.nodes,
+			edges: workflow.edges,
+			flags: workflow.flags,
+			zoom: workflow.zoom ?? 1,
+			pan: workflow.pan ?? { x: 0, y: 0 },
+			...(workflow.metadata?.nameEs || workflow.metadata?.descriptionEs
+				? { metadata: workflow.metadata }
+				: {}),
+		},
+	};
+}
+
+/**
+ * Normalizes imported JSON to a flat definition object that
+ * `parseDefinitionJson` can consume. Handles both v2.0 canonical
+ * format (with `metadata.kind` + `definition` wrapper) and v1.0
+ * legacy format (flat `nodes`/`edges`/`flags`).
+ */
+function normalizeImportedJson(
+	data: Record<string, unknown>,
+	t: (key: string) => string,
+): Record<string, unknown> {
+	if (data.metadata && typeof data.metadata === "object") {
+		const meta = data.metadata as Record<string, unknown>;
+		if (meta.kind && meta.kind !== "workflow") {
+			throw new Error(t("jsonModal.errorInvalidKind"));
+		}
+		if (
+			meta.version === "2.0" &&
+			data.definition &&
+			typeof data.definition === "object"
+		) {
+			return data.definition as Record<string, unknown>;
+		}
+	}
+
+	if (!data.nodes || !Array.isArray(data.nodes)) {
+		throw new Error(t("jsonModal.errorInvalidNodes"));
+	}
+	if (!data.edges || !Array.isArray(data.edges)) {
+		throw new Error(t("jsonModal.errorInvalidEdges"));
+	}
+
+	return data;
 }
 
 export function JSONModal({
@@ -32,35 +91,18 @@ export function JSONModal({
 }: JSONModalProps) {
 	const [jsonText, setJsonText] = useState(
 		mode === "export"
-			? JSON.stringify(
-					{
-						metadata: { version: "1.0", createdAt: new Date().toISOString() },
-						...workflow,
-					},
-					null,
-					2,
-				)
+			? JSON.stringify(buildCanonicalExport(workflow), null, 2)
 			: "",
 	);
 	const [error, setError] = useState<string | null>(null);
 	const { t } = useLanguage();
+	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	const handleImport = () => {
 		try {
-			const data = JSON.parse(jsonText);
-
-			if (!data.nodes || !Array.isArray(data.nodes)) {
-				throw new Error(t("jsonModal.errorInvalidNodes"));
-			}
-
-			if (!data.edges || !Array.isArray(data.edges)) {
-				throw new Error(t("jsonModal.errorInvalidEdges"));
-			}
-
-			// flags is optional for backwards compatibility with older exports
-			const flags: Flag[] = Array.isArray(data.flags) ? data.flags : [];
-
-			onImport({ nodes: data.nodes, edges: data.edges, flags });
+			const raw = JSON.parse(jsonText);
+			const normalized = normalizeImportedJson(raw, t);
+			onImport(normalized);
 			setError(null);
 		} catch (err) {
 			setError(
@@ -77,6 +119,21 @@ export function JSONModal({
 		a.download = `workflow-${Date.now()}.json`;
 		a.click();
 		URL.revokeObjectURL(url);
+	};
+
+	const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = (ev) => {
+			const text = ev.target?.result;
+			if (typeof text === "string") {
+				setJsonText(text);
+				setError(null);
+			}
+		};
+		reader.readAsText(file);
+		if (fileInputRef.current) fileInputRef.current.value = "";
 	};
 
 	return (
@@ -120,6 +177,24 @@ export function JSONModal({
 					)}
 
 					<div className="flex justify-end gap-2 flex-shrink-0">
+						{mode === "import" && (
+							<>
+								<input
+									ref={fileInputRef}
+									type="file"
+									accept=".json"
+									className="hidden"
+									onChange={handleFileUpload}
+								/>
+								<Button
+									variant="outline"
+									onClick={() => fileInputRef.current?.click()}
+								>
+									<FileUp className="mr-2 h-4 w-4" />
+									{t("jsonModal.uploadFile")}
+								</Button>
+							</>
+						)}
 						<Button variant="outline" onClick={onClose}>
 							{t("jsonModal.cancel")}
 						</Button>
