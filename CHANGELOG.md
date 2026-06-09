@@ -1,3 +1,10 @@
+# [1.3.0-rc.32](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.31...v1.3.0-rc.32) (2026-06-09)
+
+
+### Features
+
+* enhance JSON import/export functionality and workflow state management ([350bf32](https://github.com/carteracredit/workflow/commit/350bf32cb0833198edc9ec938564ec228bf75d11))
+
 # [1.3.0-rc.31](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.30...v1.3.0-rc.31) (2026-06-04)
 
 
