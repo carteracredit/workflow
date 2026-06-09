@@ -73,8 +73,10 @@ vi.mock("@/lib/workflow-api/workflows", () => ({
 }));
 
 let capturedOnImport: ((data: Record<string, unknown>) => void) | null = null;
+let capturedModalMode: string | null = null;
 vi.mock("@/components/workflow/json-modal", () => ({
 	JSONModal: ({
+		mode,
 		onClose,
 		onImport,
 	}: {
@@ -84,8 +86,9 @@ vi.mock("@/components/workflow/json-modal", () => ({
 		onImport: (data: Record<string, unknown>) => void;
 	}) => {
 		capturedOnImport = onImport;
+		capturedModalMode = mode;
 		return (
-			<div data-testid="json-modal">
+			<div data-testid="json-modal" data-mode={mode}>
 				<button onClick={onClose}>Cerrar modal</button>
 				<button onClick={() => onImport({ nodes: [], edges: [], flags: [] })}>
 					Confirmar importar
@@ -1074,6 +1077,7 @@ describe("WorkflowList – exportar/importar JSON", () => {
 
 	beforeEach(() => {
 		capturedOnImport = null;
+		capturedModalMode = null;
 		createObjectURL = vi.fn(() => "blob:test-url");
 		revokeObjectURL = vi.fn();
 		Object.defineProperty(URL, "createObjectURL", {
@@ -1127,7 +1131,7 @@ describe("WorkflowList – exportar/importar JSON", () => {
 		expect(exportBtn).toBeDefined();
 	});
 
-	it("descarga el JSON al hacer click en 'Exportar JSON'", async () => {
+	it("abre el modal de export al hacer click en 'Exportar JSON'", async () => {
 		const fullWf = makeWorkflow({
 			id: "wf-exp-02",
 			name: "WFExportFull",
@@ -1147,9 +1151,8 @@ describe("WorkflowList – exportar/importar JSON", () => {
 			expect(mockGetWorkflow).toHaveBeenCalledWith("wf-exp-02");
 		});
 		await waitFor(() => {
-			expect(mockAnchor.click).toHaveBeenCalled();
+			expect(capturedModalMode).toBe("export");
 		});
-		expect(mockAnchor.download).toMatch(/^workflow-wf-export-full-.*\.json$/);
 	});
 
 	it("muestra toast de error cuando falla la exportación", async () => {
