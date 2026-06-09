@@ -63,11 +63,39 @@ const mockCreateWorkflow = vi.fn();
 const mockDeleteWorkflow = vi.fn();
 const mockUpdateWorkflow = vi.fn();
 const mockCloneWorkflow = vi.fn();
+const mockGetWorkflow = vi.fn();
 vi.mock("@/lib/workflow-api/workflows", () => ({
 	createWorkflow: (...args: unknown[]) => mockCreateWorkflow(...args),
 	deleteWorkflow: (...args: unknown[]) => mockDeleteWorkflow(...args),
 	updateWorkflow: (...args: unknown[]) => mockUpdateWorkflow(...args),
 	cloneWorkflow: (...args: unknown[]) => mockCloneWorkflow(...args),
+	getWorkflow: (...args: unknown[]) => mockGetWorkflow(...args),
+}));
+
+let capturedOnImport: ((data: Record<string, unknown>) => void) | null = null;
+let capturedModalMode: string | null = null;
+vi.mock("@/components/workflow/json-modal", () => ({
+	JSONModal: ({
+		mode,
+		onClose,
+		onImport,
+	}: {
+		mode: string;
+		workflow: unknown;
+		onClose: () => void;
+		onImport: (data: Record<string, unknown>) => void;
+	}) => {
+		capturedOnImport = onImport;
+		capturedModalMode = mode;
+		return (
+			<div data-testid="json-modal" data-mode={mode}>
+				<button onClick={onClose}>Cerrar modal</button>
+				<button onClick={() => onImport({ nodes: [], edges: [], flags: [] })}>
+					Confirmar importar
+				</button>
+			</div>
+		);
+	},
 }));
 
 vi.mock("sonner", () => ({
@@ -1035,6 +1063,179 @@ describe("WorkflowList – clonar", () => {
 				"Error al clonar workflow",
 				expect.any(Object),
 			);
+		});
+	});
+});
+
+// -------------------------------------------------------------------------
+
+describe("WorkflowList – exportar/importar JSON", () => {
+	let createObjectURL: ReturnType<typeof vi.fn>;
+	let revokeObjectURL: ReturnType<typeof vi.fn>;
+	let createElementSpy: ReturnType<typeof vi.spyOn>;
+	const mockAnchor = { href: "", download: "", click: vi.fn() };
+
+	beforeEach(() => {
+		capturedOnImport = null;
+		capturedModalMode = null;
+		createObjectURL = vi.fn(() => "blob:test-url");
+		revokeObjectURL = vi.fn();
+		Object.defineProperty(URL, "createObjectURL", {
+			value: createObjectURL,
+			writable: true,
+		});
+		Object.defineProperty(URL, "revokeObjectURL", {
+			value: revokeObjectURL,
+			writable: true,
+		});
+		const originalCreateElement = document.createElement.bind(document);
+		createElementSpy = vi
+			.spyOn(document, "createElement")
+			.mockImplementation((tag: string, ...rest: unknown[]) => {
+				if (tag === "a") return mockAnchor as unknown as HTMLElement;
+				return originalCreateElement(
+					tag,
+					...(rest as [ElementCreationOptions?]),
+				);
+			});
+	});
+
+	afterEach(() => {
+		createElementSpy.mockRestore();
+		mockAnchor.click.mockClear();
+	});
+
+	async function openDropdown(workflowName: string) {
+		const user = userEvent.setup();
+		const nameEl = screen.getAllByText(workflowName)[0];
+		const row =
+			nameEl.closest("tr") ?? nameEl.closest("div[class*='cursor-pointer']");
+		if (!row) throw new Error(`Could not find row for ${workflowName}`);
+		const trigger = within(row).getByRole("button");
+		await user.click(trigger);
+	}
+
+	it("muestra el botón 'Importar JSON' en el header", () => {
+		makeHooksReturn([]);
+		render(<WorkflowList />);
+		expect(screen.getByText("Importar JSON")).toBeDefined();
+	});
+
+	it("muestra la opción 'Exportar JSON' en el dropdown de fila", async () => {
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-exp-01", name: "WFExport", status: "published" }),
+		]);
+		render(<WorkflowList />);
+		await openDropdown("WFExport");
+		const exportBtn = await screen.findByText("Exportar JSON");
+		expect(exportBtn).toBeDefined();
+	});
+
+	it("abre el modal de export al hacer click en 'Exportar JSON'", async () => {
+		const fullWf = makeWorkflow({
+			id: "wf-exp-02",
+			name: "WFExportFull",
+			slug: "wf-export-full",
+			definition: { nodes: [], edges: [], flags: [] },
+		});
+		mockGetWorkflow.mockResolvedValue(fullWf);
+
+		makeHooksReturn([fullWf]);
+		render(<WorkflowList />);
+		await openDropdown("WFExportFull");
+
+		const exportBtn = await screen.findByText("Exportar JSON");
+		fireEvent.click(exportBtn);
+
+		await waitFor(() => {
+			expect(mockGetWorkflow).toHaveBeenCalledWith("wf-exp-02");
+		});
+		await waitFor(() => {
+			expect(capturedModalMode).toBe("export");
+		});
+	});
+
+	it("muestra toast de error cuando falla la exportación", async () => {
+		const { toast } = await import("sonner");
+		mockGetWorkflow.mockRejectedValue(new Error("fetch failed"));
+
+		makeHooksReturn([
+			makeWorkflow({ id: "wf-exp-03", name: "WFExportErr", status: "draft" }),
+		]);
+		render(<WorkflowList />);
+		await openDropdown("WFExportErr");
+
+		const exportBtn = await screen.findByText("Exportar JSON");
+		fireEvent.click(exportBtn);
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalledWith("Error al exportar el workflow");
+		});
+	});
+
+	it("abre el JSONModal al hacer click en 'Importar JSON'", async () => {
+		makeHooksReturn([]);
+		render(<WorkflowList />);
+
+		const importBtn = screen.getByText("Importar JSON");
+		fireEvent.click(importBtn);
+
+		await waitFor(() => {
+			expect(screen.getByTestId("json-modal")).toBeDefined();
+		});
+	});
+
+	it("cierra el modal al cancelar importar", async () => {
+		makeHooksReturn([]);
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getByText("Importar JSON"));
+		await waitFor(() => screen.getByTestId("json-modal"));
+
+		fireEvent.click(screen.getByText("Cerrar modal"));
+		await waitFor(() => {
+			expect(screen.queryByTestId("json-modal")).toBeNull();
+		});
+	});
+
+	it("crea un workflow y navega al editor al confirmar importar", async () => {
+		const { toast } = await import("sonner");
+		const importedWf = makeWorkflow({
+			id: "wf-imported-01",
+			name: "Importado",
+		});
+		mockCreateWorkflow.mockResolvedValue(importedWf);
+
+		makeHooksReturn([]);
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getByText("Importar JSON"));
+		await waitFor(() => screen.getByTestId("json-modal"));
+
+		fireEvent.click(screen.getByText("Confirmar importar"));
+
+		await waitFor(() => {
+			expect(mockCreateWorkflow).toHaveBeenCalled();
+		});
+		await waitFor(() => {
+			expect(toast.success).toHaveBeenCalledWith("Workflow importado");
+		});
+		expect(mockPush).toHaveBeenCalledWith("/editor/wf-imported-01");
+	});
+
+	it("muestra toast de error cuando falla la importación", async () => {
+		const { toast } = await import("sonner");
+		mockCreateWorkflow.mockRejectedValue(new Error("import failed"));
+
+		makeHooksReturn([]);
+		render(<WorkflowList />);
+
+		fireEvent.click(screen.getByText("Importar JSON"));
+		await waitFor(() => screen.getByTestId("json-modal"));
+		fireEvent.click(screen.getByText("Confirmar importar"));
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalledWith("Error al importar el workflow");
 		});
 	});
 });

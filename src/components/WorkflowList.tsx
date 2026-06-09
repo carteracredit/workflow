@@ -18,6 +18,8 @@ import {
 	Archive,
 	ChevronLeft,
 	ChevronRight,
+	Download,
+	Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +63,12 @@ import {
 	deleteWorkflow,
 	updateWorkflow,
 	cloneWorkflow,
+	getWorkflow,
 } from "@/lib/workflow-api/workflows";
+import {
+	JSONModal,
+	type WorkflowExportData,
+} from "@/components/workflow/json-modal";
 import { useLanguage } from "@/components/LanguageProvider";
 import { getLocaleForLanguage } from "@/lib/translations";
 import { slugify } from "@/lib/slugify";
@@ -124,6 +131,7 @@ interface WorkflowCardRowProps {
 	onArchive: (wf: Workflow) => void;
 	onDelete: (wf: Workflow) => void;
 	onClone: (wf: Workflow) => void;
+	onExport: (wf: Workflow) => void;
 	deletingId: string | null;
 	cloningId: string | null;
 }
@@ -146,6 +154,7 @@ function WorkflowCardRow({
 	onArchive,
 	onDelete,
 	onClone,
+	onExport,
 	deletingId,
 	cloningId,
 }: WorkflowCardRowProps) {
@@ -215,6 +224,10 @@ function WorkflowCardRow({
 						<DropdownMenuItem onClick={() => onClone(workflow)}>
 							<Copy className="mr-2 h-4 w-4" />
 							{t("workflowList.rowActionClone")}
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => onExport(workflow)}>
+							<Download className="mr-2 h-4 w-4" />
+							{t("workflowList.rowActionExportJson")}
 						</DropdownMenuItem>
 						{workflow.current_major_version === 0 &&
 							workflow.status === "draft" && (
@@ -543,6 +556,10 @@ export function WorkflowList() {
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [cloningId, setCloningId] = useState<string | null>(null);
+	const [importModalOpen, setImportModalOpen] = useState(false);
+	const [exportModalOpen, setExportModalOpen] = useState(false);
+	const [exportModalData, setExportModalData] =
+		useState<WorkflowExportData | null>(null);
 	const [page, setPage] = useState(1);
 	const [perPage, setPerPage] = useState(20);
 
@@ -676,6 +693,69 @@ export function WorkflowList() {
 		}
 	};
 
+	const handleExportJson = async (wf: Workflow) => {
+		try {
+			const full = await getWorkflow(wf.id);
+			const def =
+				typeof full.definition === "string"
+					? (JSON.parse(full.definition) as Record<string, unknown>)
+					: ((full.definition ?? {}) as Record<string, unknown>);
+
+			const workflowData: WorkflowExportData = {
+				nodes: (def.nodes as WorkflowExportData["nodes"]) ?? [],
+				edges: (def.edges as WorkflowExportData["edges"]) ?? [],
+				flags: (def.flags as WorkflowExportData["flags"]) ?? [],
+				zoom: (def.zoom as number) ?? 1,
+				pan: (def.pan as { x: number; y: number }) ?? { x: 0, y: 0 },
+				...(def.metadata
+					? {
+							metadata: def.metadata as {
+								nameEs?: string;
+								descriptionEs?: string;
+							},
+						}
+					: {}),
+			};
+
+			setExportModalData(workflowData);
+			setExportModalOpen(true);
+		} catch {
+			toast.error(t("workflowList.toastExportError"));
+		}
+	};
+
+	const handleImportNew = async (data: Record<string, unknown>) => {
+		try {
+			// Extract definition — support canonical v2.0 and legacy bare-root
+			const def =
+				(data.definition as Record<string, unknown> | undefined) ?? data;
+			const meta = (def.metadata ?? data.metadata) as
+				| Record<string, unknown>
+				| undefined;
+			const importedName =
+				(meta?.nameEs as string | undefined) ||
+				(data.name as string | undefined) ||
+				t("workflowList.newWorkflow");
+			const uniqueName =
+				`${t("workflowList.rowActionClone").replace("Clone", "Imported")} ${importedName}`.trim();
+
+			const created = await createWorkflow({
+				name: uniqueName,
+				slug: slugify(uniqueName),
+				description: (data.description as string | undefined) ?? "",
+				status: "draft",
+				class_name: toClassName(uniqueName),
+				current_major_version: 0,
+				definition: def as Record<string, unknown>,
+			});
+
+			toast.success(t("workflowList.toastImportSuccess"));
+			router.push(`/editor/${created.id}`);
+		} catch {
+			toast.error(t("workflowList.toastImportError"));
+		}
+	};
+
 	// Skeleton until we have received a response (data defined) or error. Show empty
 	// state only when loading is done and data is available (possibly empty array).
 	const showSkeleton = !error && resultInfo === null && isLoading;
@@ -701,6 +781,14 @@ export function WorkflowList() {
 						</div>
 					</div>
 					<div className="flex w-full min-w-0 max-w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
+						<Button
+							variant="outline"
+							onClick={() => setImportModalOpen(true)}
+							className="shrink-0"
+						>
+							<Upload className="mr-2 h-4 w-4" />
+							{t("workflowList.importJson")}
+						</Button>
 						<Button
 							onClick={() => setCreateDialogOpen(true)}
 							className="shrink-0"
@@ -927,6 +1015,7 @@ export function WorkflowList() {
 										onArchive={handleArchive}
 										onDelete={handleDelete}
 										onClone={handleClone}
+										onExport={handleExportJson}
 										deletingId={deletingId}
 										cloningId={cloningId}
 									/>
@@ -1044,6 +1133,12 @@ export function WorkflowList() {
 																	<Copy className="mr-2 h-4 w-4" />
 																	{t("workflowList.rowActionClone")}
 																</DropdownMenuItem>
+																<DropdownMenuItem
+																	onClick={() => handleExportJson(wf)}
+																>
+																	<Download className="mr-2 h-4 w-4" />
+																	{t("workflowList.rowActionExportJson")}
+																</DropdownMenuItem>
 																{wf.current_major_version === 0 &&
 																	wf.status === "draft" && (
 																		<>
@@ -1134,6 +1229,30 @@ export function WorkflowList() {
 				onOpenChange={setCreateDialogOpen}
 				onCreated={handleCreated}
 			/>
+
+			{importModalOpen && (
+				<JSONModal
+					mode="import"
+					workflow={{ nodes: [], edges: [], flags: [] }}
+					onClose={() => setImportModalOpen(false)}
+					onImport={(data) => {
+						setImportModalOpen(false);
+						void handleImportNew(data);
+					}}
+				/>
+			)}
+
+			{exportModalOpen && exportModalData && (
+				<JSONModal
+					mode="export"
+					workflow={exportModalData}
+					onClose={() => {
+						setExportModalOpen(false);
+						setExportModalData(null);
+					}}
+					onImport={() => {}}
+				/>
+			)}
 		</div>
 	);
 }
