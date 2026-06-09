@@ -455,6 +455,14 @@ export const translations = {
 			errorInvalidNodes: 'Invalid format: missing "nodes" array',
 			errorInvalidEdges: 'Invalid format: missing "edges" array',
 			errorParseJson: "Error parsing JSON",
+			errorInvalidKind:
+				"Invalid format: this JSON is not a workflow definition",
+			tokensMigrated: "Legacy variable references were automatically updated",
+			uploadFile: "Upload file",
+			modeNew: "Create new",
+			modeReplace: "Replace current",
+			modeReplaceWarning:
+				"This will replace the current definition. Unsaved changes will be lost.",
 		},
 
 		// Flag Manager Modal
@@ -1519,6 +1527,15 @@ export const translations = {
 			errorInvalidNodes: 'Formato inválido: falta el array "nodes"',
 			errorInvalidEdges: 'Formato inválido: falta el array "edges"',
 			errorParseJson: "Error al parsear JSON",
+			errorInvalidKind:
+				"Formato inválido: este JSON no es una definición de workflow",
+			tokensMigrated:
+				"Las referencias a variables legacy fueron actualizadas automáticamente",
+			uploadFile: "Subir archivo",
+			modeNew: "Crear nuevo",
+			modeReplace: "Reemplazar actual",
+			modeReplaceWarning:
+				"Esto reemplazará la definición actual. Los cambios no guardados se perderán.",
 		},
 
 		// Flag Manager Modal

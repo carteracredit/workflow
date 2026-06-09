@@ -70,25 +70,66 @@ function rewriteTokensInString(
 	return changed ? result : null;
 }
 
-function rewriteField(
-	obj: Record<string, unknown>,
-	key: string,
+/**
+ * Recursively rewrites all `${node-<id>.prop}` tokens found in any string
+ * value within `obj`, replacing legacy node-ID prefixes with camelCase aliases.
+ *
+ * This generic walker covers every node type (including NLS, Challenge
+ * signature, ExternalLink, etc.) without needing to enumerate individual
+ * fields. It is idempotent: strings without legacy tokens are untouched.
+ */
+function rewriteAllStrings(
+	obj: unknown,
 	aliasMap: Map<string, string>,
 	reverseMap: Map<string, string>,
 ): boolean {
-	const val = obj[key];
-	if (typeof val !== "string") return false;
-	const rewritten = rewriteTokensInString(val, aliasMap, reverseMap);
-	if (rewritten !== null) {
-		obj[key] = rewritten;
-		return true;
+	if (obj === null || obj === undefined) return false;
+
+	if (Array.isArray(obj)) {
+		let dirty = false;
+		for (let i = 0; i < obj.length; i++) {
+			const item = obj[i];
+			if (typeof item === "string") {
+				const rewritten = rewriteTokensInString(item, aliasMap, reverseMap);
+				if (rewritten !== null) {
+					obj[i] = rewritten;
+					dirty = true;
+				}
+			} else if (typeof item === "object") {
+				if (rewriteAllStrings(item, aliasMap, reverseMap)) dirty = true;
+			}
+		}
+		return dirty;
 	}
+
+	if (typeof obj === "object") {
+		let dirty = false;
+		const record = obj as Record<string, unknown>;
+		for (const key of Object.keys(record)) {
+			const val = record[key];
+			if (typeof val === "string") {
+				const rewritten = rewriteTokensInString(val, aliasMap, reverseMap);
+				if (rewritten !== null) {
+					record[key] = rewritten;
+					dirty = true;
+				}
+			} else if (typeof val === "object") {
+				if (rewriteAllStrings(val, aliasMap, reverseMap)) dirty = true;
+			}
+		}
+		return dirty;
+	}
+
 	return false;
 }
 
 /**
  * Migrates all variable-picker tokens in a single WorkflowNode's config,
  * replacing `${node-<id>.prop}` with `${<alias>.prop}`.
+ *
+ * Uses a generic recursive walker so all node types (API, Transform, Decision,
+ * Message, NLS, Challenge signature, ExternalLink, etc.) are covered
+ * automatically without manual field enumeration.
  *
  * Returns `true` when at least one field was rewritten.
  */
@@ -97,94 +138,7 @@ function migrateNodeConfig(
 	aliasMap: Map<string, string>,
 	reverseMap: Map<string, string>,
 ): boolean {
-	const cfg = node.config;
-	let dirty = false;
-
-	const rw = (key: string) => {
-		if (rewriteField(cfg, key, aliasMap, reverseMap)) dirty = true;
-	};
-
-	// Fields present in all / most node types
-	rw("code"); // Transform
-	rw("condition"); // Decision (legacy single-condition)
-	rw("url"); // API
-	rw("endpoint"); // API (legacy alias)
-	rw("body"); // API + Message (SMS body)
-	rw("subject"); // Message email subject
-
-	// API: custom headers (array of { key, value })
-	const customHeaders = cfg.customHeaders;
-	if (Array.isArray(customHeaders)) {
-		for (const h of customHeaders as Array<Record<string, unknown>>) {
-			if (rewriteField(h, "value", aliasMap, reverseMap)) dirty = true;
-		}
-	}
-
-	// API: body field mappings ({ sourceExpression, targetKey })
-	const bodyConfig = cfg.bodyConfig as Record<string, unknown> | undefined;
-	if (bodyConfig) {
-		rw("rawJson"); // rawJson in bodyConfig, not root cfg
-		const fieldMappings = bodyConfig.fieldMappings;
-		if (Array.isArray(fieldMappings)) {
-			for (const m of fieldMappings as Array<Record<string, unknown>>) {
-				if (rewriteField(m, "sourceExpression", aliasMap, reverseMap))
-					dirty = true;
-			}
-		}
-		if (
-			typeof bodyConfig.rawJson === "string" &&
-			rewriteField(bodyConfig, "rawJson", aliasMap, reverseMap)
-		) {
-			dirty = true;
-		}
-		if (
-			typeof bodyConfig.rawXml === "string" &&
-			rewriteField(bodyConfig, "rawXml", aliasMap, reverseMap)
-		) {
-			dirty = true;
-		}
-	}
-
-	// API: auth config fields that may contain ${secret.*} refs (no-op for secrets
-	// since rewritePath leaves them, but still run for completeness)
-	const authConfig = cfg.authConfig as Record<string, unknown> | undefined;
-	if (authConfig) {
-		for (const key of [
-			"bearerToken",
-			"oauth2TokenUrl",
-			"oauth2ClientId",
-			"oauth2ClientSecret",
-			"oauth2Scope",
-			"oauth2Username",
-			"oauth2Password",
-		]) {
-			if (rewriteField(authConfig, key, aliasMap, reverseMap)) dirty = true;
-		}
-	}
-
-	// API: response config extractPath is a dot-notation path into the response
-	// object (not a ${...} template), so skip it.
-
-	// Decision: conditions array (newer format)
-	const conditions = cfg.conditions;
-	if (Array.isArray(conditions)) {
-		for (const c of conditions as Array<Record<string, unknown>>) {
-			if (rewriteField(c, "expression", aliasMap, reverseMap)) dirty = true;
-			if (rewriteField(c, "condition", aliasMap, reverseMap)) dirty = true;
-		}
-	}
-
-	// Message: merge vars array ({ key, value })
-	const mergeVars = cfg.mergeVars;
-	if (Array.isArray(mergeVars)) {
-		for (const mv of mergeVars as Array<Record<string, unknown>>) {
-			if (rewriteField(mv, "value", aliasMap, reverseMap)) dirty = true;
-		}
-	}
-
-	rw("templateName"); // Message email template name may contain vars
-
-	return dirty;
+	return rewriteAllStrings(node.config, aliasMap, reverseMap);
 }
 
 /**
