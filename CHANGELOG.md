@@ -1,3 +1,11 @@
+# [1.3.0-rc.34](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.33...v1.3.0-rc.34) (2026-06-09)
+
+
+### Features
+
+* enhance export functionality in WorkflowList component ([2e182fb](https://github.com/carteracredit/workflow/commit/2e182fb9c1ba30dff42854c1d7587f6e8e6632c8))
+* implement JSON import/export functionality in WorkflowList ([958fd38](https://github.com/carteracredit/workflow/commit/958fd38fa9a822b8848eaee2f461541efbba7d89))
+
 # [1.3.0-rc.33](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.32...v1.3.0-rc.33) (2026-06-09)
 
 
