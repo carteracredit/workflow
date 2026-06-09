@@ -1,3 +1,10 @@
+# [1.3.0-rc.33](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.32...v1.3.0-rc.33) (2026-06-09)
+
+
+### Features
+
+* implement delete selected functionality in canvas toolbar ([4ee0946](https://github.com/carteracredit/workflow/commit/4ee094691cebd901dee302fbe62f92b6a6461778))
+
 # [1.3.0-rc.32](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.31...v1.3.0-rc.32) (2026-06-09)
 
 
