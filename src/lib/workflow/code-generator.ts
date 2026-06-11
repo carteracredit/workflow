@@ -2173,7 +2173,10 @@ function generateExternalLinkStep(
 		};
 		channels?: string[];
 		formConfig?: { formId?: string; formVersion?: number };
-		challengeConfig?: { timeout?: { value?: number; unit?: string } };
+		challengeConfig?: {
+			timeout?: { value?: number; unit?: string };
+			pullType?: "soft" | "hard" | "new";
+		};
 		emailConfig?: {
 			templateName?: string;
 			subject?: string;
@@ -2241,7 +2244,14 @@ function generateExternalLinkStep(
 		}
 	}
 	if (mode === "challenge" && config.challengeConfig) {
-		code += `${indent}\t\tchallengeConfig: ${JSON.stringify({ challengeType: "acceptance", timeout: config.challengeConfig.timeout })},\n`;
+		const challengePayload: Record<string, unknown> = {
+			challengeType: "acceptance",
+			timeout: config.challengeConfig.timeout,
+		};
+		if (config.challengeConfig.pullType) {
+			challengePayload.pullType = config.challengeConfig.pullType;
+		}
+		code += `${indent}\t\tchallengeConfig: ${JSON.stringify(challengePayload)},\n`;
 	}
 	if (config.emailConfig?.templateName) {
 		code += `${indent}\t\temailConfig: {\n`;

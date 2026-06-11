@@ -391,6 +391,7 @@ export interface ExternalLinkNodeConfig extends Record<string, unknown> {
 		challengeType: "acceptance";
 		labels?: ChallengeLabels;
 		timeout: ChallengeTimeoutConfig;
+		pullType?: "soft" | "hard" | "new";
 	};
 }
 

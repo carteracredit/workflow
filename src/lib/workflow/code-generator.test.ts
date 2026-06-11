@@ -5590,4 +5590,76 @@ describe("ExternalLink node code generation", () => {
 		// TTL: 2 days = 48 hours = 172800 seconds
 		expect(result.code).toContain("ttlSeconds: 172800");
 	});
+
+	it("should serialize pullType in challengeConfig when provided", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "elpt",
+				type: "ExternalLink",
+				title: "T&C Hard Pull",
+				config: {
+					mode: "challenge",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.email}",
+					},
+					channels: ["email"],
+					challengeConfig: {
+						challengeType: "acceptance",
+						timeout: { value: 15, unit: "minutes" },
+						pullType: "hard",
+					},
+					emailConfig: { templateName: "tc-tpl" },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({ id: "rej", type: "Reject", title: "Rechazado" }),
+		];
+		const edges = [
+			createEdge("start", "elpt"),
+			createEdge("elpt", "end", { label: "accepted", fromPort: "top" }),
+			createEdge("elpt", "rej", { label: "rejected", fromPort: "bottom" }),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('"pullType":"hard"');
+		expect(result.code).toContain('"challengeType":"acceptance"');
+		expect(result.code).toContain("challengeConfig:");
+	});
+
+	it("should not include pullType in challengeConfig when not set", () => {
+		const nodes = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "elnp",
+				type: "ExternalLink",
+				title: "Challenge No Pull",
+				config: {
+					mode: "challenge",
+					linkTtl: { value: 24, unit: "hours" },
+					recipient: {
+						source: "variable",
+						emailExpression: "${start.email}",
+					},
+					channels: ["email"],
+					challengeConfig: {
+						challengeType: "acceptance",
+						timeout: { value: 5, unit: "minutes" },
+					},
+					emailConfig: { templateName: "basic-tpl" },
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+			createNode({ id: "rej", type: "Reject", title: "Rechazado" }),
+		];
+		const edges = [
+			createEdge("start", "elnp"),
+			createEdge("elnp", "end", { label: "accepted", fromPort: "top" }),
+			createEdge("elnp", "rej", { label: "rejected", fromPort: "bottom" }),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("challengeConfig:");
+		expect(result.code).not.toContain("pullType");
+	});
 });

@@ -6043,72 +6043,117 @@ export function PropertiesPanel({
 
 									{/* Challenge-specific config — shown right after mode */}
 									{elConfig.mode === "challenge" && (
-										<div className="space-y-2">
-											<Label>
-												{t("propertiesPanel.elChallengeTimeoutLabel")}
-											</Label>
-											<div className="flex items-center gap-2">
-												<Input
-													type="number"
-													min={1}
-													className="w-20"
-													value={elConfig.challengeConfig?.timeout?.value ?? 5}
-													onChange={(e) =>
-														updateElConfig({
-															challengeConfig: {
-																challengeType: "acceptance",
-																...elConfig.challengeConfig,
-																timeout: {
-																	value: Number(e.target.value),
-																	unit:
-																		elConfig.challengeConfig?.timeout?.unit ??
-																		"minutes",
+										<div className="space-y-4">
+											<div className="space-y-2">
+												<Label>
+													{t("propertiesPanel.elChallengeTimeoutLabel")}
+												</Label>
+												<div className="flex items-center gap-2">
+													<Input
+														type="number"
+														min={1}
+														className="w-20"
+														value={
+															elConfig.challengeConfig?.timeout?.value ?? 5
+														}
+														onChange={(e) =>
+															updateElConfig({
+																challengeConfig: {
+																	challengeType: "acceptance",
+																	...elConfig.challengeConfig,
+																	timeout: {
+																		value: Number(e.target.value),
+																		unit:
+																			elConfig.challengeConfig?.timeout?.unit ??
+																			"minutes",
+																	},
 																},
-															},
-														})
-													}
-												/>
+															})
+														}
+													/>
+													<Select
+														value={
+															elConfig.challengeConfig?.timeout?.unit ??
+															"minutes"
+														}
+														onValueChange={(v) =>
+															updateElConfig({
+																challengeConfig: {
+																	challengeType: "acceptance",
+																	...elConfig.challengeConfig,
+																	timeout: {
+																		value:
+																			elConfig.challengeConfig?.timeout
+																				?.value ?? 5,
+																		unit: v as
+																			| "seconds"
+																			| "minutes"
+																			| "hours"
+																			| "days",
+																	},
+																},
+															})
+														}
+													>
+														<SelectTrigger className="w-28">
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															<SelectItem value="seconds">
+																{t("propertiesPanel.elChallengeTimeoutSeconds")}
+															</SelectItem>
+															<SelectItem value="minutes">
+																{t("propertiesPanel.elChallengeTimeoutMinutes")}
+															</SelectItem>
+															<SelectItem value="hours">
+																{t("propertiesPanel.elChallengeTimeoutHours")}
+															</SelectItem>
+															<SelectItem value="days">
+																{t("propertiesPanel.elChallengeTimeoutDays")}
+															</SelectItem>
+														</SelectContent>
+													</Select>
+												</div>
+											</div>
+
+											<div className="space-y-2">
+												<Label>
+													{t("propertiesPanel.elChallengePullTypeLabel")}
+												</Label>
 												<Select
-													value={
-														elConfig.challengeConfig?.timeout?.unit ?? "minutes"
-													}
+													value={elConfig.challengeConfig?.pullType ?? "soft"}
 													onValueChange={(v) =>
 														updateElConfig({
 															challengeConfig: {
 																challengeType: "acceptance",
 																...elConfig.challengeConfig,
-																timeout: {
-																	value:
-																		elConfig.challengeConfig?.timeout?.value ??
-																		5,
-																	unit: v as
-																		| "seconds"
-																		| "minutes"
-																		| "hours"
-																		| "days",
+																timeout: elConfig.challengeConfig?.timeout ?? {
+																	value: 5,
+																	unit: "minutes",
 																},
+																pullType: v as "soft" | "hard" | "new",
 															},
 														})
 													}
 												>
-													<SelectTrigger className="w-28">
+													<SelectTrigger className="w-40">
 														<SelectValue />
 													</SelectTrigger>
 													<SelectContent>
-														<SelectItem value="seconds">
-															{t("propertiesPanel.elChallengeTimeoutSeconds")}
+														<SelectItem value="soft">
+															{t("propertiesPanel.elChallengePullTypeSoft")}
 														</SelectItem>
-														<SelectItem value="minutes">
-															{t("propertiesPanel.elChallengeTimeoutMinutes")}
+														<SelectItem value="hard">
+															{t("propertiesPanel.elChallengePullTypeHard")}
 														</SelectItem>
-														<SelectItem value="hours">
-															{t("propertiesPanel.elChallengeTimeoutHours")}
-														</SelectItem>
-														<SelectItem value="days">
-															{t("propertiesPanel.elChallengeTimeoutDays")}
+														<SelectItem value="new">
+															{t("propertiesPanel.elChallengePullTypeNew")}
 														</SelectItem>
 													</SelectContent>
 												</Select>
+												<p className="text-xs text-muted-foreground">
+													{t("propertiesPanel.elChallengePullTypeDesc")}
+												</p>
 											</div>
 										</div>
 									)}
