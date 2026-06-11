@@ -1,3 +1,10 @@
+# [1.3.0-rc.35](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.34...v1.3.0-rc.35) (2026-06-11)
+
+
+### Features
+
+* add pull type configuration to challenge settings in properties panel ([1f5b6e2](https://github.com/carteracredit/workflow/commit/1f5b6e2a17259476f732e73a2f3e9e9bb5e59fda))
+
 # [1.3.0-rc.34](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.33...v1.3.0-rc.34) (2026-06-09)
 
 
