@@ -6117,7 +6117,9 @@ export function PropertiesPanel({
 											</div>
 
 											<div className="space-y-2">
-												<Label>{t("elChallengePullTypeLabel")}</Label>
+												<Label>
+													{t("propertiesPanel.elChallengePullTypeLabel")}
+												</Label>
 												<Select
 													value={elConfig.challengeConfig?.pullType ?? "soft"}
 													onValueChange={(v) =>
@@ -6139,18 +6141,18 @@ export function PropertiesPanel({
 													</SelectTrigger>
 													<SelectContent>
 														<SelectItem value="soft">
-															{t("elChallengePullTypeSoft")}
+															{t("propertiesPanel.elChallengePullTypeSoft")}
 														</SelectItem>
 														<SelectItem value="hard">
-															{t("elChallengePullTypeHard")}
+															{t("propertiesPanel.elChallengePullTypeHard")}
 														</SelectItem>
 														<SelectItem value="new">
-															{t("elChallengePullTypeNew")}
+															{t("propertiesPanel.elChallengePullTypeNew")}
 														</SelectItem>
 													</SelectContent>
 												</Select>
 												<p className="text-xs text-muted-foreground">
-													{t("elChallengePullTypeDesc")}
+													{t("propertiesPanel.elChallengePullTypeDesc")}
 												</p>
 											</div>
 										</div>
