@@ -462,10 +462,10 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
 export interface RetryZone {
 	/** ID of the Checkpoint node that is the retry target */
 	checkpointNodeId: string;
-	/** ID of the Reject node that triggers the retry */
-	rejectNodeId: string;
+	/** IDs of all Reject nodes that trigger retry to this checkpoint */
+	rejectNodeIds: string[];
 	/**
-	 * Maximum number of retries (from Reject.config.maxRetries).
+	 * Maximum number of retries (consolidated across all Reject nodes).
 	 * Ignored when unlimited=true.
 	 */
 	maxRetries: number;
@@ -474,21 +474,32 @@ export interface RetryZone {
 	 * which means "unlimited" per the UI label "0 = ilimitados").
 	 */
 	unlimited: boolean;
-	/** JS variable name used as the loop counter, e.g. "retryCP1" */
+	/** JS variable name used as the loop counter, e.g. "retry_cp" */
 	retryVarName: string;
 }
 
 /**
  * Scans all Reject nodes with `config.allowRetry === true` and resolves the
  * associated Checkpoint target from their outgoing edge. Returns one RetryZone
- * per qualifying Reject node.
+ * per unique Checkpoint, consolidating all Reject nodes that target it.
+ *
+ * Consolidation rules:
+ * - If ANY reject targeting a checkpoint has unlimited retries, the zone is unlimited.
+ * - Otherwise, maxRetries = max of all individual reject maxRetries values.
  */
 export function detectRetryZones(
 	nodes: WorkflowNode[],
 	edges: WorkflowEdge[],
 ): RetryZone[] {
-	const zones: RetryZone[] = [];
-	const cpVarCounters = new Map<string, number>();
+	const zoneMap = new Map<
+		string,
+		{
+			checkpointNode: WorkflowNode;
+			rejectNodeIds: string[];
+			maxRetries: number;
+			unlimited: boolean;
+		}
+	>();
 
 	for (const node of nodes) {
 		if (node.type !== "Reject") continue;
@@ -501,24 +512,35 @@ export function detectRetryZones(
 		if (!targetNode || targetNode.type !== "Checkpoint") continue;
 
 		const rawMaxRetries = Number(node.config.maxRetries ?? 0);
-		// In the editor, maxRetries=0 means "unlimited" ("0 = ilimitados").
-		// maxRetries>0 is the explicit cap.
-		const unlimited = rawMaxRetries === 0 || Number.isNaN(rawMaxRetries);
-		const maxRetries = unlimited ? 0 : Math.max(1, rawMaxRetries);
+		const isUnlimited = rawMaxRetries === 0 || Number.isNaN(rawMaxRetries);
+		const resolvedMax = isUnlimited ? 0 : Math.max(1, rawMaxRetries);
 
-		// Derive a unique JS variable name from the checkpoint title
-		const cpSlug = createVariableName(targetNode.title || targetNode.id, "cp");
-		const count = cpVarCounters.get(cpSlug) ?? 0;
-		cpVarCounters.set(cpSlug, count + 1);
-		const retryVarName =
-			count === 0 ? `retry_${cpSlug}` : `retry_${cpSlug}_${count}`;
+		const existing = zoneMap.get(targetNode.id);
+		if (existing) {
+			existing.rejectNodeIds.push(node.id);
+			existing.unlimited = existing.unlimited || isUnlimited;
+			if (!existing.unlimited) {
+				existing.maxRetries = Math.max(existing.maxRetries, resolvedMax);
+			}
+		} else {
+			zoneMap.set(targetNode.id, {
+				checkpointNode: targetNode,
+				rejectNodeIds: [node.id],
+				maxRetries: resolvedMax,
+				unlimited: isUnlimited,
+			});
+		}
+	}
 
+	const zones: RetryZone[] = [];
+	for (const [cpId, data] of zoneMap) {
+		const cpSlug = createVariableName(data.checkpointNode.title || cpId, "cp");
 		zones.push({
-			checkpointNodeId: targetNode.id,
-			rejectNodeId: node.id,
-			maxRetries,
-			unlimited,
-			retryVarName,
+			checkpointNodeId: cpId,
+			rejectNodeIds: data.rejectNodeIds,
+			maxRetries: data.unlimited ? 0 : data.maxRetries,
+			unlimited: data.unlimited,
+			retryVarName: `retry_${cpSlug}`,
 		});
 	}
 
@@ -982,7 +1004,7 @@ function generateAPIStep(
 		const maxR = failureHandling?.maxRetries ?? 0;
 		code += `${indent}} catch (_apiErr) {\n`;
 		code += `${indent}\tif (${retryVarOrig} < ${maxR}) {\n`;
-		code += `${indent}\t\tcontinue; // Return to checkpoint and retry\n`;
+		code += `${indent}\t\tcontinue ${retryVarOrig};\n`;
 		code += `${indent}\t}\n`;
 		code += `${indent}\tthrow _apiErr; // Max retries exhausted — propagate error\n`;
 		code += `${indent}}\n`;
@@ -1227,7 +1249,7 @@ function generateNLSStep(
 		const maxR = failureHandling?.maxRetries ?? 0;
 		code += `${indent}} catch (_nlsErr) {\n`;
 		code += `${indent}\tif (${retryVarName} < ${maxR}) {\n`;
-		code += `${indent}\t\tcontinue; // Return to checkpoint and retry\n`;
+		code += `${indent}\t\tcontinue ${retryVarName};\n`;
 		code += `${indent}\t}\n`;
 		code += `${indent}\tthrow _nlsErr; // Max retries exhausted — propagate error\n`;
 		code += `${indent}}\n`;
@@ -2113,7 +2135,9 @@ function findConvergenceNode(
 	// Build a set of back-edges to exclude: Reject → Checkpoint edges
 	const backEdges = new Set<string>();
 	for (const zone of retryZones) {
-		backEdges.add(`${zone.rejectNodeId}→${zone.checkpointNodeId}`);
+		for (const rejectId of zone.rejectNodeIds) {
+			backEdges.add(`${rejectId}→${zone.checkpointNodeId}`);
+		}
 	}
 
 	const forwardEdges = (id: string): string[] =>
@@ -2348,8 +2372,8 @@ interface TraversalContext {
 	warnings: string[];
 	/** All detected retry zones in this workflow */
 	retryZones: RetryZone[];
-	/** The retry zone currently active during code generation (null = no zone) */
-	activeRetryZone: RetryZone | null;
+	/** Stack of active retry zones (innermost zone is last). Supports nesting. */
+	activeRetryZoneStack: RetryZone[];
 }
 
 /**
@@ -2360,7 +2384,9 @@ function generateNodeCode(
 	indent: string,
 	ctx: TraversalContext,
 ): string {
-	const retryVar = ctx.activeRetryZone?.retryVarName;
+	const activeZone =
+		ctx.activeRetryZoneStack[ctx.activeRetryZoneStack.length - 1];
+	const retryVar = activeZone?.retryVarName;
 
 	switch (node.type) {
 		case "Start":
@@ -2404,7 +2430,9 @@ function generateNodeCode(
 				`${indent}return { success: true, payload: event.payload };\n`
 			);
 		case "Reject": {
-			const zone = ctx.retryZones.find((z) => z.rejectNodeId === node.id);
+			const zone = ctx.retryZones.find((z) =>
+				z.rejectNodeIds.includes(node.id),
+			);
 			if (zone) {
 				// Pattern 1: Reject with retry — generate continue/return logic.
 				// IMPORTANT: use "in_progress" while retrying so that the cases-svc
@@ -2413,15 +2441,13 @@ function generateNodeCode(
 				// checkpoint). Only emit "completed" on the final (exhausted) rejection.
 				const rv = zone.retryVarName;
 				if (zone.unlimited) {
-					// Unlimited retries: always in_progress (never completed)
 					return (
 						`${indent}// Workflow rejected — retrying (unlimited)\n` +
 						generateCaseObjectCall(node, indent, undefined, rv) +
 						generateProgressCall(node, indent, "in_progress", undefined, rv) +
-						`${indent}continue; // Unlimited retry from checkpoint\n`
+						`${indent}continue ${rv};\n`
 					);
 				}
-				// Limited retries: in_progress while retrying, completed on last attempt
 				return (
 					`${indent}// Workflow rejected (retry zone)\n` +
 					generateCaseObjectCall(node, indent, undefined, rv) +
@@ -2433,7 +2459,7 @@ function generateNodeCode(
 						undefined,
 						rv,
 					) +
-					`${indent}\tcontinue; // Retry from checkpoint\n` +
+					`${indent}\tcontinue ${rv};\n` +
 					`${indent}}\n` +
 					generateProgressCall(node, indent, "completed", undefined, rv) +
 					`${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`
@@ -2488,46 +2514,43 @@ function traverseBranch(
 		}
 
 		// -------------------------------------------------------------------
-		// Pattern 1: Checkpoint that is the start of a retry zone.
-		// Wrap the whole zone (Checkpoint … Reject) in a for loop.
-		// All descendant nodes will see ctx.activeRetryZone during traversal.
+		// Checkpoint that is the start of a retry zone.
+		// Wrap the zone (Checkpoint … Reject) in a labeled for loop.
+		// Supports nesting: each checkpoint opens its own loop and Reject
+		// nodes use `continue <label>` to target the correct one.
 		// -------------------------------------------------------------------
 		const retryZone = ctx.retryZones.find(
 			(z) => z.checkpointNodeId === currentNodeId,
 		);
 
-		if (retryZone && !ctx.activeRetryZone) {
-			// Open the for loop
+		const alreadyActiveForThisZone =
+			retryZone &&
+			ctx.activeRetryZoneStack.some(
+				(z) => z.checkpointNodeId === retryZone.checkpointNodeId,
+			);
+
+		if (retryZone && !alreadyActiveForThisZone) {
 			const rv = retryZone.retryVarName;
 			if (retryZone.unlimited) {
-				// maxRetries=0 in editor means "unlimited" — loop forever until
-				// the accepted path returns { success: true }.
-				code += `${indent}for (let ${rv} = 0; ; ${rv}++) {\n`;
+				code += `${indent}${rv}: for (let ${rv} = 0; ; ${rv}++) {\n`;
 			} else {
-				code += `${indent}for (let ${rv} = 0; ${rv} <= ${retryZone.maxRetries}; ${rv}++) {\n`;
+				code += `${indent}${rv}: for (let ${rv} = 0; ${rv} <= ${retryZone.maxRetries}; ${rv}++) {\n`;
 			}
 
-			// Traverse inside the zone with increased indentation and active zone set
-			const prevZone = ctx.activeRetryZone;
-			ctx.activeRetryZone = retryZone;
+			ctx.activeRetryZoneStack.push(retryZone);
 
-			// We must NOT mark this node as visited yet so the inner traversal
-			// processes it with the retryVar active.
 			code += trimTrailingBlankLines(
 				traverseBranch(currentNodeId, indent + "\t", ctx, stopAtNodeId),
 			);
 
-			ctx.activeRetryZone = prevZone;
+			ctx.activeRetryZoneStack.pop();
 			code += `${indent}}\n\n`;
 
-			// The inner traversal has already processed the rest of the path
-			// (including the Reject node which emits `continue` / `return`).
-			// After the loop closes there is nothing more to process on this path.
 			break;
 		}
 
 		// Mark as visited *after* retry-zone check so the inner traversal can
-		// see the node and process it with the correct activeRetryZone.
+		// see the node and process it with the correct activeRetryZoneStack.
 		ctx.visited.add(currentNodeId);
 
 		// Get outgoing edges
@@ -2545,7 +2568,8 @@ function traverseBranch(
 
 		// Handle Decision nodes (branching)
 		if (node.type === "Decision") {
-			const condition = (node.config.condition as string) || "/* condition */";
+			const rawCondition = (node.config.condition as string) ?? "";
+			const condition = rawCondition.trim() || "/* condition */";
 			const topEdge = forwardOutgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "top",
 			);
@@ -2748,7 +2772,7 @@ function traverseAndGenerate(
 		visited: new Set<string>(),
 		warnings: [],
 		retryZones,
-		activeRetryZone: null,
+		activeRetryZoneStack: [],
 	};
 
 	// Start traversal from the start node
@@ -3269,7 +3293,7 @@ export async function validateNodeCodeSyntax(
 		.filter(
 			(n) =>
 				(n.type === "Transform" && (n.config.code as string)?.trim()) ||
-				(n.type === "Decision" && (n.config.condition as string)?.trim()),
+				n.type === "Decision",
 		)
 		.map(async (node) => {
 			if (node.type === "Transform") {
@@ -3280,9 +3304,12 @@ export async function validateNodeCodeSyntax(
 					);
 				}
 			} else if (node.type === "Decision") {
-				const result = await validateConditionExpression(
-					node.config.condition as string,
-				);
+				const conditionText = (node.config.condition as string)?.trim();
+				if (!conditionText) {
+					errors.push(`"${node.title}": debe tener una condición definida`);
+					return;
+				}
+				const result = await validateConditionExpression(conditionText);
 				if (!result.valid) {
 					errors.push(`"${node.title}": condición inválida — ${result.error}`);
 				}

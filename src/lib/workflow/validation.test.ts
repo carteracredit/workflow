@@ -547,6 +547,41 @@ describe("validateWorkflow", () => {
 				),
 			).toBe(true);
 		});
+
+		it("should error when Decision node has whitespace-only condition", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "decision-1",
+					type: "Decision",
+					title: "Decision",
+					description: "",
+					roles: [],
+					config: { condition: "   " },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "decision-1" &&
+						e.message.includes("condición definida"),
+				),
+			).toBe(true);
+		});
 	});
 
 	describe("End node validation", () => {
