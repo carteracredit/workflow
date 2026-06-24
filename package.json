@@ -1,6 +1,6 @@
 {
 	"name": "workflow",
-	"version": "1.3.0-rc.35",
+	"version": "1.3.0-rc.36",
 	"description": "Build a full-stack web application with Next.js.",
 	"cloudflare": {
 		"label": "Next.js Framework Starter",

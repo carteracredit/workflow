@@ -1,3 +1,10 @@
+# [1.3.0-rc.36](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.35...v1.3.0-rc.36) (2026-06-24)
+
+
+### Features
+
+* enhance workflow code generation and validation for Decision nodes ([9d6caa5](https://github.com/carteracredit/workflow/commit/9d6caa5a93cd570595f5b9a983d9d3ce24f37b2d))
+
 # [1.3.0-rc.35](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.34...v1.3.0-rc.35) (2026-06-11)
 
 
