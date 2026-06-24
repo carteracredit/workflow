@@ -255,7 +255,10 @@ export function validateWorkflow(
 			});
 		}
 
-		if (node.type === "Decision" && !node.config.condition) {
+		if (
+			node.type === "Decision" &&
+			!(node.config.condition as string)?.trim()
+		) {
 			errors.push({
 				nodeId: node.id,
 				message: `"${node.title}" debe tener una condición definida`,
