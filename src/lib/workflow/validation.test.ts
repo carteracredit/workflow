@@ -584,6 +584,133 @@ describe("validateWorkflow", () => {
 		});
 	});
 
+	describe("Duplicate title validation", () => {
+		it("should error when two nodes of the same type share a title", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "cp-1",
+					type: "Checkpoint",
+					title: "Checkpoint",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "cp-2",
+					type: "Checkpoint",
+					title: "Checkpoint",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 200, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const dupErrors = errors.filter((e) =>
+				e.message.includes("nombre duplicado"),
+			);
+			expect(dupErrors.length).toBe(2);
+			expect(dupErrors.some((e) => e.nodeId === "cp-1")).toBe(true);
+			expect(dupErrors.some((e) => e.nodeId === "cp-2")).toBe(true);
+		});
+
+		it("should not error when nodes of different types share a title", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "cp-1",
+					type: "Checkpoint",
+					title: "Shared Name",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Shared Name",
+					description: "",
+					roles: ["client"],
+					config: { formId: "f1" },
+					position: { x: 200, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const dupErrors = errors.filter((e) =>
+				e.message.includes("nombre duplicado"),
+			);
+			expect(dupErrors.length).toBe(0);
+		});
+
+		it("should not flag Start or End nodes for duplicates", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "end-1",
+					type: "End",
+					title: "End",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [
+				{
+					id: "e1",
+					from: "start-1",
+					to: "end-1",
+					label: null,
+				},
+			];
+
+			const errors = validateWorkflow(nodes, edges);
+			const dupErrors = errors.filter((e) =>
+				e.message.includes("nombre duplicado"),
+			);
+			expect(dupErrors.length).toBe(0);
+		});
+	});
+
 	describe("End node validation", () => {
 		it("should error when no End or Reject nodes exist", () => {
 			const nodes: WorkflowNode[] = [

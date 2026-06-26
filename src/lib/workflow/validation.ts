@@ -68,7 +68,12 @@ export function validateWorkflow(
 	}
 
 	// Validación 2: Form, Challenge y Promotion requieren al menos un rol
-	const NODES_WITH_REQUIRED_ROLES = ["Form", "Challenge", "Promotion"];
+	const NODES_WITH_REQUIRED_ROLES = [
+		"Form",
+		"Challenge",
+		"Promotion",
+		"AddCard",
+	];
 	nodes.forEach((node) => {
 		if (
 			NODES_WITH_REQUIRED_ROLES.includes(node.type) &&
@@ -101,6 +106,7 @@ export function validateWorkflow(
 		"Form",
 		"Challenge",
 		"Promotion",
+		"AddCard",
 	];
 	nodes.forEach((node) => {
 		if (
@@ -244,6 +250,35 @@ export function validateWorkflow(
 			}
 		}
 	});
+
+	// Validación: Títulos duplicados dentro del mismo tipo de nodo
+	const titlesByType = new Map<string, Map<string, WorkflowNode[]>>();
+	for (const node of nodes) {
+		if (node.type === "Start" || node.type === "End") continue;
+		const trimmedTitle = node.title.trim();
+		if (!trimmedTitle) continue;
+		if (!titlesByType.has(node.type)) {
+			titlesByType.set(node.type, new Map());
+		}
+		const typeMap = titlesByType.get(node.type)!;
+		if (!typeMap.has(trimmedTitle)) {
+			typeMap.set(trimmedTitle, []);
+		}
+		typeMap.get(trimmedTitle)!.push(node);
+	}
+	for (const [, typeMap] of titlesByType) {
+		for (const [title, dupes] of typeMap) {
+			if (dupes.length > 1) {
+				for (const node of dupes) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${title}" tiene un nombre duplicado — cada nodo debe tener un título único`,
+						severity: "error",
+					});
+				}
+			}
+		}
+	}
 
 	// Validación 6: Configuración específica por tipo
 	nodes.forEach((node) => {

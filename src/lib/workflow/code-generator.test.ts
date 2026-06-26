@@ -5911,3 +5911,97 @@ describe("Nested Checkpoints (nested retry zones)", () => {
 		}
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Multiple Checkpoints with the same title (duplicate label prevention)
+// ---------------------------------------------------------------------------
+describe("Multiple Checkpoints with identical titles", () => {
+	it("generates unique retryVarNames when checkpoints share the same title", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "cp1", type: "Checkpoint", title: "Checkpoint" }),
+			createNode({ id: "cp2", type: "Checkpoint", title: "Checkpoint" }),
+			createNode({ id: "cp3", type: "Checkpoint", title: "Checkpoint" }),
+			createNode({
+				id: "rej1",
+				type: "Reject",
+				title: "Rej 1",
+				config: { allowRetry: true, maxRetries: 2 },
+			}),
+			createNode({
+				id: "rej2",
+				type: "Reject",
+				title: "Rej 2",
+				config: { allowRetry: true, maxRetries: 3 },
+			}),
+			createNode({
+				id: "rej3",
+				type: "Reject",
+				title: "Rej 3",
+				config: { allowRetry: true, maxRetries: 1 },
+			}),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp1"),
+			createEdge("rej1", "cp1"),
+			createEdge("rej2", "cp2"),
+			createEdge("rej3", "cp3"),
+		];
+		const zones = detectRetryZones(nodes, edges);
+		expect(zones).toHaveLength(3);
+
+		const varNames = zones.map((z) => z.retryVarName);
+		const unique = new Set(varNames);
+		expect(unique.size).toBe(3);
+	});
+
+	it("generates valid code without duplicate labels for same-title checkpoints", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "cp1", type: "Checkpoint", title: "Checkpoint" }),
+			createNode({
+				id: "challenge1",
+				type: "Challenge",
+				title: "Challenge 1",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({
+				id: "rej1",
+				type: "Reject",
+				title: "Rej 1",
+				config: { allowRetry: true, maxRetries: 2 },
+			}),
+			createNode({ id: "cp2", type: "Checkpoint", title: "Checkpoint" }),
+			createNode({
+				id: "challenge2",
+				type: "Challenge",
+				title: "Challenge 2",
+				config: { challengeType: "acceptance" },
+			}),
+			createNode({
+				id: "rej2",
+				type: "Reject",
+				title: "Rej 2",
+				config: { allowRetry: true, maxRetries: 3 },
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "cp1"),
+			createEdge("cp1", "challenge1"),
+			createEdge("challenge1", "end", { fromPort: "top" }),
+			createEdge("challenge1", "rej1", { fromPort: "bottom" }),
+			createEdge("rej1", "cp1"),
+			createEdge("cp2", "challenge2"),
+			createEdge("challenge2", "end", { fromPort: "top" }),
+			createEdge("challenge2", "rej2", { fromPort: "bottom" }),
+			createEdge("rej2", "cp2"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		const labeledLoops = [...code.matchAll(/(\w+):\s*for\s*\(let (\w+)/g)];
+		const loopLabels = labeledLoops.map((m) => m[1]);
+		const uniqueLabels = new Set(loopLabels);
+		expect(uniqueLabels.size).toBe(loopLabels.length);
+	});
+});

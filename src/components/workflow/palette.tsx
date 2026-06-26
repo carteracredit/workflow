@@ -9,6 +9,7 @@ import {
 	createDefaultPromotionConfig,
 	createDefaultNLSConfig,
 	createDefaultExternalLinkConfig,
+	createDefaultAddCardConfig,
 } from "@/lib/workflow/types";
 import {
 	XCircle,
@@ -26,6 +27,7 @@ import {
 	BadgePercent,
 	Banknote,
 	ExternalLink,
+	CreditCard,
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 import {
@@ -46,6 +48,7 @@ const NODES_WITH_VISIBILITY_ROLES = new Set<NodeType>([
 	"FlagChange",
 	"NLS",
 	"ExternalLink",
+	"AddCard",
 ]);
 
 interface PaletteProps {
@@ -156,6 +159,13 @@ const NODE_CATEGORIES = [
 				bgColor: "var(--node-bg-external-link)",
 				iconColorVar: "--node-icon-external-link",
 			},
+			{
+				type: "AddCard" as NodeType,
+				labelKey: "palette.nodeAddCard",
+				icon: <CreditCard className="h-4 w-4" />,
+				bgColor: "var(--node-bg-add-card)",
+				iconColorVar: "--node-icon-add-card",
+			},
 		],
 	},
 	{
@@ -208,6 +218,9 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	}
 	if (type === "ExternalLink") {
 		return createDefaultExternalLinkConfig();
+	}
+	if (type === "AddCard") {
+		return createDefaultAddCardConfig();
 	}
 	return {};
 };

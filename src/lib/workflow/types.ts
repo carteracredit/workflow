@@ -13,7 +13,8 @@ export type NodeType =
 	| "Join"
 	| "FlagChange"
 	| "NLS"
-	| "ExternalLink";
+	| "ExternalLink"
+	| "AddCard";
 
 export type CheckpointType = "normal" | "safe";
 
@@ -274,6 +275,24 @@ export function createDefaultPromotionConfig(): PromotionNodeConfig {
 	return { commission: DEFAULT_PROMOTION_COMMISSION };
 }
 
+export interface AddCardNodeConfig extends Record<string, unknown> {
+	acceptedBrands: string[];
+	requireAddress: boolean;
+}
+
+export function createDefaultAddCardConfig(): AddCardNodeConfig {
+	return {
+		acceptedBrands: ["visa", "mastercard", "amex", "discover"],
+		requireAddress: false,
+	};
+}
+
+export function isAddCardNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "AddCard"; config: AddCardNodeConfig } {
+	return node.type === "AddCard";
+}
+
 export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"Form",
 	"Decision",
@@ -284,6 +303,7 @@ export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"Promotion",
 	"NLS",
 	"ExternalLink",
+	"AddCard",
 ];
 
 export interface StaleTimeoutConfig {
