@@ -1736,7 +1736,6 @@ export function PropertiesPanel({
 	const hasRoles =
 		NODES_WITH_ROLES.includes(selectedNode.type) ||
 		NODES_WITH_VISIBILITY_ROLES.includes(selectedNode.type);
-	const hasAdvanced = supportsStaleTimeout;
 	const defaultTab = hasConfig ? "config" : "general";
 
 	return (
@@ -1854,19 +1853,11 @@ export function PropertiesPanel({
 							{t("propertiesPanel.tabs.roles")}
 						</TabsTrigger>
 					)}
-					{hasAdvanced && (
-						<TabsTrigger value="advanced">
-							{t("propertiesPanel.tabs.advanced")}
-						</TabsTrigger>
-					)}
 				</TabsList>
 
-				{/* ── General ─────────────────────────────────────────────────────── */}
-				<TabsContent
-					value="general"
-					className="flex-1 min-h-0 mt-0 overflow-hidden"
-				>
-					<ScrollArea className="h-full overflow-x-hidden">
+				<ScrollArea className="flex-1 min-h-0 overflow-x-hidden">
+					{/* ── General ─────────────────────────────────────────────────────── */}
+					<TabsContent value="general" className="mt-0">
 						<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
 							{/* Title (Bilingual) */}
 							<div className="space-y-2 w-full">
@@ -2083,16 +2074,11 @@ export function PropertiesPanel({
 								</div>
 							</div>
 						</div>
-					</ScrollArea>
-				</TabsContent>
+					</TabsContent>
 
-				{/* ── Config ──────────────────────────────────────────────────────── */}
-				{hasConfig && (
-					<TabsContent
-						value="config"
-						className="flex-1 min-h-0 mt-0 overflow-hidden"
-					>
-						<ScrollArea className="h-full overflow-x-hidden">
+					{/* ── Config ──────────────────────────────────────────────────────── */}
+					{hasConfig && (
+						<TabsContent value="config" className="mt-0">
 							<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
 								{/* Start node: case-level fixed inputs + user-defined custom fields */}
 								{selectedNode.type === "Start" && (
@@ -6982,18 +6968,89 @@ export function PropertiesPanel({
 											</div>
 										);
 									})()}
-							</div>
-						</ScrollArea>
-					</TabsContent>
-				)}
 
-				{/* ── Roles ───────────────────────────────────────────────────────── */}
-				{hasRoles && (
-					<TabsContent
-						value="roles"
-						className="flex-1 min-h-0 mt-0 overflow-hidden"
-					>
-						<ScrollArea className="h-full overflow-x-hidden">
+								{/* Stale Timeout — al final de Config para todos los nodos que lo soportan */}
+								{supportsStaleTimeout && (
+									<div className="space-y-3 rounded-md border border-border/60 p-3">
+										<div className="flex items-center justify-between gap-4">
+											<div>
+												<FieldLabel
+													htmlFor="stale-toggle"
+													description={t("propertiesPanel.staleTimeoutDesc")}
+												>
+													{t("propertiesPanel.staleTimeoutLabel")}
+												</FieldLabel>
+											</div>
+											<Switch
+												id="stale-toggle"
+												checked={Boolean(selectedNode.staleTimeout)}
+												onCheckedChange={handleStaleToggle}
+											/>
+										</div>
+										{selectedNode.staleTimeout && (
+											<div className="grid gap-3 md:grid-cols-2">
+												<div className="space-y-1">
+													<Label htmlFor="stale-duration">
+														{t("propertiesPanel.staleDurationLabel")}
+													</Label>
+													<Input
+														id="stale-duration"
+														type="number"
+														min={1}
+														value={selectedNode.staleTimeout.value}
+														onChange={(event) =>
+															handleStaleDurationChange(event.target.value)
+														}
+														onBlur={(event) =>
+															handleStaleDurationBlur(event.target.value)
+														}
+													/>
+												</div>
+												<div className="space-y-1">
+													<Label htmlFor="stale-unit">
+														{t("propertiesPanel.staleUnitLabel")}
+													</Label>
+													<Select
+														value={selectedNode.staleTimeout.unit}
+														onValueChange={(value) =>
+															handleStaleUnitChange(
+																value as StaleTimeoutConfig["unit"],
+															)
+														}
+														data-testid="stale-unit-select"
+													>
+														<SelectTrigger id="stale-unit">
+															<SelectValue
+																placeholder={t(
+																	"propertiesPanel.staleUnitPlaceholder",
+																)}
+															/>
+														</SelectTrigger>
+														<SelectContent>
+															{STALE_TIMEOUT_UNITS.map((option) => (
+																<SelectItem
+																	key={option.value}
+																	value={option.value}
+																>
+																	{option.value === "hours"
+																		? t("propertiesPanel.staleUnitHours")
+																		: t("propertiesPanel.staleUnitDays")}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+											</div>
+										)}
+									</div>
+								)}
+							</div>
+						</TabsContent>
+					)}
+
+					{/* ── Roles ───────────────────────────────────────────────────────── */}
+					{hasRoles && (
+						<TabsContent value="roles" className="mt-0">
 							<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
 								{NODES_WITH_ROLES.includes(selectedNode.type) && (
 									<div className="space-y-2">
@@ -7072,96 +7129,9 @@ export function PropertiesPanel({
 									</div>
 								)}
 							</div>
-						</ScrollArea>
-					</TabsContent>
-				)}
-
-				{/* ── Advanced ────────────────────────────────────────────────────── */}
-				{hasAdvanced && (
-					<TabsContent
-						value="advanced"
-						className="flex-1 min-h-0 mt-0 overflow-hidden"
-					>
-						<ScrollArea className="h-full overflow-x-hidden">
-							<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
-								{supportsStaleTimeout && (
-									<div className="space-y-3 rounded-md border border-border/60 p-3">
-										<div className="flex items-center justify-between gap-4">
-											<div>
-												<FieldLabel
-													htmlFor="stale-toggle"
-													description={t("propertiesPanel.staleTimeoutDesc")}
-												>
-													{t("propertiesPanel.staleTimeoutLabel")}
-												</FieldLabel>
-											</div>
-											<Switch
-												id="stale-toggle"
-												checked={Boolean(selectedNode.staleTimeout)}
-												onCheckedChange={handleStaleToggle}
-											/>
-										</div>
-										{selectedNode.staleTimeout && (
-											<div className="grid gap-3 md:grid-cols-2">
-												<div className="space-y-1">
-													<Label htmlFor="stale-duration">
-														{t("propertiesPanel.staleDurationLabel")}
-													</Label>
-													<Input
-														id="stale-duration"
-														type="number"
-														min={1}
-														value={selectedNode.staleTimeout.value}
-														onChange={(event) =>
-															handleStaleDurationChange(event.target.value)
-														}
-														onBlur={(event) =>
-															handleStaleDurationBlur(event.target.value)
-														}
-													/>
-												</div>
-												<div className="space-y-1">
-													<Label htmlFor="stale-unit">
-														{t("propertiesPanel.staleUnitLabel")}
-													</Label>
-													<Select
-														value={selectedNode.staleTimeout.unit}
-														onValueChange={(value) =>
-															handleStaleUnitChange(
-																value as StaleTimeoutConfig["unit"],
-															)
-														}
-														data-testid="stale-unit-select"
-													>
-														<SelectTrigger id="stale-unit">
-															<SelectValue
-																placeholder={t(
-																	"propertiesPanel.staleUnitPlaceholder",
-																)}
-															/>
-														</SelectTrigger>
-														<SelectContent>
-															{STALE_TIMEOUT_UNITS.map((option) => (
-																<SelectItem
-																	key={option.value}
-																	value={option.value}
-																>
-																	{option.value === "hours"
-																		? t("propertiesPanel.staleUnitHours")
-																		: t("propertiesPanel.staleUnitDays")}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-												</div>
-											</div>
-										)}
-									</div>
-								)}
-							</div>
-						</ScrollArea>
-					</TabsContent>
-				)}
+						</TabsContent>
+					)}
+				</ScrollArea>
 			</Tabs>
 		</div>
 	);
