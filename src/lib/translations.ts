@@ -911,6 +911,33 @@ export const translations = {
 			dropboxSignConfigTitle: "Dropbox Sign Configuration",
 			dropboxSignRefreshTooltip:
 				"Reload templates and fields from Dropbox Sign",
+			// Tab labels
+			tabs: {
+				general: "General",
+				config: "Config",
+				roles: "Roles",
+				advanced: "Advanced",
+			},
+			// CollapsibleSection subtitles for heavy nodes
+			sectionRequest: "Request",
+			sectionAuth: "Authentication",
+			sectionHeaders: "Headers",
+			sectionBody: "Body",
+			sectionResponse: "Response",
+			sectionOutputSchema: "Output Schema",
+			sectionDropboxSign: "Dropbox Sign",
+			sectionDocument: "Document",
+			sectionSigners: "Signers",
+			sectionCustomFields: "Custom Fields",
+			sectionLabels: "UI Labels (optional)",
+			sectionMode: "Mode",
+			sectionFormConfig: "Form Configuration",
+			sectionChallengeConfig: "Challenge Configuration",
+			sectionChannels: "Channels",
+			sectionRecipient: "Recipient",
+			sectionLinkTtl: "Link Expiration",
+			sectionEmailConfig: "Email",
+			sectionSmsConfig: "SMS",
 		},
 		publishModal: {
 			title: "Publish Workflow",
@@ -1996,6 +2023,33 @@ export const translations = {
 			dropboxSignConfigTitle: "Configuración Dropbox Sign",
 			dropboxSignRefreshTooltip:
 				"Recargar templates y campos desde Dropbox Sign",
+			// Tab labels
+			tabs: {
+				general: "General",
+				config: "Configuración",
+				roles: "Roles",
+				advanced: "Avanzado",
+			},
+			// CollapsibleSection subtitles for heavy nodes
+			sectionRequest: "Solicitud",
+			sectionAuth: "Autenticación",
+			sectionHeaders: "Encabezados",
+			sectionBody: "Cuerpo",
+			sectionResponse: "Respuesta",
+			sectionOutputSchema: "Esquema de Salida",
+			sectionDropboxSign: "Dropbox Sign",
+			sectionDocument: "Documento",
+			sectionSigners: "Firmantes",
+			sectionCustomFields: "Campos Personalizados",
+			sectionLabels: "Etiquetas UI (opcional)",
+			sectionMode: "Modo",
+			sectionFormConfig: "Configuración del Formulario",
+			sectionChallengeConfig: "Configuración del Desafío",
+			sectionChannels: "Canales",
+			sectionRecipient: "Destinatario",
+			sectionLinkTtl: "Expiración del Enlace",
+			sectionEmailConfig: "Email",
+			sectionSmsConfig: "SMS",
 		},
 
 		// Publish Modal

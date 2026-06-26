@@ -836,3 +836,81 @@ export const NlsNodeAdvancePeriod: Story = {
 		selectedEdges: [],
 	},
 };
+
+// ─── Tabs Layout Stories ───────────────────────────────────────────────────────
+
+/** API node: muestra las 4 pestañas + secciones colapsables en Config */
+export const ApiNodeTabs: Story = {
+	name: "Tabs — API (4 pestañas + colapsables)",
+	args: {
+		selectedNodes: [
+			{
+				id: "api-tabs-demo",
+				type: "API",
+				title: "Consultar Buró",
+				description: "Consulta el historial crediticio del solicitante",
+				roles: [],
+				visibilityRoles: ["credit_agent", "org_manager"],
+				staleTimeout: null,
+				position: { x: 300, y: 200 },
+				groupId: null,
+				config: {
+					method: "POST",
+					url: "https://api.buro.example.com/v1/query",
+					authConfig: {
+						type: "bearer",
+						bearerToken: "env:BURO_TOKEN",
+					},
+					customHeaders: [{ key: "X-Client-ID", value: "env:CLIENT_ID" }],
+					bodyConfig: {
+						mode: "raw-json",
+						rawJson: '{"applicantId": "${startNode.caseId}"}',
+					},
+					responseConfig: { extractPath: "payload.score" },
+					failureHandling: {
+						onFailure: "retry",
+						maxRetries: 2,
+						retryCount: 0,
+						cacheStrategy: "always-execute",
+						timeout: 30000,
+					},
+					outputSchema: {
+						properties: [
+							{
+								id: "score",
+								name: "score",
+								type: "number",
+								description: "Credit score",
+							},
+						],
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
+/** Challenge-signature: muestra Config (Dropbox Sign colapsable) + Avanzado (retries) */
+export const ChallengeSignatureTabs: Story = {
+	name: "Tabs — Challenge Firma (Config + Avanzado)",
+	args: {
+		selectedNodes: [
+			{
+				...signatureChallengeNode,
+				id: "sig-tabs-demo",
+				title: "Firma del Contrato",
+				staleTimeout: null,
+				config: {
+					...signatureChallengeNode.config,
+					retries: {
+						enabled: true,
+						maxRetries: 2,
+						roles: ["credit_agent"],
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
