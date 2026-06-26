@@ -1,3 +1,11 @@
+# [1.3.0-rc.37](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.36...v1.3.0-rc.37) (2026-06-26)
+
+
+### Features
+
+* add AddCard node support in workflow ([0fc99fe](https://github.com/carteracredit/workflow/commit/0fc99fefb07ee2743ea8df6fa138926a0680b159))
+* enhance workflow validation and code generation for duplicate titles ([7e79c50](https://github.com/carteracredit/workflow/commit/7e79c505721ec56be80c66d3253224ee1ab21f9a))
+
 # [1.3.0-rc.36](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.35...v1.3.0-rc.36) (2026-06-24)
 
 
