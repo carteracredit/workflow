@@ -230,6 +230,7 @@ body {
 	--node-bg-promotion: #fdf2f8;
 	--node-bg-nls: #ecfdf5;
 	--node-bg-external-link: #fff7ed;
+	--node-bg-add-card: #eff6ff;
 	--node-bg-status: #f0eef8;
 
 	/* Icon colors - same as node colors in light theme */
@@ -248,6 +249,7 @@ body {
 	--node-icon-promotion: #be185d;
 	--node-icon-nls: #059669;
 	--node-icon-external-link: #c2410c;
+	--node-icon-add-card: #2563eb;
 	--node-icon-status: #5a4fcf;
 
 	--node-safe-surface: #ecfdf5;
@@ -277,6 +279,7 @@ body {
 	--node-icon-promotion: #f9a8d4;
 	--node-icon-nls: #6ee7b7;
 	--node-icon-external-link: #fb923c;
+	--node-icon-add-card: #60a5fa;
 	--node-icon-status: #a29bfe;
 
 	/* Icon container backgrounds - same colors as icons but with 12% opacity */
@@ -295,6 +298,7 @@ body {
 	--node-bg-promotion: rgba(249, 168, 212, 0.12);
 	--node-bg-nls: rgba(110, 231, 183, 0.12);
 	--node-bg-external-link: rgba(251, 146, 60, 0.12);
+	--node-bg-add-card: rgba(96, 165, 250, 0.12);
 	--node-bg-status: rgba(162, 155, 254, 0.12);
 
 	--node-safe-surface: rgba(4, 120, 87, 0.32);

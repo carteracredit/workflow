@@ -2029,6 +2029,53 @@ function emitPromotionOutputAssignment(
 }
 
 /**
+ * Generate code for an AddCard node.
+ *
+ * Pauses the workflow until the responsible role submits card data
+ * via the cases-svc endpoint. The event `card-added-<stepName>` is
+ * sent by cases-svc after a successful proxy-svc card registration.
+ */
+function generateAddCardStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = isHoisted ? `${varName} = ` : `const ${varName} = `;
+	const eventType = `card-added-${stepName}`;
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	let code = `${indent}// AddCard: ${node.title} (roles: ${roles})\n`;
+	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload: { last4, brand } }) from cases-svc\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		eventType,
+		retryVarName,
+	);
+	code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
+	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
+	code += `${indent})).payload as Record<string, unknown>;\n`;
+	code += generateCaseObjectCall(node, indent, varName);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
  * Generate code for a FlagChange node
  */
 function generateFlagChangeStep(
@@ -2418,6 +2465,8 @@ function generateNodeCode(
 			return generateNLSStep(node, indent, retryVar);
 		case "ExternalLink":
 			return generateExternalLinkStep(node, indent, retryVar);
+		case "AddCard":
+			return generateAddCardStep(node, indent, retryVar);
 		case "FlagChange":
 			return generateFlagChangeStep(node, indent, retryVar);
 		case "Join":

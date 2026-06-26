@@ -32,6 +32,7 @@ import {
 	BadgePercent,
 	Banknote,
 	ExternalLink as ExternalLinkIcon,
+	CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
@@ -76,6 +77,7 @@ const NODE_ICONS = {
 	FlagChange: Tag,
 	NLS: Banknote,
 	ExternalLink: ExternalLinkIcon,
+	AddCard: CreditCard,
 };
 
 export const NODE_BG_COLORS = {
@@ -94,6 +96,7 @@ export const NODE_BG_COLORS = {
 	FlagChange: "var(--node-bg-status)",
 	NLS: "var(--node-bg-nls)",
 	ExternalLink: "var(--node-bg-external-link)",
+	AddCard: "var(--node-bg-add-card)",
 };
 
 export const NODE_ICON_COLORS = {
@@ -112,6 +115,7 @@ export const NODE_ICON_COLORS = {
 	FlagChange: "var(--node-icon-status)",
 	NLS: "var(--node-icon-nls)",
 	ExternalLink: "var(--node-icon-external-link)",
+	AddCard: "var(--node-icon-add-card)",
 };
 
 export function NodeRenderer({

@@ -68,7 +68,12 @@ export function validateWorkflow(
 	}
 
 	// Validación 2: Form, Challenge y Promotion requieren al menos un rol
-	const NODES_WITH_REQUIRED_ROLES = ["Form", "Challenge", "Promotion"];
+	const NODES_WITH_REQUIRED_ROLES = [
+		"Form",
+		"Challenge",
+		"Promotion",
+		"AddCard",
+	];
 	nodes.forEach((node) => {
 		if (
 			NODES_WITH_REQUIRED_ROLES.includes(node.type) &&
@@ -101,6 +106,7 @@ export function validateWorkflow(
 		"Form",
 		"Challenge",
 		"Promotion",
+		"AddCard",
 	];
 	nodes.forEach((node) => {
 		if (

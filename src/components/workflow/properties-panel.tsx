@@ -237,7 +237,13 @@ interface PropertiesPanelProps {
 	extraVariableSources?: VariableSourceNode[];
 }
 
-const NODES_WITH_ROLES = ["Form", "Challenge", "Message", "Promotion"];
+const NODES_WITH_ROLES = [
+	"Form",
+	"Challenge",
+	"Message",
+	"Promotion",
+	"AddCard",
+];
 const NODES_WITH_VISIBILITY_ROLES = [
 	"Form",
 	"Challenge",
@@ -250,6 +256,7 @@ const NODES_WITH_VISIBILITY_ROLES = [
 	"FlagChange",
 	"NLS",
 	"ExternalLink",
+	"AddCard",
 ];
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 560;
