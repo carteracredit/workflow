@@ -864,7 +864,7 @@ export function PropertiesPanel({
 	const panelSideClass = position === "left" ? "border-r" : "border-l";
 	const panelWidth = width ?? 320;
 	const panelContainerClass = cn(
-		"border-border bg-card overflow-hidden flex flex-col relative",
+		"border-border bg-card overflow-x-hidden flex flex-col relative",
 		panelSideClass,
 	);
 	const panelContainerStyle = {
@@ -976,7 +976,7 @@ export function PropertiesPanel({
 					</Button>
 				</div>
 
-				<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+				<ScrollArea className="max-h-[calc(100svh-8rem)] overflow-x-hidden">
 					<div className="space-y-4 p-4">
 						{/* Workflow Name (Bilingual) */}
 						<div className="space-y-2">
@@ -1169,7 +1169,7 @@ export function PropertiesPanel({
 					</h2>
 				</div>
 
-				<ScrollArea className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+				<ScrollArea className="max-h-[calc(100svh-8rem)] overflow-x-hidden">
 					<div className="space-y-4 p-4">
 						{/* Edge Label (Bilingual) */}
 						<div className="space-y-2">
@@ -1835,10 +1835,7 @@ export function PropertiesPanel({
 				<h2 className="font-semibold">{t("propertiesPanel.nodePropsTitle")}</h2>
 			</div>
 
-			<Tabs
-				defaultValue={defaultTab}
-				className="flex-1 min-h-0 flex flex-col overflow-hidden"
-			>
+			<Tabs defaultValue={defaultTab} className="flex flex-col">
 				<TabsList className="mx-3 mt-2 mb-0 shrink-0">
 					<TabsTrigger value="general">
 						{t("propertiesPanel.tabs.general")}
@@ -1855,7 +1852,7 @@ export function PropertiesPanel({
 					)}
 				</TabsList>
 
-				<ScrollArea className="flex-1 min-h-0 overflow-x-hidden">
+				<ScrollArea className="max-h-[calc(100svh-8rem)] overflow-x-hidden">
 					{/* ── General ─────────────────────────────────────────────────────── */}
 					<TabsContent value="general" className="mt-0">
 						<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
