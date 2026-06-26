@@ -10,13 +10,19 @@ import type {
 	ExternalLinkNodeConfig,
 } from "./types";
 import { MAX_CHALLENGE_RETRIES, ROLE_OPTIONS } from "./types";
-import { findNearestPreviousCheckpoint } from "./graph-utils";
+import {
+	findNearestPreviousCheckpoint,
+	findUpstreamNodes,
+	buildVariableSourceNodes,
+	type VariableLeafNode,
+	type VariableSourceNode,
+} from "./graph-utils";
 import {
 	validateTransformCode,
 	validateConditionExpression,
 } from "./validate-code";
 import { buildAliasMap } from "./node-alias";
-import { findOrphanedTokens } from "./migrate-tokens";
+import { findOrphanedTokens, findInvalidPathTokens } from "./migrate-tokens";
 
 type ChallengeResult = "accepted" | "rejected" | "failed";
 
@@ -849,9 +855,13 @@ export function validateWorkflow(
 	}
 
 	// Validación: tokens huérfanos (referencias a alias que no existen en el workflow)
+	// y validación de paths completos contra el outputSchema de los nodos upstream.
 	{
 		const aliasMap = buildAliasMap(nodes);
+		const knownAliases = new Set(aliasMap.values());
+
 		for (const node of nodes) {
+			// 1. Tokens cuyo alias raíz no existe (nodo eliminado o renombrado)
 			const orphans = findOrphanedTokens(node, aliasMap);
 			if (orphans.length > 0) {
 				const uniqueOrphans = [...new Set(orphans)];
@@ -861,10 +871,45 @@ export function validateWorkflow(
 					severity: "error",
 				});
 			}
+
+			// 2. Tokens con alias conocido pero path inválido en el outputSchema upstream
+			const upstreamNodes = findUpstreamNodes(node.id, nodes, edges);
+			const sources = buildVariableSourceNodes(upstreamNodes, {
+				allNodes: nodes,
+			});
+			const validPaths = collectVariablePaths(sources);
+
+			const invalidPaths = findInvalidPathTokens(
+				node,
+				validPaths,
+				knownAliases,
+			);
+			if (invalidPaths.length > 0) {
+				const unique = [...new Set(invalidPaths)];
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": referencia(s) a propiedad(es) que no existen en el schema del nodo origen — ${unique.join(", ")}. Revisa el nombre de la propiedad o el schema del nodo de origen.`,
+					severity: "error",
+				});
+			}
 		}
 	}
 
 	return errors;
+}
+
+function collectVariablePaths(sources: VariableSourceNode[]): Set<string> {
+	const paths = new Set<string>();
+
+	const walkLeaf = (leaves: VariableLeafNode[]): void => {
+		for (const leaf of leaves) {
+			paths.add(leaf.path);
+			if (leaf.children) walkLeaf(leaf.children);
+		}
+	};
+
+	for (const src of sources) walkLeaf(src.variables);
+	return paths;
 }
 
 function buildAdjacencyMaps(edges: WorkflowEdge[]) {
