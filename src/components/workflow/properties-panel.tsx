@@ -864,7 +864,7 @@ export function PropertiesPanel({
 	const panelSideClass = position === "left" ? "border-r" : "border-l";
 	const panelWidth = width ?? 320;
 	const panelContainerClass = cn(
-		"border-border bg-card overflow-x-hidden flex flex-col relative rounded-b-2xl shadow-xl",
+		"border-border bg-card overflow-x-hidden flex flex-col relative rounded-2xl shadow-xl",
 		panelSideClass,
 	);
 	const panelContainerStyle = {
