@@ -533,14 +533,22 @@ export function detectRetryZones(
 	}
 
 	const zones: RetryZone[] = [];
+	const usedVarNames = new Set<string>();
 	for (const [cpId, data] of zoneMap) {
 		const cpSlug = createVariableName(data.checkpointNode.title || cpId, "cp");
+		let retryVarName = `retry_${cpSlug}`;
+		let counter = 1;
+		while (usedVarNames.has(retryVarName)) {
+			retryVarName = `retry_${cpSlug}_${counter}`;
+			counter++;
+		}
+		usedVarNames.add(retryVarName);
 		zones.push({
 			checkpointNodeId: cpId,
 			rejectNodeIds: data.rejectNodeIds,
 			maxRetries: data.unlimited ? 0 : data.maxRetries,
 			unlimited: data.unlimited,
-			retryVarName: `retry_${cpSlug}`,
+			retryVarName,
 		});
 	}
 
