@@ -861,11 +861,9 @@ export function PropertiesPanel({
 		[selectedNode, onUpdateNode],
 	);
 
-	const panelSideClass = position === "left" ? "border-r" : "border-l";
 	const panelWidth = width ?? 320;
 	const panelContainerClass = cn(
-		"border-border bg-card overflow-x-hidden flex flex-col relative rounded-2xl shadow-xl",
-		panelSideClass,
+		"border border-border bg-card overflow-x-hidden flex flex-col relative rounded-2xl shadow-xl",
 	);
 	const panelContainerStyle = {
 		width: panelWidth,
@@ -976,7 +974,7 @@ export function PropertiesPanel({
 					</Button>
 				</div>
 
-				<ScrollArea className="max-h-[calc(100svh-8rem)] overflow-x-hidden">
+				<div className="overflow-y-auto overflow-x-hidden overscroll-contain max-h-[calc(100svh-8rem)]">
 					<div className="space-y-4 p-4">
 						{/* Workflow Name (Bilingual) */}
 						<div className="space-y-2">
@@ -1133,7 +1131,7 @@ export function PropertiesPanel({
 							<p className="mt-1">{t("propertiesPanel.workflowInfoBody")}</p>
 						</div>
 					</div>
-				</ScrollArea>
+				</div>
 			</div>
 		);
 	}
@@ -1169,7 +1167,7 @@ export function PropertiesPanel({
 					</h2>
 				</div>
 
-				<ScrollArea className="max-h-[calc(100svh-8rem)] overflow-x-hidden">
+				<div className="overflow-y-auto overflow-x-hidden overscroll-contain max-h-[calc(100svh-8rem)]">
 					<div className="space-y-4 p-4">
 						{/* Edge Label (Bilingual) */}
 						<div className="space-y-2">
@@ -1320,7 +1318,7 @@ export function PropertiesPanel({
 							</ul>
 						</div>
 					</div>
-				</ScrollArea>
+				</div>
 			</div>
 		);
 	}
@@ -1852,7 +1850,7 @@ export function PropertiesPanel({
 					)}
 				</TabsList>
 
-				<ScrollArea className="max-h-[calc(100svh-8rem)] overflow-x-hidden">
+				<div className="overflow-y-auto overflow-x-hidden overscroll-contain max-h-[calc(100svh-12rem)]">
 					{/* ── General ─────────────────────────────────────────────────────── */}
 					<TabsContent value="general" className="mt-0">
 						<div className="space-y-4 p-4 min-w-0 max-w-full overflow-hidden">
@@ -7128,7 +7126,7 @@ export function PropertiesPanel({
 							</div>
 						</TabsContent>
 					)}
-				</ScrollArea>
+				</div>
 			</Tabs>
 		</div>
 	);
