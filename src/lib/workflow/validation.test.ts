@@ -2184,3 +2184,168 @@ describe("NLS node validation", () => {
 		});
 	});
 });
+
+// ── Invalid variable path validation ─────────────────────────────────────────
+
+describe("validateWorkflow – invalid variable paths", () => {
+	// Converts a camelCase alias to a spaced title so that titleToCamelCase
+	// correctly reverses it back to the original alias.
+	// e.g. "addressForm" → "Address Form" → alias "addressForm"
+	function aliasToTitle(alias: string): string {
+		const spaced = alias.replace(/([A-Z])/g, " $1");
+		return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+	}
+
+	function makeFormNode(id: string, alias: string): WorkflowNode {
+		return {
+			id,
+			type: "Form",
+			title: aliasToTitle(alias),
+			description: "",
+			roles: [],
+			config: {
+				formId: "form-abc",
+				outputSchema: {
+					name: alias,
+					properties: [
+						{
+							id: "prop-addr",
+							name: "address",
+							type: "object",
+							properties: [
+								{ id: "prop-street", name: "street", type: "string" },
+								{ id: "prop-city", name: "city", type: "string" },
+							],
+						},
+					],
+				},
+			},
+			position: { x: 100, y: 0 },
+			groupId: null,
+		};
+	}
+
+	function makeTransformNode(id: string, code: string): WorkflowNode {
+		return {
+			id,
+			type: "Transform",
+			title: "Transformar",
+			description: "",
+			roles: [],
+			config: { code },
+			position: { x: 200, y: 0 },
+			groupId: null,
+		};
+	}
+
+	const startNode: WorkflowNode = {
+		id: "start",
+		type: "Start",
+		title: "Start",
+		description: "",
+		roles: [],
+		config: {},
+		position: { x: 0, y: 0 },
+		groupId: null,
+	};
+
+	const endNode: WorkflowNode = {
+		id: "end",
+		type: "End",
+		title: "End",
+		description: "",
+		roles: [],
+		config: {},
+		position: { x: 400, y: 0 },
+		groupId: null,
+	};
+
+	it("should not error when path is valid in upstream schema", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { street: \${addressForm.address.street} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(errors.filter((e) => e.nodeId === "tx-1")).toHaveLength(0);
+	});
+
+	it("should error when referencing a non-existent nested property (typo)", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { street: \${addressForm.addr.street} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		const txErrors = errors.filter((e) => e.nodeId === "tx-1");
+		expect(txErrors.length).toBeGreaterThan(0);
+		expect(
+			txErrors.some((e) => e.message.includes("\${addressForm.addr.street}")),
+		).toBe(true);
+	});
+
+	it("should error when accessing a leaf property as an object", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { zip: \${addressForm.address.street.zip} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		const txErrors = errors.filter((e) => e.nodeId === "tx-1");
+		expect(txErrors.length).toBeGreaterThan(0);
+	});
+
+	it("should not error for secret references regardless of schema", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { key: \${secret.MY_API_KEY} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(errors.filter((e) => e.nodeId === "tx-1")).toHaveLength(0);
+	});
+
+	it("should not flag unknown aliases (those are handled by findOrphanedTokens)", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { x: \${ghostNode.prop} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		const txErrors = errors.filter((e) => e.nodeId === "tx-1");
+		const hasOrphanError = txErrors.some((e) => e.message.includes("huérfana"));
+		const hasPathError = txErrors.some((e) => e.message.includes("propiedad"));
+		expect(hasOrphanError).toBe(true);
+		expect(hasPathError).toBe(false);
+	});
+});

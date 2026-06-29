@@ -140,7 +140,10 @@ describe("validateWorkflow - ExternalLink node", () => {
 		const { nodes, edges } = makeMinimalWorkflow({
 			mode: "form",
 			channels: ["email"],
-			recipient: { source: "variable", emailExpression: "${start.email}" },
+			recipient: {
+				source: "variable",
+				emailExpression: "${start.clientEmail}",
+			},
 			emailConfig: {
 				templateName: "my-template",
 				subject: "Hello",
@@ -177,7 +180,7 @@ describe("validateWorkflow - ExternalLink node", () => {
 					channels: ["email"],
 					recipient: {
 						source: "variable",
-						emailExpression: "${start.email}",
+						emailExpression: "${start.clientEmail}",
 					},
 					emailConfig: {
 						templateName: "my-template",

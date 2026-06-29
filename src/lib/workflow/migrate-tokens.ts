@@ -190,6 +190,64 @@ export function findOrphanedTokens(
 }
 
 /**
+ * Detects all `${<alias>.prop...}` tokens in a node's config whose path does
+ * not exist in the provided set of valid paths.
+ *
+ * Only checks tokens where the first segment (alias) IS known — unresolvable
+ * aliases are already reported by `findOrphanedTokens`. This function focuses
+ * on typos / structural errors in the rest of the path.
+ *
+ * `validPaths` should be built from `buildVariableSourceNodes` for the
+ * upstream nodes of the consumer being validated.
+ *
+ * Returns an array of the invalid token strings (e.g. `${form.address.street}`).
+ */
+export function findInvalidPathTokens(
+	node: WorkflowNode,
+	validPaths: Set<string>,
+	knownAliases: Set<string>,
+): string[] {
+	const invalid: string[] = [];
+
+	function check(str: string | undefined) {
+		if (!str) return;
+		const regex = /\$\{([^}]+)\}/g;
+		let m: RegExpExecArray | null;
+		while ((m = regex.exec(str)) !== null) {
+			const path = m[1].trim();
+			if (/^secret\./.test(path)) continue;
+			const dotIdx = path.indexOf(".");
+			const firstSeg = dotIdx >= 0 ? path.slice(0, dotIdx) : path;
+			// Skip tokens whose alias is unknown — findOrphanedTokens covers those
+			if (!knownAliases.has(firstSeg)) continue;
+			// The alias is known but the full path is not in the schema
+			if (!validPaths.has(path)) {
+				invalid.push(m[0]);
+			}
+		}
+	}
+
+	function checkConfig(obj: Record<string, unknown>) {
+		for (const [, val] of Object.entries(obj)) {
+			if (typeof val === "string") {
+				check(val);
+			} else if (Array.isArray(val)) {
+				for (const item of val) {
+					if (typeof item === "string") check(item);
+					else if (item && typeof item === "object")
+						checkConfig(item as Record<string, unknown>);
+				}
+			} else if (val && typeof val === "object") {
+				checkConfig(val as Record<string, unknown>);
+			}
+		}
+	}
+
+	checkConfig(node.config);
+	return invalid;
+}
+
+/**
  * Result of migrating a workflow definition.
  */
 export interface MigrateTokensResult {

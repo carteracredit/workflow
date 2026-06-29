@@ -1490,7 +1490,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						)}
 
 						<div
-							className={`absolute inset-y-0 left-0 z-30 flex transition-opacity duration-200 ${
+							className={`absolute top-0 left-0 z-30 flex transition-opacity duration-200 ${
 								shouldShowPropertiesOverlay
 									? "pointer-events-auto opacity-100"
 									: "pointer-events-none opacity-0"
