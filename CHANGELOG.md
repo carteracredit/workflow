@@ -1,3 +1,11 @@
+# [1.3.0-rc.38](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.37...v1.3.0-rc.38) (2026-06-29)
+
+
+### Features
+
+* add tabs and collapsible sections to properties panel ([4e303f3](https://github.com/carteracredit/workflow/commit/4e303f3b85acf065f8dcc93c37e8c749a12eafbf))
+* add validation for invalid variable paths in workflow ([60b4348](https://github.com/carteracredit/workflow/commit/60b4348fe4fa861e03be11dc90c640877aa06deb))
+
 # [1.3.0-rc.37](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.36...v1.3.0-rc.37) (2026-06-26)
 
 
