@@ -106,6 +106,13 @@ vi.mock("sonner", () => ({
 	Toaster: () => null,
 }));
 
+const mockUseDebouncedValue = vi.fn((value: unknown, _delay: number) => value);
+
+vi.mock("@algenium/blocks", () => ({
+	useDebouncedValue: (value: unknown, delay: number) =>
+		mockUseDebouncedValue(value, delay),
+}));
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -456,6 +463,22 @@ describe("WorkflowList – búsqueda y filtrado", () => {
 		expect(
 			screen.getByText("No se encontraron workflows con esos filtros"),
 		).toBeInTheDocument();
+	});
+
+	it("utiliza useDebouncedValue con el valor de búsqueda y delay de 350ms", async () => {
+		makeHooksReturn(WORKFLOWS);
+		render(<WorkflowList />);
+		mockUseDebouncedValue.mockClear();
+
+		const input = screen.getByPlaceholderText(
+			"Buscar por nombre o descripción...",
+		);
+		await userEvent.type(input, "test");
+
+		const callsWithSearch = mockUseDebouncedValue.mock.calls.filter(
+			(c) => c[0] === "test" && c[1] === 350,
+		);
+		expect(callsWithSearch.length).toBeGreaterThan(0);
 	});
 
 	it("filtra por estado al hacer clic en chip de estado", async () => {
