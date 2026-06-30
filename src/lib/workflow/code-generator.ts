@@ -4,7 +4,6 @@ import type {
 	WorkflowMetadata,
 	ChallengeNodeConfig,
 	SignatureChallengeConfig,
-	PromotionNodeConfig,
 	APIFailureHandling,
 	APIAuthConfig,
 	APIHeaderEntry,
@@ -15,7 +14,6 @@ import type {
 	NLSNodeConfig,
 	NLSFunctionId,
 } from "./types";
-import { DEFAULT_PROMOTION_COMMISSION } from "./types";
 import { slugify } from "../slugify";
 import {
 	validateTransformCode,
@@ -1959,11 +1957,6 @@ function generatePromotionStep(
 	// `outputVar` is the public alias; `rawVar` is the internal event result variable.
 	const outputVar = getVarName(node.id);
 	const rawVar = `_${outputVar}Evt`;
-	const config = node.config as PromotionNodeConfig | undefined;
-	const commission =
-		typeof config?.commission === "number"
-			? config.commission
-			: DEFAULT_PROMOTION_COMMISSION;
 	const eventType = "promotion_selection";
 
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
@@ -1972,7 +1965,7 @@ function generatePromotionStep(
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
 
-	let code = `${indent}// Promotion: ${node.title} (commission: ${commission} | roles: ${roles})\n`;
+	let code = `${indent}// Promotion: ${node.title} (roles: ${roles})\n`;
 	code += generateProgressCall(
 		node,
 		indent,

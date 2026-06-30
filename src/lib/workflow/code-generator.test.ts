@@ -417,7 +417,7 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain('"seleccionar-promo"');
 		// "Seleccionar promo" → alias "seleccionarPromo"; rawVar = "_seleccionarPromoEvt"
 		expect(result.code).toContain("let _seleccionarPromoEvt: unknown = null;");
-		expect(result.code).toMatch(/commission: 75/);
+		expect(result.code).toContain("// Promotion: Seleccionar promo (roles:");
 		// hoisted output variable uses the alias "seleccionarPromo"
 		expect(result.code).toContain(
 			"seleccionarPromo = (_seleccionarPromoEvt === null)",

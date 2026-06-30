@@ -417,7 +417,7 @@ export const translations = {
 			nlsFunctionLabel: "Function",
 			challengeTypeAcceptance: "Acceptance",
 			challengeTypeSignature: "Signature",
-			promotionCommissionLabel: "Commission",
+			promotionNodeLabel: "Promotion",
 			staleUnitHours: "hours",
 			staleUnitDays: "days",
 		},
@@ -818,9 +818,6 @@ export const translations = {
 			challengeFailureTitle: "Behavior on failure:",
 			challengeFailureDesc:
 				"If the challenge fails (timeout or rejection), the flow automatically returns to the nearest previous checkpoint.",
-			promotionCommissionLabel: "Commission (COMMISSION)",
-			promotionCommissionDesc:
-				"Fixed amount added to the principal in the PMT formula when computing the monthly payment. Default 55.",
 			promotionOutputsTitle: "Outputs exposed by this node",
 			promotionOutputsDesc:
 				"The selected promotion snapshot (promotionId, selectedTerm, monthlyPayment, etc.) is automatically exposed to downstream nodes through the variable picker.",
@@ -1529,7 +1526,7 @@ export const translations = {
 			nlsFunctionLabel: "Función",
 			challengeTypeAcceptance: "Aceptación",
 			challengeTypeSignature: "Firma",
-			promotionCommissionLabel: "Comisión",
+			promotionNodeLabel: "Promoción",
 			staleUnitHours: "horas",
 			staleUnitDays: "días",
 		},
@@ -1932,9 +1929,6 @@ export const translations = {
 			challengeFailureTitle: "Comportamiento en caso de fallo:",
 			challengeFailureDesc:
 				"Si el challenge falla (timeout o rechazo), el flujo retorna automáticamente al checkpoint previo más próximo.",
-			promotionCommissionLabel: "Comisión (COMMISSION)",
-			promotionCommissionDesc:
-				"Monto fijo que se suma al capital en la fórmula PMT al calcular el pago mensual. Valor por defecto 55.",
 			promotionOutputsTitle: "Salidas expuestas por este nodo",
 			promotionOutputsDesc:
 				"El snapshot de la promoción seleccionada (promotionId, selectedTerm, monthlyPayment, etc.) queda disponible automáticamente para los nodos siguientes a través del selector de variables.",
