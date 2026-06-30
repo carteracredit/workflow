@@ -731,22 +731,6 @@ export function validateWorkflow(
 				}
 			}
 		}
-
-		if (node.type === "Promotion") {
-			const config = node.config as { commission?: unknown } | undefined;
-			if (
-				config === undefined ||
-				typeof config.commission !== "number" ||
-				!Number.isFinite(config.commission) ||
-				config.commission < 0
-			) {
-				errors.push({
-					nodeId: node.id,
-					message: `"${node.title}": La comisión debe ser un número mayor o igual a 0`,
-					severity: "error",
-				});
-			}
-		}
 	});
 
 	// Validación 7: Nodos con staleTimeout deben tener checkpoints SAFE previos y posteriores

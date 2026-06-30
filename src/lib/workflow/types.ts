@@ -256,23 +256,14 @@ export function createDefaultChallengeConfig(
 }
 
 /**
- * Default commission (in currency units) used in the PMT formula when the
- * Promotion node does not override it. Kept as a module-level constant so
- * `cases-svc` and `cases` can reuse the same default when they recompute PMT.
+ * Promotion node no longer carries a commission field — the commission is
+ * resolved from the promotion's own condition (operator + threshold +
+ * match/default) at selection time in cases-svc.
  */
-export const DEFAULT_PROMOTION_COMMISSION = 55;
-
-export interface PromotionNodeConfig extends Record<string, unknown> {
-	/**
-	 * Fixed commission added to the financed principal when computing the
-	 * monthly payment (PMT) for the selected promotion. Editable per-node so
-	 * business users can adjust it without redeploying code.
-	 */
-	commission: number;
-}
+export interface PromotionNodeConfig extends Record<string, unknown> {}
 
 export function createDefaultPromotionConfig(): PromotionNodeConfig {
-	return { commission: DEFAULT_PROMOTION_COMMISSION };
+	return {};
 }
 
 export interface AddCardNodeConfig extends Record<string, unknown> {

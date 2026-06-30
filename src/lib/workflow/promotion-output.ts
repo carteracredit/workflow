@@ -78,7 +78,7 @@ export const PROMOTION_OUTPUT_SCHEMA: OutputSchemaProperty[] = [
 		name: "commission",
 		type: "number",
 		description:
-			"Commission applied when computing the PMT (copied from the Promotion node config at selection time)",
+			"Commission resolved from the promotion's condition (operator + threshold vs requestedAmount) at selection time",
 		readOnly: true,
 	},
 	{

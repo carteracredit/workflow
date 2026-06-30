@@ -24,7 +24,6 @@ import type {
 	SignatureSignerConfig,
 	SignatureCustomFieldConfig,
 	SignatureFlow,
-	PromotionNodeConfig,
 	MessageNodeConfig,
 	MessageMergeVar,
 	MessageChannel,
@@ -70,7 +69,6 @@ import {
 	createDefaultChallengeConfig,
 	createDefaultPromotionConfig,
 	DEFAULT_CHALLENGE_TIMEOUT,
-	DEFAULT_PROMOTION_COMMISSION,
 	ROLE_OPTIONS,
 	MAX_CHALLENGE_RETRIES,
 	DEFAULT_CHALLENGE_RETRY_CONFIG,
@@ -1382,10 +1380,6 @@ export function PropertiesPanel({
 			createDefaultChallengeConfig())
 		: null;
 	const isPromotionNode = selectedNode.type === "Promotion";
-	const promotionConfig = isPromotionNode
-		? ((selectedNode.config as PromotionNodeConfig | undefined) ??
-			createDefaultPromotionConfig())
-		: null;
 	const challengeTimeout =
 		challengeConfig?.challengeTimeout ?? DEFAULT_CHALLENGE_TIMEOUT;
 	const selectedChallengeType = challengeConfig
@@ -5047,37 +5041,8 @@ export function PropertiesPanel({
 									</div>
 								)}
 
-								{selectedNode.type === "Promotion" && promotionConfig && (
+								{selectedNode.type === "Promotion" && (
 									<div className="space-y-4">
-										<div className="space-y-2">
-											<Label htmlFor="promotion-commission">
-												{t("propertiesPanel.promotionCommissionLabel")}
-											</Label>
-											<Input
-												id="promotion-commission"
-												type="number"
-												min={0}
-												step={1}
-												value={promotionConfig.commission}
-												onChange={(e) => {
-													const raw = e.target.value;
-													const parsed = raw === "" ? 0 : Number(raw);
-													const next: PromotionNodeConfig = {
-														...promotionConfig,
-														commission:
-															Number.isFinite(parsed) && parsed >= 0
-																? parsed
-																: 0,
-													};
-													onUpdateNode(selectedNode.id, { config: next });
-												}}
-												placeholder={String(DEFAULT_PROMOTION_COMMISSION)}
-											/>
-											<p className="text-xs text-muted-foreground">
-												{t("propertiesPanel.promotionCommissionDesc")}
-											</p>
-										</div>
-
 										<div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
 											<p className="font-medium text-foreground">
 												{t("propertiesPanel.promotionOutputsTitle")}

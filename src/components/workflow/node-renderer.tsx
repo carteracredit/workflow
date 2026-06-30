@@ -9,7 +9,6 @@ import type {
 	APIFailureHandling,
 	ChallengeNodeConfig,
 	ChallengeType,
-	PromotionNodeConfig,
 	NLSNodeConfig,
 	ExternalLinkNodeConfig,
 } from "@/lib/workflow/types";
@@ -151,9 +150,6 @@ export function NodeRenderer({
 		: undefined;
 	const challengeRetries = challengeConfig?.retries;
 	const isPromotionNode = node.type === "Promotion";
-	const promotionConfig = isPromotionNode
-		? (node.config as PromotionNodeConfig | undefined)
-		: undefined;
 	const isNLSNode = node.type === "NLS";
 	const nlsConfig = isNLSNode
 		? (node.config as NLSNodeConfig | undefined)
@@ -300,7 +296,7 @@ export function NodeRenderer({
 			node.config.failureHandling) ||
 		isSafeCheckpoint ||
 		(isChallengeNode && challengeConfig) ||
-		(isPromotionNode && promotionConfig) ||
+		isPromotionNode ||
 		(isNLSNode && nlsConfig?.functionId);
 
 	let estimatedHeight = MIN_NODE_HEIGHT;
@@ -615,12 +611,11 @@ export function NodeRenderer({
 									</div>
 								)}
 
-								{isPromotionNode && promotionConfig && (
+								{isPromotionNode && (
 									<div className="mt-2">
 										<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
 											<BadgePercent className="h-3 w-3" />
-											{t("canvas.promotionCommissionLabel")}:{" "}
-											{promotionConfig.commission}
+											{t("canvas.promotionNodeLabel")}
 										</span>
 									</div>
 								)}
