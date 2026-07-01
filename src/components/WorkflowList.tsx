@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
 	Plus,
@@ -75,6 +75,7 @@ import { slugify } from "@/lib/slugify";
 import type { Workflow } from "@/lib/workflow-api/types";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { SessionControls } from "@/components/SessionControls";
+import { useDebouncedValue } from "@algenium/blocks";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -549,7 +550,8 @@ export function WorkflowList() {
 	const router = useRouter();
 	const { t, language, getFieldLabel } = useLanguage();
 	const locale = getLocaleForLanguage(language);
-	const [search, setSearch] = useState("");
+	const [searchInput, setSearchInput] = useState("");
+	const debouncedSearch = useDebouncedValue(searchInput, 350);
 	const [searchScope, setSearchScope] = useState<SearchScope>("all");
 	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
 	const [activeTab, setActiveTab] = useState("all");
@@ -563,8 +565,12 @@ export function WorkflowList() {
 	const [page, setPage] = useState(1);
 	const [perPage, setPerPage] = useState(20);
 
+	useEffect(() => {
+		setPage(1);
+	}, [debouncedSearch]);
+
 	const { workflows, resultInfo, isLoading, error, mutate } = useWorkflows({
-		search: search || undefined,
+		search: debouncedSearch || undefined,
 		status: activeTab === "all" ? undefined : activeTab,
 		page,
 		per_page: perPage,
@@ -890,11 +896,8 @@ export function WorkflowList() {
 						<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
 							placeholder={t("workflowList.searchPlaceholder")}
-							value={search}
-							onChange={(e) => {
-								setSearch(e.target.value);
-								setPage(1);
-							}}
+							value={searchInput}
+							onChange={(e) => setSearchInput(e.target.value)}
 							className="pl-9"
 						/>
 					</div>
@@ -988,20 +991,22 @@ export function WorkflowList() {
 								className="h-10 w-auto opacity-30"
 							/>
 							<p className="text-sm">
-								{search || activeTab !== "all" || versionFilter !== "all"
+								{searchInput || activeTab !== "all" || versionFilter !== "all"
 									? t("workflowList.noWorkflowsFiltered")
 									: t("workflowList.noWorkflows")}
 							</p>
-							{!search && activeTab === "all" && versionFilter === "all" && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setCreateDialogOpen(true)}
-								>
-									<Plus className="mr-2 h-4 w-4" />
-									{t("workflowList.newWorkflow")}
-								</Button>
-							)}
+							{!searchInput &&
+								activeTab === "all" &&
+								versionFilter === "all" && (
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => setCreateDialogOpen(true)}
+									>
+										<Plus className="mr-2 h-4 w-4" />
+										{t("workflowList.newWorkflow")}
+									</Button>
+								)}
 						</div>
 					) : (
 						<>
