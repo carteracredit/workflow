@@ -568,6 +568,51 @@ function retryStepNameExpr(baseName: string, retryVarName: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Error recording helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap a node's generated code in a try/catch that persists the error via
+ * `WORKFLOW_SVC.recordInstanceError` before re-throwing. The re-throw causes
+ * Cloudflare to transition the instance to the `errored` state.
+ *
+ * NOT applied to: Start, End, Reject, Decision (handled separately), and
+ * nodes that generate empty strings (e.g. the Decision case).
+ */
+function wrapWithErrorHandler(
+	node: WorkflowNode,
+	indent: string,
+	innerCode: string,
+): string {
+	if (!innerCode.trim()) return innerCode;
+	const nodeId = escapeString(node.id);
+	const nodeType = escapeString(node.type);
+	const stepName = escapeString(createStepName(node));
+	const i1 = indent + "\t";
+	const i2 = indent + "\t\t";
+	let code = `${indent}try {\n`;
+	code += innerCode
+		.split("\n")
+		.map((line) => (line.length > 0 ? `\t${line}` : line))
+		.join("\n");
+	code += `${indent}} catch (_err_${node.id.replace(/-/g, "_")}) {\n`;
+	code += `${i1}const _msg_${node.id.replace(/-/g, "_")} = _err_${node.id.replace(/-/g, "_")} instanceof Error ? _err_${node.id.replace(/-/g, "_")}.message : String(_err_${node.id.replace(/-/g, "_")});\n`;
+	code += `${i1}try {\n`;
+	code += `${i2}await this.env.WORKFLOW_SVC.recordInstanceError({\n`;
+	code += `${i2}\tworkflowId: this.env.WORKFLOW_ID,\n`;
+	code += `${i2}\tinstanceId: event.instanceId,\n`;
+	code += `${i2}\tnodeId: "${nodeId}",\n`;
+	code += `${i2}\tnodeType: "${nodeType}",\n`;
+	code += `${i2}\tstepName: "${stepName}",\n`;
+	code += `${i2}\terrorMessage: _msg_${node.id.replace(/-/g, "_")},\n`;
+	code += `${i2}});\n`;
+	code += `${i1}} catch { /* ignore RPC error, re-throw original */ }\n`;
+	code += `${i1}throw _err_${node.id.replace(/-/g, "_")};\n`;
+	code += `${indent}}\n`;
+	return code;
+}
+
+// ---------------------------------------------------------------------------
 // Progress tracking helper
 // ---------------------------------------------------------------------------
 
@@ -687,6 +732,64 @@ function generateCaseObjectCall(
 	code += `${i2}await this.env.CASES_SVC.updateCaseObject(\n`;
 	code += `${i2}\tevent.payload.caseId as string,\n`;
 	code += `${i2}\t${data},\n`;
+	code += `${i2});\n`;
+	code += `${indent}});\n`;
+	return code;
+}
+
+/**
+ * Emit a `step.do`-wrapped call that publishes the resolved (interpolated)
+ * UI labels of a Challenge node to the case realtime object **before**
+ * calling `waitForEvent`. This allows the cases UI to render dynamic labels
+ * (containing `${variable}` tokens) with real values instead of raw tokens.
+ *
+ * Returns an empty string when no labels are configured, so callers do not
+ * need to guard against undefined config.
+ *
+ * The result is stored under `_${stepName}-labels` in the case object.
+ */
+function emitChallengeLabelsCaseObjectCall(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const config = node.config as ChallengeNodeConfig | undefined;
+	const labels = config?.labels;
+	if (!labels) return "";
+	const hasAny =
+		labels.prompt ||
+		labels.promptEs ||
+		labels.approveLabel ||
+		labels.approveLabelEs ||
+		labels.rejectLabel ||
+		labels.rejectLabelEs;
+	if (!hasAny) return "";
+
+	const stepName = createStepName(node);
+	const baseName = `_label-${node.id}`;
+	const stepDoNameExpr = retryVarName
+		? `${retryVarName} > 0 ? \`${baseName}-r\${${retryVarName}}\` : "${baseName}"`
+		: `"${baseName}"`;
+
+	const i2 = indent + "\t";
+	const i3 = indent + "\t\t";
+
+	const emitLabelField = (key: string, value: string | undefined): string =>
+		value ? `${i3}${key}: ${emitInterpolatedString(value)},\n` : "";
+
+	let code = `${indent}await step.do(${stepDoNameExpr}, async () => {\n`;
+	code += `${i2}await this.env.CASES_SVC.updateCaseObject(\n`;
+	code += `${i2}\tevent.payload.caseId as string,\n`;
+	code += `${i2}\t{\n`;
+	code += `${i3}"_${escapeString(stepName)}-labels": {\n`;
+	code += emitLabelField("prompt", labels.prompt);
+	code += emitLabelField("promptEs", labels.promptEs);
+	code += emitLabelField("approveLabel", labels.approveLabel);
+	code += emitLabelField("approveLabelEs", labels.approveLabelEs);
+	code += emitLabelField("rejectLabel", labels.rejectLabel);
+	code += emitLabelField("rejectLabelEs", labels.rejectLabelEs);
+	code += `${i3}},\n`;
+	code += `${i2}\t},\n`;
 	code += `${i2});\n`;
 	code += `${indent}});\n`;
 	return code;
@@ -1842,6 +1945,7 @@ function generateChallengeStep(
 			stepNameExpr = `${chVar} > 0 ? \`${stepName}-ch\${${chVar}}\` : "${stepName}"`;
 		}
 
+		code += emitChallengeLabelsCaseObjectCall(node, innerIndent, retryVarName);
 		code += generateProgressCall(
 			node,
 			innerIndent,
@@ -1882,6 +1986,7 @@ function generateChallengeStep(
 			? retryStepNameExpr(stepName, retryVarName)
 			: `"${stepName}"`;
 
+		code += emitChallengeLabelsCaseObjectCall(node, indent, retryVarName);
 		code += generateProgressCall(
 			node,
 			indent,
@@ -2436,6 +2541,8 @@ function generateNodeCode(
 		ctx.activeRetryZoneStack[ctx.activeRetryZoneStack.length - 1];
 	const retryVar = activeZone?.retryVarName;
 
+	const wrap = (code: string) => wrapWithErrorHandler(node, indent, code);
+
 	switch (node.type) {
 		case "Start":
 			return (
@@ -2446,30 +2553,30 @@ function generateNodeCode(
 				`${indent});\n`
 			);
 		case "Form":
-			return generateFormStep(node, indent, retryVar);
+			return wrap(generateFormStep(node, indent, retryVar));
 		case "API":
-			return generateAPIStep(node, indent, retryVar);
+			return wrap(generateAPIStep(node, indent, retryVar));
 		case "Transform":
-			return generateTransformStep(node, indent, retryVar);
+			return wrap(generateTransformStep(node, indent, retryVar));
 		case "Message":
-			return generateMessageStep(node, indent);
+			return wrap(generateMessageStep(node, indent));
 		case "Checkpoint":
-			return generateCheckpointStep(node, indent, retryVar);
+			return wrap(generateCheckpointStep(node, indent, retryVar));
 		case "Challenge":
-			return generateChallengeStep(node, indent, retryVar);
+			return wrap(generateChallengeStep(node, indent, retryVar));
 		case "Promotion":
-			return generatePromotionStep(node, indent, retryVar);
+			return wrap(generatePromotionStep(node, indent, retryVar));
 		case "Decision":
 			// Decision generates an if/else, code is handled in traversal
 			return "";
 		case "NLS":
-			return generateNLSStep(node, indent, retryVar);
+			return wrap(generateNLSStep(node, indent, retryVar));
 		case "ExternalLink":
-			return generateExternalLinkStep(node, indent, retryVar);
+			return wrap(generateExternalLinkStep(node, indent, retryVar));
 		case "AddCard":
-			return generateAddCardStep(node, indent, retryVar);
+			return wrap(generateAddCardStep(node, indent, retryVar));
 		case "FlagChange":
-			return generateFlagChangeStep(node, indent, retryVar);
+			return wrap(generateFlagChangeStep(node, indent, retryVar));
 		case "Join":
 			return generateJoinStep(node, indent, ctx.incomingMap.get(node.id) || []);
 		case "End":

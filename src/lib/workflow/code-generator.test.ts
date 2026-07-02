@@ -6005,3 +6005,189 @@ describe("Multiple Checkpoints with identical titles", () => {
 		expect(uniqueLabels.size).toBe(loopLabels.length);
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Challenge UI labels interpolation (Feature 3b)
+// When a Challenge node has `config.labels`, the code-generator should emit
+// a `step.do` block that calls `updateCaseObject` with the resolved labels
+// BEFORE the `waitForEvent` call.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("generateWorkflowCode – Challenge UI labels interpolation", () => {
+	it("emits a labels update step before waitForEvent when labels are configured", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion",
+				config: {
+					challengeType: "acceptance",
+					challengeTimeout: { value: 24, unit: "hours" },
+					labels: {
+						prompt: "Please review and approve.",
+						promptEs: "Por favor revisa y aprueba.",
+						approveLabel: "Approve",
+						approveLabelEs: "Aprobar",
+						rejectLabel: "Reject",
+						rejectLabelEs: "Rechazar",
+					},
+				},
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		// A step.do block with the labels key should appear
+		expect(code).toContain("_aprobacion-labels");
+		// The prompt text should be emitted (as a literal or template string)
+		expect(code).toContain("Please review and approve.");
+		expect(code).toContain("Por favor revisa y aprueba.");
+		// The labels step.do must appear BEFORE the waitForEvent call
+		const labelStepIdx = code.indexOf("_aprobacion-labels");
+		const waitForEventIdx = code.indexOf("waitForEvent");
+		expect(labelStepIdx).toBeGreaterThanOrEqual(0);
+		expect(waitForEventIdx).toBeGreaterThanOrEqual(0);
+		expect(labelStepIdx).toBeLessThan(waitForEventIdx);
+	});
+
+	it("does not emit a labels step when no labels are configured", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Aprobacion",
+				config: {
+					challengeType: "acceptance",
+					challengeTimeout: { value: 24, unit: "hours" },
+				},
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		expect(code).not.toContain("_aprobacion-labels");
+	});
+
+	it("emits labels with variable tokens interpolated via template literals", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "challenge",
+				type: "Challenge",
+				title: "Review",
+				config: {
+					challengeType: "acceptance",
+					challengeTimeout: { value: 24, unit: "hours" },
+					labels: {
+						prompt: "Hello ${start.clientName}, please approve.",
+						promptEs: "Hola ${start.clientName}, por favor aprueba.",
+					},
+				},
+			}),
+			createNode({ id: "end-ok", type: "End", title: "Ok" }),
+			createNode({ id: "end-ko", type: "Reject", title: "Rechazado" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "challenge"),
+			createEdge("challenge", "end-ok", { fromPort: "top" }),
+			createEdge("challenge", "end-ko", { fromPort: "bottom" }),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		// The variable token ${start.clientName} should be emitted as a JS template literal
+		expect(code).toContain("_review-labels");
+		// The label value should contain template literal interpolation
+		const promptIdx = code.indexOf("prompt");
+		const clientNameIdx = code.indexOf("clientName");
+		expect(promptIdx).toBeGreaterThanOrEqual(0);
+		expect(clientNameIdx).toBeGreaterThanOrEqual(0);
+	});
+});
+
+describe("generateWorkflowCode – error recording try/catch wrapper", () => {
+	it("wraps Form nodes with try/catch calling recordInstanceError", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "form-1",
+				type: "Form",
+				title: "Solicitud",
+				config: {
+					formId: "f-abc",
+					formVersion: 1,
+					roles: ["user"],
+					captureAs: null,
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "form-1"),
+			createEdge("form-1", "end"),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		expect(code).toContain("try {");
+		expect(code).toContain("recordInstanceError");
+		expect(code).toContain("WORKFLOW_SVC.recordInstanceError");
+		expect(code).toContain("errorMessage:");
+	});
+
+	it("wraps API nodes with try/catch calling recordInstanceError", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "api-1",
+				type: "API",
+				title: "Consulta",
+				config: {
+					url: "https://api.example.com/check",
+					method: "GET",
+					auth: null,
+					captureAs: null,
+					mapFields: [],
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "api-1"),
+			createEdge("api-1", "end"),
+		];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		expect(code).toContain("recordInstanceError");
+	});
+
+	it("does NOT wrap Start, End, Reject nodes with try/catch recordInstanceError", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+
+		const { code } = generateWorkflowCode(nodes, edges);
+
+		// No error recording for trivial start/end workflow
+		expect(code).not.toContain("recordInstanceError");
+	});
+});

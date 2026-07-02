@@ -4860,50 +4860,60 @@ export function PropertiesPanel({
 										>
 											{/* Prompt text */}
 											<div className="space-y-1">
-												<Label htmlFor="challenge-prompt" className="text-xs">
+												<Label className="text-xs">
 													{t("propertiesPanel.challengePromptLabel")}
 												</Label>
 												<div className="grid grid-cols-2 gap-2">
-													<Textarea
-														id="challenge-prompt"
-														rows={2}
-														value={challengeConfig.labels?.prompt ?? ""}
-														onChange={(e) =>
-															setChallengeConfig({
-																...challengeConfig,
-																labels: {
-																	...challengeConfig.labels,
-																	prompt: e.target.value || undefined,
-																},
-															})
-														}
-														placeholder={
-															challengeConfig.challengeType === "signature"
-																? "Se requiere tu firma para continuar con el proceso."
-																: "Se requiere tu aprobación para continuar con el proceso."
-														}
-														className="text-xs"
-													/>
-													<Textarea
-														id="challenge-prompt-es"
-														rows={2}
-														value={challengeConfig.labels?.promptEs ?? ""}
-														onChange={(e) =>
-															setChallengeConfig({
-																...challengeConfig,
-																labels: {
-																	...challengeConfig.labels,
-																	promptEs: e.target.value || undefined,
-																},
-															})
-														}
-														placeholder={
-															challengeConfig.challengeType === "signature"
-																? "Se requiere tu firma para continuar con el proceso."
-																: "Se requiere tu aprobación para continuar con el proceso."
-														}
-														className="text-xs"
-													/>
+													<div>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																challengeConfig.labels?.prompt,
+																upstreamVariableNodes,
+															)}
+															onChange={(segs) =>
+																setChallengeConfig({
+																	...challengeConfig,
+																	labels: {
+																		...challengeConfig.labels,
+																		prompt:
+																			segmentsToTemplateString(segs) ||
+																			undefined,
+																	},
+																})
+															}
+															placeholder={
+																challengeConfig.challengeType === "signature"
+																	? "Your signature is required to continue."
+																	: "Your approval is required to continue."
+															}
+														/>
+													</div>
+													<div>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																challengeConfig.labels?.promptEs,
+																upstreamVariableNodes,
+															)}
+															onChange={(segs) =>
+																setChallengeConfig({
+																	...challengeConfig,
+																	labels: {
+																		...challengeConfig.labels,
+																		promptEs:
+																			segmentsToTemplateString(segs) ||
+																			undefined,
+																	},
+																})
+															}
+															placeholder={
+																challengeConfig.challengeType === "signature"
+																	? "Se requiere tu firma para continuar."
+																	: "Se requiere tu aprobación para continuar."
+															}
+														/>
+													</div>
 												</div>
 												<div className="grid grid-cols-2 gap-2">
 													<span className="text-[10px] text-muted-foreground">
@@ -4917,51 +4927,60 @@ export function PropertiesPanel({
 
 											{/* Approve button label */}
 											<div className="space-y-1">
-												<Label
-													htmlFor="challenge-approve-label"
-													className="text-xs"
-												>
+												<Label className="text-xs">
 													{t("propertiesPanel.challengeApproveLabelField")}
 												</Label>
 												<div className="grid grid-cols-2 gap-2">
-													<Input
-														id="challenge-approve-label"
-														value={challengeConfig.labels?.approveLabel ?? ""}
-														onChange={(e) =>
-															setChallengeConfig({
-																...challengeConfig,
-																labels: {
-																	...challengeConfig.labels,
-																	approveLabel: e.target.value || undefined,
-																},
-															})
-														}
-														placeholder={
-															challengeConfig.challengeType === "signature"
-																? "Firmar"
-																: "Aprobar"
-														}
-														className="text-xs"
-													/>
-													<Input
-														id="challenge-approve-label-es"
-														value={challengeConfig.labels?.approveLabelEs ?? ""}
-														onChange={(e) =>
-															setChallengeConfig({
-																...challengeConfig,
-																labels: {
-																	...challengeConfig.labels,
-																	approveLabelEs: e.target.value || undefined,
-																},
-															})
-														}
-														placeholder={
-															challengeConfig.challengeType === "signature"
-																? "Firmar"
-																: "Aprobar"
-														}
-														className="text-xs"
-													/>
+													<div>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																challengeConfig.labels?.approveLabel,
+																upstreamVariableNodes,
+															)}
+															onChange={(segs) =>
+																setChallengeConfig({
+																	...challengeConfig,
+																	labels: {
+																		...challengeConfig.labels,
+																		approveLabel:
+																			segmentsToTemplateString(segs) ||
+																			undefined,
+																	},
+																})
+															}
+															placeholder={
+																challengeConfig.challengeType === "signature"
+																	? "Sign"
+																	: "Approve"
+															}
+														/>
+													</div>
+													<div>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																challengeConfig.labels?.approveLabelEs,
+																upstreamVariableNodes,
+															)}
+															onChange={(segs) =>
+																setChallengeConfig({
+																	...challengeConfig,
+																	labels: {
+																		...challengeConfig.labels,
+																		approveLabelEs:
+																			segmentsToTemplateString(segs) ||
+																			undefined,
+																	},
+																})
+															}
+															placeholder={
+																challengeConfig.challengeType === "signature"
+																	? "Firmar"
+																	: "Aprobar"
+															}
+														/>
+													</div>
 												</div>
 												<div className="grid grid-cols-2 gap-2">
 													<span className="text-[10px] text-muted-foreground">
@@ -4975,43 +4994,52 @@ export function PropertiesPanel({
 
 											{/* Reject button label */}
 											<div className="space-y-1">
-												<Label
-													htmlFor="challenge-reject-label"
-													className="text-xs"
-												>
+												<Label className="text-xs">
 													{t("propertiesPanel.challengeRejectLabelField")}
 												</Label>
 												<div className="grid grid-cols-2 gap-2">
-													<Input
-														id="challenge-reject-label"
-														value={challengeConfig.labels?.rejectLabel ?? ""}
-														onChange={(e) =>
-															setChallengeConfig({
-																...challengeConfig,
-																labels: {
-																	...challengeConfig.labels,
-																	rejectLabel: e.target.value || undefined,
-																},
-															})
-														}
-														placeholder="Rechazar"
-														className="text-xs"
-													/>
-													<Input
-														id="challenge-reject-label-es"
-														value={challengeConfig.labels?.rejectLabelEs ?? ""}
-														onChange={(e) =>
-															setChallengeConfig({
-																...challengeConfig,
-																labels: {
-																	...challengeConfig.labels,
-																	rejectLabelEs: e.target.value || undefined,
-																},
-															})
-														}
-														placeholder="Rechazar"
-														className="text-xs"
-													/>
+													<div>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																challengeConfig.labels?.rejectLabel,
+																upstreamVariableNodes,
+															)}
+															onChange={(segs) =>
+																setChallengeConfig({
+																	...challengeConfig,
+																	labels: {
+																		...challengeConfig.labels,
+																		rejectLabel:
+																			segmentsToTemplateString(segs) ||
+																			undefined,
+																	},
+																})
+															}
+															placeholder="Reject"
+														/>
+													</div>
+													<div>
+														<VariableTemplateInput
+															nodes={upstreamVariableNodes}
+															value={parseTemplateStringToSegments(
+																challengeConfig.labels?.rejectLabelEs,
+																upstreamVariableNodes,
+															)}
+															onChange={(segs) =>
+																setChallengeConfig({
+																	...challengeConfig,
+																	labels: {
+																		...challengeConfig.labels,
+																		rejectLabelEs:
+																			segmentsToTemplateString(segs) ||
+																			undefined,
+																	},
+																})
+															}
+															placeholder="Rechazar"
+														/>
+													</div>
 												</div>
 												<div className="grid grid-cols-2 gap-2">
 													<span className="text-[10px] text-muted-foreground">
