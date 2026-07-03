@@ -71,6 +71,8 @@ export function formFieldTypeToSchemaType(
 		case "name":
 		case "address":
 			return "object";
+		case "month":
+			return "string";
 		default:
 			return "string";
 	}

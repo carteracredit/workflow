@@ -98,6 +98,10 @@ describe("formFieldTypeToSchemaType", () => {
 		expect(formFieldTypeToSchemaType("date")).toBe("string");
 	});
 
+	it("maps month to string", () => {
+		expect(formFieldTypeToSchemaType("month")).toBe("string");
+	});
+
 	it("maps phone to string", () => {
 		expect(formFieldTypeToSchemaType("phone")).toBe("string");
 	});
