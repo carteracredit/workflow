@@ -1,3 +1,10 @@
+# [1.3.0-rc.39](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.38...v1.3.0-rc.39) (2026-07-03)
+
+
+### Features
+
+* implement challenge UI labels interpolation in code generation ([9767bfb](https://github.com/carteracredit/workflow/commit/9767bfb4bc4c048f387e76ba8d81b624d92c54c1))
+
 # [1.3.0-rc.38](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.37...v1.3.0-rc.38) (2026-06-29)
 
 
