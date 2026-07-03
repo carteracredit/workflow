@@ -108,7 +108,7 @@ vi.mock("sonner", () => ({
 
 const mockUseDebouncedValue = vi.fn((value: unknown, _delay: number) => value);
 
-vi.mock("@algenium/blocks", () => ({
+vi.mock("@/lib/hooks/use-debounced", () => ({
 	useDebouncedValue: (value: unknown, delay: number) =>
 		mockUseDebouncedValue(value, delay),
 }));

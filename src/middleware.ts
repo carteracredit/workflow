@@ -1,25 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
-
-/**
- * Get auth app URL for redirects.
- */
-const getAuthAppUrl = () => {
-	return (
-		process.env.NEXT_PUBLIC_AUTH_APP_URL ||
-		"https://auth.carteracredit.workers.dev"
-	);
-};
-
-/**
- * Get auth service URL for session validation.
- */
-const getAuthServiceUrl = () => {
-	return (
-		process.env.NEXT_PUBLIC_AUTH_SERVICE_URL ||
-		"https://auth-svc.carteracredit.workers.dev"
-	);
-};
+import { getAuthAppUrl, getAuthServiceUrl } from "@/lib/auth/config";
+import {
+	WORKFLOW_APP_ACCESS_ACTION,
+	resolveAppAccessForMiddleware,
+	setPermissionsCookie,
+} from "@/lib/auth/adminPermissions";
 
 /**
  * Get the external base URL for the request, using forwarded headers from reverse proxy.
@@ -149,8 +135,22 @@ export async function middleware(request: NextRequest) {
 		return redirectToForbidden(request);
 	}
 
-	// Admin user with valid session - allow access
-	return NextResponse.next();
+	const { allowed, permissions } = await resolveAppAccessForMiddleware(
+		request,
+		getAuthServiceUrl(),
+		getAuthAppUrl(),
+		WORKFLOW_APP_ACCESS_ACTION,
+	);
+
+	if (!allowed) {
+		return redirectToForbidden(request);
+	}
+
+	const response = NextResponse.next();
+	if (permissions) {
+		setPermissionsCookie(response, permissions);
+	}
+	return response;
 }
 
 /**

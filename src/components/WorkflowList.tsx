@@ -75,7 +75,7 @@ import { slugify } from "@/lib/slugify";
 import type { Workflow } from "@/lib/workflow-api/types";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { SessionControls } from "@/components/SessionControls";
-import { useDebouncedValue } from "@algenium/blocks";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced";
 
 // ---------------------------------------------------------------------------
 // Helpers
