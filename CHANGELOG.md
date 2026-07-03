@@ -1,3 +1,10 @@
+# [1.3.0-rc.40](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.39...v1.3.0-rc.40) (2026-07-03)
+
+
+### Features
+
+* add month mapping to formFieldTypeToSchemaType function ([e2904a8](https://github.com/carteracredit/workflow/commit/e2904a827f180e47a910014c82eb566ac3c1f1a1))
+
 # [1.3.0-rc.39](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.38...v1.3.0-rc.39) (2026-07-03)
 
 
