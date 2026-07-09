@@ -1326,6 +1326,16 @@ function generateNLSStep(
 			const valueExpr = emitInterpolatedString(field.value);
 			code += `${indent}\t_nlsBody[${JSON.stringify(field.fieldId)}] = ${valueExpr};\n`;
 		}
+		// createLoan: fall back to the case number as loanNumber when the node
+		// doesn't map one explicitly (proxy-svc uses it only if loanNumber is
+		// absent — see createLoan.ts resolution order). Not a mappable field in
+		// the designer, so this only applies when absent from the config.
+		if (
+			functionId === "createLoan" &&
+			!fields.some((f) => f.fieldId === "caseNumber" && f.value)
+		) {
+			code += `${indent}\t_nlsBody["caseNumber"] = event.payload.caseNumber as string;\n`;
+		}
 
 		code += `${indent}\tconst _nlsResult = await this.env.PROXY_SVC.${rpcMethod}({\n`;
 		code += `${indent}\t\tbearerToken: event.payload._jwt as string,\n`;

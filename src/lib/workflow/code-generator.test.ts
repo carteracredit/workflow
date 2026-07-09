@@ -5185,6 +5185,70 @@ describe("NLS node code generation", () => {
 		expect(result.code).toContain('"source"');
 	});
 
+	it("should auto-inject caseNumber into _nlsBody for createLoan when not mapped", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [{ fieldId: "source", value: "PORTAL", source: "discovered" }],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain(
+			'_nlsBody["caseNumber"] = event.payload.caseNumber as string;',
+		);
+	});
+
+	it("should NOT duplicate the caseNumber injection when the node already maps it", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [
+				{
+					fieldId: "caseNumber",
+					value: "${start.myCaseNumber}",
+					source: "discovered",
+				},
+			],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		const occurrences = (result.code.match(/_nlsBody\["caseNumber"\]/g) ?? [])
+			.length;
+		expect(occurrences).toBe(1);
+		expect(result.code).not.toContain(
+			'_nlsBody["caseNumber"] = event.payload.caseNumber as string;',
+		);
+	});
+
+	it("should NOT inject caseNumber for non-createLoan NLS functions", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "cancelLoan",
+			fields: [{ fieldId: "loanNumber", value: "99", source: "discovered" }],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain("caseNumber");
+	});
+
 	it("should generate RPC call for getAmortization", () => {
 		const cfg: NLSNodeConfig = {
 			functionId: "getAmortization",
