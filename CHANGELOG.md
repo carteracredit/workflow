@@ -1,3 +1,10 @@
+# [1.3.0-rc.41](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.40...v1.3.0-rc.41) (2026-07-09)
+
+
+### Features
+
+* enhance caseNumber injection logic for createLoan NLS function ([f668184](https://github.com/carteracredit/workflow/commit/f668184a67fa2b7ebc2a630f3212e0a820d43775))
+
 # [1.3.0-rc.40](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.39...v1.3.0-rc.40) (2026-07-03)
 
 
