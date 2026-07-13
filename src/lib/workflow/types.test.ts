@@ -5,6 +5,8 @@ import {
 	isExternalLinkNode,
 	createDefaultExternalLinkConfig,
 	isMessageNode,
+	isGeneratePdfNode,
+	createDefaultGeneratePdfConfig,
 	type WorkflowNode,
 	type ChallengeNodeConfig,
 	type ExternalLinkNodeConfig,
@@ -163,6 +165,63 @@ describe("workflow types", () => {
 				groupId: null,
 			};
 			expect(isMessageNode(node)).toBe(false);
+		});
+	});
+
+	describe("createDefaultGeneratePdfConfig", () => {
+		it("should create an empty config with no template and no field mappings", () => {
+			const config = createDefaultGeneratePdfConfig();
+			expect(config.pdfTemplateId).toBeUndefined();
+			expect(config.pdfTemplateName).toBeUndefined();
+			expect(config.fieldMappings).toEqual([]);
+		});
+	});
+
+	describe("isGeneratePdfNode", () => {
+		it("should return true for GeneratePDF node", () => {
+			const node: WorkflowNode = {
+				id: "node-1",
+				type: "GeneratePDF",
+				title: "Generate PDF",
+				description: "",
+				roles: [],
+				config: createDefaultGeneratePdfConfig(),
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+			expect(isGeneratePdfNode(node)).toBe(true);
+		});
+
+		it("should return false for non-GeneratePDF node", () => {
+			const node: WorkflowNode = {
+				id: "node-1",
+				type: "Form",
+				title: "Form",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+			expect(isGeneratePdfNode(node)).toBe(false);
+		});
+
+		it("should narrow type correctly", () => {
+			const node: WorkflowNode = {
+				id: "node-1",
+				type: "GeneratePDF",
+				title: "Generate PDF",
+				description: "",
+				roles: [],
+				config: createDefaultGeneratePdfConfig(),
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			if (isGeneratePdfNode(node)) {
+				expect(node.type).toBe("GeneratePDF");
+				expect(node.config.fieldMappings).toEqual([]);
+			}
 		});
 	});
 });

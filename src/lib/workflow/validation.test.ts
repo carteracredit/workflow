@@ -2349,3 +2349,108 @@ describe("validateWorkflow – invalid variable paths", () => {
 		expect(hasPathError).toBe(false);
 	});
 });
+
+describe("GeneratePDF node validation", () => {
+	function makeGeneratePdfWorkflow(config: Record<string, unknown>) {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "pdf-1",
+				type: "GeneratePDF",
+				title: "Generar PDF",
+				description: "",
+				roles: [],
+				config,
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 200, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "pdf-1", label: null },
+			{ id: "e2", from: "pdf-1", to: "end", label: null },
+		];
+		return { nodes, edges };
+	}
+
+	it("should error when no PDF template is selected", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({ fieldMappings: [] });
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.message.includes("plantilla PDF seleccionada"),
+			),
+		).toBe(true);
+	});
+
+	it("should not error when a PDF template is selected", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [{ fieldName: "name", value: "${start.name}" }],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.message.includes("plantilla PDF seleccionada"),
+			),
+		).toBe(false);
+	});
+
+	it("should warn when every field mapping has an empty value", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [
+				{ fieldName: "name", value: "" },
+				{ fieldName: "amount", value: "  " },
+			],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.severity === "warning" &&
+					e.message.includes("Ningún campo del PDF"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn when at least one field mapping has a value", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [
+				{ fieldName: "name", value: "${start.name}" },
+				{ fieldName: "amount", value: "" },
+			],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" && e.message.includes("Ningún campo del PDF"),
+			),
+		).toBe(false);
+	});
+});

@@ -100,6 +100,24 @@ describe("Palette", () => {
 		expect(node.checkpointType).toBe("normal");
 	});
 
+	it("calls onAddNode with default GeneratePDF config when Generate PDF is clicked", async () => {
+		const onAddNode = vi.fn();
+		renderWithTooltip(
+			<Palette onAddNode={onAddNode} zoom={1} pan={{ x: 0, y: 0 }} />,
+		);
+		const generatePdfBtn = screen.getByRole("button", {
+			name: "Agregar Generar PDF",
+		});
+		fireEvent.click(generatePdfBtn);
+		const [node] = onAddNode.mock.calls[0];
+		expect(node.type).toBe("GeneratePDF");
+		expect(node.config).toEqual({
+			pdfTemplateId: undefined,
+			pdfTemplateName: undefined,
+			fieldMappings: [],
+		});
+	});
+
 	it("applies className to container when provided", () => {
 		const { container } = renderWithTooltip(
 			<Palette

@@ -972,6 +972,64 @@ describe("graph-utils", () => {
 			expect(monthlyEntries[0].type).toBe("number");
 		});
 
+		it("GeneratePDF nodes always expose GENERATE_PDF_OUTPUT_SCHEMA fields", () => {
+			const generatePdf: WorkflowNode = {
+				id: "generate-pdf-1",
+				type: "GeneratePDF",
+				title: "Generar PDF",
+				description: "",
+				roles: [],
+				config: { pdfTemplateId: "tpl-1", fieldMappings: [] },
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([generatePdf]);
+			expect(result).toHaveLength(1);
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toEqual(["documentId", "fileName"]);
+
+			const documentId = result[0].variables.find(
+				(v) => v.name === "documentId",
+			);
+			expect(documentId?.type).toBe("string");
+		});
+
+		it("GeneratePDF merges user-declared custom properties without duplicating fixed outputs", () => {
+			const generatePdf: WorkflowNode = {
+				id: "generate-pdf-2",
+				type: "GeneratePDF",
+				title: "Generar PDF",
+				description: "",
+				roles: [],
+				config: {
+					pdfTemplateId: "tpl-1",
+					fieldMappings: [],
+					outputSchema: {
+						properties: [
+							{ id: "p-1", name: "fileName", type: "boolean" },
+							{ id: "p-2", name: "extraFlag", type: "boolean" },
+						],
+					},
+				},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			const result = buildVariableSourceNodes([generatePdf]);
+			expect(result).toHaveLength(1);
+
+			const names = result[0].variables.map((v) => v.name);
+			expect(names).toContain("extraFlag");
+
+			const fileNameEntries = result[0].variables.filter(
+				(v) => v.name === "fileName",
+			);
+			expect(fileNameEntries).toHaveLength(1);
+			expect(fileNameEntries[0].type).toBe("string");
+		});
+
 		it("NLS nodes expose output fields based on functionId (createLoan)", () => {
 			const nlsNode: WorkflowNode = {
 				id: "nls-1",

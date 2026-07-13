@@ -8,6 +8,7 @@ import type {
 	MessageNodeConfig,
 	NLSNodeConfig,
 	ExternalLinkNodeConfig,
+	GeneratePdfNodeConfig,
 } from "./types";
 import { MAX_CHALLENGE_RETRIES, ROLE_OPTIONS } from "./types";
 import {
@@ -530,6 +531,28 @@ export function validateWorkflow(
 					// onFailure='stop' solo aplica al camino de error:
 					// el nodo puede y debe tener conexiones salientes para el camino de éxito.
 				}
+			}
+		}
+
+		if (node.type === "GeneratePDF") {
+			const pdfCfg = node.config as GeneratePdfNodeConfig | undefined;
+
+			if (!pdfCfg?.pdfTemplateId) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener una plantilla PDF seleccionada`,
+					severity: "error",
+				});
+			}
+
+			const mappings = pdfCfg?.fieldMappings ?? [];
+			const emptyMappings = mappings.filter((m) => !m.value?.trim());
+			if (mappings.length > 0 && emptyMappings.length === mappings.length) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": Ningún campo del PDF tiene un valor asignado`,
+					severity: "warning",
+				});
 			}
 		}
 

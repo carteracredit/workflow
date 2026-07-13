@@ -11,6 +11,7 @@ import type {
 	ChallengeType,
 	NLSNodeConfig,
 	ExternalLinkNodeConfig,
+	GeneratePdfNodeConfig,
 } from "@/lib/workflow/types";
 import {
 	Play,
@@ -32,6 +33,7 @@ import {
 	Banknote,
 	ExternalLink as ExternalLinkIcon,
 	CreditCard,
+	FileOutput,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getColorValue } from "@/lib/flag-manager";
@@ -77,6 +79,7 @@ const NODE_ICONS = {
 	NLS: Banknote,
 	ExternalLink: ExternalLinkIcon,
 	AddCard: CreditCard,
+	GeneratePDF: FileOutput,
 };
 
 export const NODE_BG_COLORS = {
@@ -96,6 +99,7 @@ export const NODE_BG_COLORS = {
 	NLS: "var(--node-bg-nls)",
 	ExternalLink: "var(--node-bg-external-link)",
 	AddCard: "var(--node-bg-add-card)",
+	GeneratePDF: "var(--node-bg-generate-pdf)",
 };
 
 export const NODE_ICON_COLORS = {
@@ -115,6 +119,7 @@ export const NODE_ICON_COLORS = {
 	NLS: "var(--node-icon-nls)",
 	ExternalLink: "var(--node-icon-external-link)",
 	AddCard: "var(--node-icon-add-card)",
+	GeneratePDF: "var(--node-icon-generate-pdf)",
 };
 
 export function NodeRenderer({
@@ -153,6 +158,10 @@ export function NodeRenderer({
 	const isNLSNode = node.type === "NLS";
 	const nlsConfig = isNLSNode
 		? (node.config as NLSNodeConfig | undefined)
+		: undefined;
+	const isGeneratePdfNode = node.type === "GeneratePDF";
+	const generatePdfConfig = isGeneratePdfNode
+		? (node.config as GeneratePdfNodeConfig | undefined)
 		: undefined;
 	const iconBackgroundColor = isSafeCheckpoint
 		? "var(--node-safe-icon-bg)"
@@ -297,7 +306,8 @@ export function NodeRenderer({
 		isSafeCheckpoint ||
 		(isChallengeNode && challengeConfig) ||
 		isPromotionNode ||
-		(isNLSNode && nlsConfig?.functionId);
+		(isNLSNode && nlsConfig?.functionId) ||
+		(isGeneratePdfNode && generatePdfConfig?.pdfTemplateName);
 
 	let estimatedHeight = MIN_NODE_HEIGHT;
 	if (hasDescription) estimatedHeight += 22;
@@ -630,6 +640,17 @@ export function NodeRenderer({
 													nlsConfig.functionId,
 													nlsConfig.functionId,
 												)}
+											</span>
+										</span>
+									</div>
+								)}
+
+								{isGeneratePdfNode && generatePdfConfig?.pdfTemplateName && (
+									<div className="mt-2">
+										<span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary max-w-full">
+											<FileOutput className="h-3 w-3 shrink-0" />
+											<span className="truncate">
+												{generatePdfConfig.pdfTemplateName}
 											</span>
 										</span>
 									</div>

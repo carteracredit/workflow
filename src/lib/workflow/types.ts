@@ -14,7 +14,8 @@ export type NodeType =
 	| "FlagChange"
 	| "NLS"
 	| "ExternalLink"
-	| "AddCard";
+	| "AddCard"
+	| "GeneratePDF";
 
 export type CheckpointType = "normal" | "safe";
 
@@ -284,6 +285,39 @@ export function isAddCardNode(
 	return node.type === "AddCard";
 }
 
+/**
+ * Maps an AcroForm text field (by name, as extracted server-side by cases-svc
+ * from the PDF template) to a value expression. The value may be a literal
+ * string or contain `${nodeId.property}` variable-picker tokens, following
+ * the same convention as NLSFieldConfig.value / Message mergeVars.
+ */
+export interface GeneratePdfFieldMapping {
+	fieldName: string;
+	value: string;
+}
+
+export interface GeneratePdfNodeConfig extends Record<string, unknown> {
+	pdfTemplateId?: string;
+	/** Cached display name, so the panel can show a label before the template list has loaded. */
+	pdfTemplateName?: string;
+	fieldMappings: GeneratePdfFieldMapping[];
+}
+
+export function isGeneratePdfNode(node: WorkflowNode): node is WorkflowNode & {
+	type: "GeneratePDF";
+	config: GeneratePdfNodeConfig;
+} {
+	return node.type === "GeneratePDF";
+}
+
+export function createDefaultGeneratePdfConfig(): GeneratePdfNodeConfig {
+	return {
+		pdfTemplateId: undefined,
+		pdfTemplateName: undefined,
+		fieldMappings: [],
+	};
+}
+
 export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"Form",
 	"Decision",
@@ -295,6 +329,7 @@ export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"NLS",
 	"ExternalLink",
 	"AddCard",
+	"GeneratePDF",
 ];
 
 export interface StaleTimeoutConfig {
