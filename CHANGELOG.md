@@ -1,3 +1,12 @@
+# [1.3.0-rc.42](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.41...v1.3.0-rc.42) (2026-07-14)
+
+
+### Features
+
+* add GeneratePDF node functionality ([6300e68](https://github.com/carteracredit/workflow/commit/6300e6810dfb9632a37d953640cdc0941b4123b9))
+* add PDF template versioning support to GeneratePDF node ([0646f91](https://github.com/carteracredit/workflow/commit/0646f9121aa1fafa21442b8077ad6b0e9823b3a6))
+* enhance paste functionality with token remapping ([4f41fca](https://github.com/carteracredit/workflow/commit/4f41fcafd08a32f57ec55d6145c2479c89f3ebda))
+
 # [1.3.0-rc.41](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.40...v1.3.0-rc.41) (2026-07-09)
 
 
