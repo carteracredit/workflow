@@ -207,7 +207,11 @@ interface CanvasProps {
 		status: "idle" | "valid" | "invalid";
 	};
 	onCopy?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
-	onPaste?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
+	onPaste?: (
+		nodes: WorkflowNode[],
+		edges: WorkflowEdge[],
+		tokensRemapped: boolean,
+	) => void;
 	onUndo?: () => void;
 	canUndo?: boolean;
 	onRedo?: () => void;
@@ -712,9 +716,12 @@ export function Canvas({
 			) {
 				e.preventDefault();
 				if (onPaste && copiedDataRef.current) {
-					const { nodes: pastedNodes, edges: pastedEdges } =
-						deserializeSelection(copiedDataRef.current, nodes);
-					onPaste(pastedNodes, pastedEdges);
+					const {
+						nodes: pastedNodes,
+						edges: pastedEdges,
+						tokensRemapped,
+					} = deserializeSelection(copiedDataRef.current, nodes);
+					onPaste(pastedNodes, pastedEdges, tokensRemapped);
 				}
 				return;
 			}
@@ -1765,9 +1772,12 @@ export function Canvas({
 						disabled={!hasCopiedData || !copiedDataRef.current}
 						onClick={() => {
 							if (onPaste && copiedDataRef.current) {
-								const { nodes: pastedNodes, edges: pastedEdges } =
-									deserializeSelection(copiedDataRef.current, nodes);
-								onPaste(pastedNodes, pastedEdges);
+								const {
+									nodes: pastedNodes,
+									edges: pastedEdges,
+									tokensRemapped,
+								} = deserializeSelection(copiedDataRef.current, nodes);
+								onPaste(pastedNodes, pastedEdges, tokensRemapped);
 							}
 						}}
 					>

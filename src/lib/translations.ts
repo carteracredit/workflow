@@ -289,6 +289,8 @@ export const translations = {
 			toastSaveError: "Error saving",
 			toastCannotPublish: "Cannot publish",
 			toastSaveBeforeFlags: "Save the workflow before managing flags.",
+			toastPasteTokensRemapped:
+				"Variable references were updated to point to the pasted nodes",
 			confirmReset:
 				"Are you sure you want to reset the canvas? All unsaved changes will be lost.",
 			smallScreenTitle: "Screen too small",
@@ -1415,6 +1417,8 @@ export const translations = {
 			toastCannotPublish: "No se puede publicar",
 			toastSaveBeforeFlags:
 				"Guarda el workflow primero antes de gestionar flags.",
+			toastPasteTokensRemapped:
+				"Las referencias a variables fueron actualizadas para apuntar a los nodos pegados",
 			confirmReset:
 				"¿Estás seguro de que deseas reiniciar el canvas? Se perderán todos los cambios no guardados.",
 			smallScreenTitle: "Pantalla demasiado pequeña",
