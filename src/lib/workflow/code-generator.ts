@@ -1394,6 +1394,7 @@ function generateGeneratePdfStep(
 ): string {
 	const cfg = node.config as GeneratePdfNodeConfig | undefined;
 	const pdfTemplateId = cfg?.pdfTemplateId ?? "";
+	const pdfTemplateVersionId = cfg?.pdfTemplateVersionId;
 	const fieldMappings = cfg?.fieldMappings ?? [];
 	const stepName = createStepName(node);
 	const varName = getVarName(node.id);
@@ -1421,6 +1422,9 @@ function generateGeneratePdfStep(
 	code += `${indent}\treturn await this.env.CASES_SVC.generatePdfDocument({\n`;
 	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
 	code += `${indent}\t\tpdfTemplateId: ${emitInterpolatedString(pdfTemplateId)},\n`;
+	if (pdfTemplateVersionId) {
+		code += `${indent}\t\tpdfTemplateVersionId: ${JSON.stringify(pdfTemplateVersionId)},\n`;
+	}
 	code += `${indent}\t\tfieldValues: _pdfFieldValues,\n`;
 	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
@@ -3294,6 +3298,7 @@ export function generateWorkflowCode(
 		code += `\t\tgeneratePdfDocument: (input: {\n`;
 		code += `\t\t\tcaseId: string;\n`;
 		code += `\t\t\tpdfTemplateId: string;\n`;
+		code += `\t\t\tpdfTemplateVersionId?: string;\n`;
 		code += `\t\t\tfieldValues: Record<string, string>;\n`;
 		code += `\t\t}) => Promise<{ documentId: string; fileName: string }>;\n`;
 	}

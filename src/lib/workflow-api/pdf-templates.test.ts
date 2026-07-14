@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { listPdfTemplates, getPdfTemplateFields } from "./pdf-templates";
+import {
+	listPdfTemplates,
+	getPdfTemplateFields,
+	listPdfTemplateVersions,
+} from "./pdf-templates";
 
 const BASE_URL = "https://cases-svc.carteracredit.workers.dev";
 
@@ -170,6 +174,101 @@ describe("pdf-templates API functions", () => {
 
 			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
 			expect(url).not.toContain("bypass_cache");
+		});
+
+		it("appends versionId when given, to pin a specific version", async () => {
+			mockFetch({ success: true, result: mockFieldsResult });
+
+			await getPdfTemplateFields("tpl-1", { versionId: "ver-1" });
+
+			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect(url).toContain("versionId=ver-1");
+		});
+
+		it("does not append versionId when not given", async () => {
+			mockFetch({ success: true, result: mockFieldsResult });
+
+			await getPdfTemplateFields("tpl-1");
+
+			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect(url).not.toContain("versionId");
+		});
+	});
+
+	describe("listPdfTemplateVersions", () => {
+		const mockVersions = [
+			{
+				id: "ver-2",
+				version: 2,
+				fileName: "ucc-v2.pdf",
+				createdAt: "2026-02-01T00:00:00.000Z",
+				isActive: true,
+			},
+			{
+				id: "ver-1",
+				version: 1,
+				fileName: "ucc-v1.pdf",
+				createdAt: "2026-01-01T00:00:00.000Z",
+				isActive: false,
+			},
+		];
+
+		it("fetches version history by template ID", async () => {
+			mockFetch({ success: true, result: mockVersions });
+
+			const result = await listPdfTemplateVersions("tpl-1");
+
+			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+				`${BASE_URL}/pdf-templates/tpl-1/versions`,
+				expect.any(Object),
+			);
+			expect(result).toHaveLength(2);
+			expect(result[0].isActive).toBe(true);
+		});
+
+		it("URL-encodes pdfTemplateId with special characters", async () => {
+			mockFetch({ success: true, result: mockVersions });
+
+			await listPdfTemplateVersions("tpl abc/123");
+
+			expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+				`${BASE_URL}/pdf-templates/tpl%20abc%2F123/versions`,
+				expect.any(Object),
+			);
+		});
+
+		it("passes JWT as Authorization header", async () => {
+			mockFetch({ success: true, result: mockVersions });
+
+			await listPdfTemplateVersions("tpl-1", { jwt: "test-token" });
+
+			const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect((init.headers as Record<string, string>).Authorization).toBe(
+				"Bearer test-token",
+			);
+		});
+
+		it("returns empty array when there are no versions", async () => {
+			mockFetch({ success: true, result: [] });
+
+			const result = await listPdfTemplateVersions("tpl-1");
+
+			expect(result).toEqual([]);
+		});
+
+		it("appends bypass_cache=true when bypassCache option is set", async () => {
+			mockFetch({ success: true, result: mockVersions });
+
+			await listPdfTemplateVersions("tpl-1", { bypassCache: true });
+
+			const [url] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+			expect(url).toContain("bypass_cache=true");
+		});
+
+		it("throws on non-2xx response", async () => {
+			mockFetch({ success: false, error: "Template not found" }, 404);
+
+			await expect(listPdfTemplateVersions("nonexistent")).rejects.toThrow();
 		});
 	});
 });

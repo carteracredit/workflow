@@ -833,14 +833,28 @@ export const translations = {
 			generatePdfTemplateEmpty:
 				"No templates available. Upload one from Admin → Settings → PDF Templates.",
 			generatePdfRefreshTooltip: "Reload templates and fields",
+			generatePdfVersionLabel: "Template version",
+			generatePdfVersionPlaceholder: "Select a version",
+			generatePdfVersionLoadingPlaceholder: "Loading versions…",
+			generatePdfVersionActive: "Active",
+			generatePdfVersionUnpinnedNote:
+				"No version pinned yet — this node currently resolves whichever version is active at generation time.",
 			generatePdfFieldsTitle: "Field mapping",
 			generatePdfFieldsDesc:
-				"Map each text field discovered in the PDF template to a literal value or a variable.",
+				"Map each field discovered in the PDF template to a literal value or a variable.",
 			generatePdfFieldsLoading: "Loading template fields…",
 			generatePdfFieldsEmpty:
-				"This template has no fillable text fields, or no template is selected yet.",
+				"This template has no fillable fields, or no template is selected yet.",
 			generatePdfUnsupportedFieldNote:
-				"Only text fields can be filled with variables; other field types are shown for reference only.",
+				"Buttons (e.g. Print/Reset) can't be filled with variables and are shown for reference only.",
+			generatePdfFieldTypeText: "Text",
+			generatePdfFieldTypeCheckbox: "Checkbox",
+			generatePdfFieldTypeRadio: "Radio",
+			generatePdfFieldTypeDropdown: "Dropdown",
+			generatePdfFieldTypeOptionList: "Option list",
+			generatePdfCheckboxHint:
+				"Valid values: true/false (also accepts yes/no, on, 1, x, si/sí, checked).",
+			generatePdfOptionsHint: "Valid options: {options}",
 			nlsOutputsTitle: "Outputs exposed by this node",
 			nlsOutputsDesc:
 				"The NLS function result is automatically exposed to downstream nodes through the variable picker.",
@@ -1964,14 +1978,28 @@ export const translations = {
 			generatePdfTemplateEmpty:
 				"No hay plantillas disponibles. Sube una desde Admin → Configuración → Plantillas PDF.",
 			generatePdfRefreshTooltip: "Recargar plantillas y campos",
+			generatePdfVersionLabel: "Versión de la plantilla",
+			generatePdfVersionPlaceholder: "Selecciona una versión",
+			generatePdfVersionLoadingPlaceholder: "Cargando versiones…",
+			generatePdfVersionActive: "Activa",
+			generatePdfVersionUnpinnedNote:
+				"Aún no se ha fijado una versión — este nodo resuelve la versión que esté activa en el momento de generar el PDF.",
 			generatePdfFieldsTitle: "Mapeo de campos",
 			generatePdfFieldsDesc:
-				"Mapea cada campo de texto detectado en la plantilla PDF a un valor literal o una variable.",
+				"Mapea cada campo detectado en la plantilla PDF a un valor literal o una variable.",
 			generatePdfFieldsLoading: "Cargando campos de la plantilla…",
 			generatePdfFieldsEmpty:
-				"Esta plantilla no tiene campos de texto rellenables, o aún no se ha seleccionado una plantilla.",
+				"Esta plantilla no tiene campos rellenables, o aún no se ha seleccionado una plantilla.",
 			generatePdfUnsupportedFieldNote:
-				"Solo los campos de texto se pueden rellenar con variables; otros tipos de campo se muestran solo como referencia.",
+				"Los botones (p. ej. Print/Reset) no se pueden rellenar con variables y se muestran solo como referencia.",
+			generatePdfFieldTypeText: "Texto",
+			generatePdfFieldTypeCheckbox: "Checkbox",
+			generatePdfFieldTypeRadio: "Radio",
+			generatePdfFieldTypeDropdown: "Desplegable",
+			generatePdfFieldTypeOptionList: "Lista de opciones",
+			generatePdfCheckboxHint:
+				"Valores válidos: true/false (también acepta yes/no, on, 1, x, si/sí, checked).",
+			generatePdfOptionsHint: "Opciones válidas: {options}",
 			nlsOutputsTitle: "Salidas expuestas por este nodo",
 			nlsOutputsDesc:
 				"El resultado de la función NLS queda disponible automáticamente para los nodos siguientes a través del selector de variables.",

@@ -110,10 +110,13 @@ import type { NLSNodeConfig, NLSFunctionId } from "@/lib/workflow/types";
 import {
 	listPdfTemplatesAction,
 	getPdfTemplateFieldsAction,
+	listPdfTemplateVersionsAction,
 } from "@/lib/workflow-api/pdf-templates-actions";
 import type {
 	PdfTemplateSummary,
 	PdfTemplateFieldsResult,
+	PdfTemplateVersionSummary,
+	PdfFormField,
 } from "@/lib/workflow-api/pdf-templates-actions";
 import type {
 	GeneratePdfNodeConfig,
@@ -145,6 +148,50 @@ import { CollapsibleSection } from "@/components/workflow/collapsible-section";
 
 function generateSchemaId() {
 	return `prop_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Human-readable badge label for a GeneratePDF field's AcroForm type. */
+function getPdfFieldTypeLabel(
+	type: PdfFormField["type"],
+	t: (key: string) => string,
+): string {
+	switch (type) {
+		case "text":
+			return t("propertiesPanel.generatePdfFieldTypeText");
+		case "checkbox":
+			return t("propertiesPanel.generatePdfFieldTypeCheckbox");
+		case "radio":
+			return t("propertiesPanel.generatePdfFieldTypeRadio");
+		case "dropdown":
+			return t("propertiesPanel.generatePdfFieldTypeDropdown");
+		case "optionList":
+			return t("propertiesPanel.generatePdfFieldTypeOptionList");
+		default:
+			return type;
+	}
+}
+
+/** Help text shown under a GeneratePDF field mapping, guiding which values are valid. */
+function getPdfFieldHint(
+	field: PdfFormField,
+	t: (key: string) => string,
+): string | null {
+	if (field.type === "checkbox") {
+		return t("propertiesPanel.generatePdfCheckboxHint");
+	}
+	if (
+		(field.type === "radio" ||
+			field.type === "dropdown" ||
+			field.type === "optionList") &&
+		field.options &&
+		field.options.length > 0
+	) {
+		return t("propertiesPanel.generatePdfOptionsHint").replace(
+			"{options}",
+			field.options.join(", "),
+		);
+	}
+	return null;
 }
 
 function jsonValueToSchemaProperty(
@@ -438,6 +485,11 @@ export function PropertiesPanel({
 	const [pdfFieldsLoading, setPdfFieldsLoading] = useState(false);
 	const [isRefreshingPdfTemplates, setIsRefreshingPdfTemplates] =
 		useState(false);
+	const [pdfTemplateVersions, setPdfTemplateVersions] = useState<
+		PdfTemplateVersionSummary[]
+	>([]);
+	const [pdfTemplateVersionsLoading, setPdfTemplateVersionsLoading] =
+		useState(false);
 
 	// Cargar forms publicados cuando hay un nodo Form seleccionado
 	useEffect(() => {
@@ -556,24 +608,50 @@ export function PropertiesPanel({
 			.finally(() => setPdfTemplatesLoading(false));
 	}, [selectedNode?.type]);
 
-	// Cargar los campos de la plantilla PDF seleccionada
+	// Cargar los campos de la version (fijada o activa) de la plantilla PDF seleccionada
 	useEffect(() => {
 		if (selectedNode?.type !== "GeneratePDF") {
 			setPdfTemplateFields(null);
+			return;
+		}
+		const cfg = selectedNode.config as GeneratePdfNodeConfig | undefined;
+		const pdfTemplateId = cfg?.pdfTemplateId;
+		if (!pdfTemplateId) {
+			setPdfTemplateFields(null);
+			return;
+		}
+		setPdfFieldsLoading(true);
+		getPdfTemplateFieldsAction(pdfTemplateId, {
+			versionId: cfg?.pdfTemplateVersionId,
+		})
+			.then((fields) => setPdfTemplateFields(fields))
+			.catch(() => setPdfTemplateFields(null))
+			.finally(() => setPdfFieldsLoading(false));
+	}, [
+		selectedNode?.type,
+		(selectedNode?.config as GeneratePdfNodeConfig | undefined)?.pdfTemplateId,
+		(selectedNode?.config as GeneratePdfNodeConfig | undefined)
+			?.pdfTemplateVersionId,
+	]);
+
+	// Cargar el historial de versiones de la plantilla PDF seleccionada (selector de version)
+	useEffect(() => {
+		if (selectedNode?.type !== "GeneratePDF") {
+			setPdfTemplateVersions([]);
 			return;
 		}
 		const pdfTemplateId = (
 			selectedNode.config as GeneratePdfNodeConfig | undefined
 		)?.pdfTemplateId;
 		if (!pdfTemplateId) {
-			setPdfTemplateFields(null);
+			setPdfTemplateVersions([]);
 			return;
 		}
-		setPdfFieldsLoading(true);
-		getPdfTemplateFieldsAction(pdfTemplateId)
-			.then((fields) => setPdfTemplateFields(fields))
-			.catch(() => setPdfTemplateFields(null))
-			.finally(() => setPdfFieldsLoading(false));
+		setPdfTemplateVersionsLoading(true);
+		listPdfTemplateVersionsAction(pdfTemplateId)
+			.then((versions) => setPdfTemplateVersions(versions))
+			.catch(() => setPdfTemplateVersions([]))
+			.finally(() => setPdfTemplateVersionsLoading(false));
 	}, [
 		selectedNode?.type,
 		(selectedNode?.config as GeneratePdfNodeConfig | undefined)?.pdfTemplateId,
@@ -588,10 +666,10 @@ export function PropertiesPanel({
 		if (cfg.pdfTemplateId !== pdfTemplateFields.pdfTemplateId) return;
 
 		const existing = cfg.fieldMappings ?? [];
-		const textFields = pdfTemplateFields.fields.filter(
-			(f) => f.type === "text",
+		const fillableFields = pdfTemplateFields.fields.filter(
+			(f) => f.type !== "unknown",
 		);
-		const merged: GeneratePdfFieldMapping[] = textFields.map((f) => {
+		const merged: GeneratePdfFieldMapping[] = fillableFields.map((f) => {
 			const found = existing.find((m) => m.fieldName === f.name);
 			return found ?? { fieldName: f.name, value: "" };
 		});
@@ -5177,11 +5255,11 @@ export function PropertiesPanel({
 											(tpl) => tpl.id === pdfConfig.pdfTemplateId,
 										);
 										const allFields = pdfTemplateFields?.fields ?? [];
-										const textFields = allFields.filter(
-											(f) => f.type === "text",
+										const fillableFields = allFields.filter(
+											(f) => f.type !== "unknown",
 										);
-										const nonTextFields = allFields.filter(
-											(f) => f.type !== "text",
+										const unsupportedFields = allFields.filter(
+											(f) => f.type === "unknown",
 										);
 
 										const handleSelectTemplate = (id: string) => {
@@ -5193,6 +5271,22 @@ export function PropertiesPanel({
 													...selectedNode.config,
 													pdfTemplateId: id,
 													pdfTemplateName: tpl?.name,
+													// Preseleccionar la version activa (patron Form: formVersion).
+													pdfTemplateVersionId: tpl?.activeVersion?.id,
+													pdfTemplateVersion: tpl?.activeVersion?.version,
+												},
+											});
+										};
+
+										const handleSelectVersion = (versionId: string) => {
+											const version = pdfTemplateVersions.find(
+												(v) => v.id === versionId,
+											);
+											onUpdateNode(selectedNode.id, {
+												config: {
+													...selectedNode.config,
+													pdfTemplateVersionId: versionId,
+													pdfTemplateVersion: version?.version,
 												},
 											});
 										};
@@ -5205,11 +5299,26 @@ export function PropertiesPanel({
 												});
 												setAvailablePdfTemplates(templates);
 												if (pdfConfig.pdfTemplateId) {
+													setPdfTemplateVersionsLoading(true);
+													listPdfTemplateVersionsAction(
+														pdfConfig.pdfTemplateId,
+														{ bypassCache: true },
+													)
+														.then((versions) =>
+															setPdfTemplateVersions(versions),
+														)
+														.catch(() => setPdfTemplateVersions([]))
+														.finally(() =>
+															setPdfTemplateVersionsLoading(false),
+														);
 													setPdfFieldsLoading(true);
 													try {
 														const fields = await getPdfTemplateFieldsAction(
 															pdfConfig.pdfTemplateId,
-															{ bypassCache: true },
+															{
+																bypassCache: true,
+																versionId: pdfConfig.pdfTemplateVersionId,
+															},
 														);
 														setPdfTemplateFields(fields);
 													} catch {
@@ -5325,6 +5434,58 @@ export function PropertiesPanel({
 													)}
 												</div>
 
+												{!!pdfConfig.pdfTemplateId &&
+													pdfTemplateVersions.length > 0 && (
+														<div className="space-y-2">
+															<Label htmlFor="generate-pdf-version">
+																{t("propertiesPanel.generatePdfVersionLabel")}
+															</Label>
+															<Select
+																value={pdfConfig.pdfTemplateVersionId ?? ""}
+																onValueChange={handleSelectVersion}
+																disabled={pdfTemplateVersionsLoading}
+															>
+																<SelectTrigger
+																	id="generate-pdf-version"
+																	className="w-full"
+																>
+																	<SelectValue
+																		placeholder={
+																			pdfTemplateVersionsLoading
+																				? t(
+																						"propertiesPanel.generatePdfVersionLoadingPlaceholder",
+																					)
+																				: t(
+																						"propertiesPanel.generatePdfVersionPlaceholder",
+																					)
+																		}
+																	/>
+																</SelectTrigger>
+																<SelectContent>
+																	{pdfTemplateVersions.map((v) => (
+																		<SelectItem key={v.id} value={v.id}>
+																			v{v.version}
+																			{v.isActive && (
+																				<span className="ml-2 text-xs text-muted-foreground">
+																					{t(
+																						"propertiesPanel.generatePdfVersionActive",
+																					)}
+																				</span>
+																			)}
+																		</SelectItem>
+																	))}
+																</SelectContent>
+															</Select>
+															{!pdfConfig.pdfTemplateVersionId && (
+																<p className="text-[10px] text-amber-600 dark:text-amber-400">
+																	{t(
+																		"propertiesPanel.generatePdfVersionUnpinnedNote",
+																	)}
+																</p>
+															)}
+														</div>
+													)}
+
 												<div className="space-y-2">
 													<Label>
 														{t("propertiesPanel.generatePdfFieldsTitle")}
@@ -5336,21 +5497,27 @@ export function PropertiesPanel({
 														<p className="text-xs text-muted-foreground">
 															{t("propertiesPanel.generatePdfFieldsLoading")}
 														</p>
-													) : textFields.length === 0 ? (
+													) : fillableFields.length === 0 ? (
 														<p className="text-xs text-muted-foreground">
 															{t("propertiesPanel.generatePdfFieldsEmpty")}
 														</p>
 													) : (
 														<div className="space-y-2">
-															{textFields.map((field) => {
+															{fillableFields.map((field) => {
 																const mapping = (
 																	pdfConfig.fieldMappings ?? []
 																).find((m) => m.fieldName === field.name);
+																const hint = getPdfFieldHint(field, t);
 																return (
 																	<div key={field.name} className="space-y-1">
-																		<Label className="text-xs font-mono text-muted-foreground">
-																			{field.name}
-																		</Label>
+																		<div className="flex items-center gap-2">
+																			<Label className="text-xs font-mono text-muted-foreground">
+																				{field.name}
+																			</Label>
+																			<span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+																				{getPdfFieldTypeLabel(field.type, t)}
+																			</span>
+																		</div>
 																		<VariableTemplateInput
 																			nodes={upstreamVariableNodes}
 																			value={parseTemplateStringToSegments(
@@ -5364,12 +5531,17 @@ export function PropertiesPanel({
 																				)
 																			}
 																		/>
+																		{hint && (
+																			<p className="text-[10px] text-muted-foreground">
+																				{hint}
+																			</p>
+																		)}
 																	</div>
 																);
 															})}
 														</div>
 													)}
-													{nonTextFields.length > 0 && (
+													{unsupportedFields.length > 0 && (
 														<div className="rounded-md border border-border/60 bg-muted/40 p-2 text-[10px] text-muted-foreground">
 															<p>
 																{t(
@@ -5377,7 +5549,9 @@ export function PropertiesPanel({
 																)}
 															</p>
 															<p className="mt-1 font-mono">
-																{nonTextFields.map((f) => f.name).join(", ")}
+																{unsupportedFields
+																	.map((f) => f.name)
+																	.join(", ")}
 															</p>
 														</div>
 													)}

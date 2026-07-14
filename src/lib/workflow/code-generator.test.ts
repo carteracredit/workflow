@@ -6351,4 +6351,26 @@ describe("GeneratePDF node code generation", () => {
 		expect(result.code).toContain("generarContrato");
 		expect(result.code).toContain("updateCaseObject");
 	});
+
+	it("should pass pdfTemplateVersionId to the RPC when the node pins a version", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			pdfTemplateVersionId: "ver-2",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('pdfTemplateVersionId: "ver-2"');
+		expect(result.code).toContain("pdfTemplateVersionId?: string;");
+	});
+
+	it("should NOT pass pdfTemplateVersionId to the RPC when the node has no version pinned", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain("pdfTemplateVersionId:");
+	});
 });

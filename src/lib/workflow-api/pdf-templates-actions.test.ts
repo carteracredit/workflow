@@ -7,14 +7,23 @@ vi.mock("@/lib/auth/getJwt", () => ({
 vi.mock("./pdf-templates", () => ({
 	listPdfTemplates: vi.fn(),
 	getPdfTemplateFields: vi.fn(),
+	listPdfTemplateVersions: vi.fn(),
 }));
 
 import { getJwt } from "@/lib/auth/getJwt";
-import { listPdfTemplates, getPdfTemplateFields } from "./pdf-templates";
-import type { PdfTemplateFieldsResult } from "./pdf-templates";
+import {
+	listPdfTemplates,
+	getPdfTemplateFields,
+	listPdfTemplateVersions,
+} from "./pdf-templates";
+import type {
+	PdfTemplateFieldsResult,
+	PdfTemplateVersionSummary,
+} from "./pdf-templates";
 import {
 	listPdfTemplatesAction,
 	getPdfTemplateFieldsAction,
+	listPdfTemplateVersionsAction,
 } from "./pdf-templates-actions";
 
 const mockTemplateSummary = {
@@ -32,11 +41,22 @@ const mockFieldsResult: PdfTemplateFieldsResult = {
 	fields: [{ name: "debtor_name", type: "text" }],
 };
 
+const mockVersions: PdfTemplateVersionSummary[] = [
+	{
+		id: "ver-1",
+		version: 1,
+		fileName: "ucc.pdf",
+		createdAt: "2026-01-01T00:00:00.000Z",
+		isActive: true,
+	},
+];
+
 describe("pdf-templates server actions", () => {
 	beforeEach(() => {
 		vi.mocked(getJwt).mockResolvedValue("mock-jwt-token");
 		vi.mocked(listPdfTemplates).mockResolvedValue([mockTemplateSummary]);
 		vi.mocked(getPdfTemplateFields).mockResolvedValue(mockFieldsResult);
+		vi.mocked(listPdfTemplateVersions).mockResolvedValue(mockVersions);
 	});
 
 	afterEach(() => {
@@ -126,6 +146,58 @@ describe("pdf-templates server actions", () => {
 			await getPdfTemplateFieldsAction("tpl-1", { bypassCache: true });
 
 			expect(getPdfTemplateFields).toHaveBeenCalledWith(
+				"tpl-1",
+				expect.objectContaining({ bypassCache: true }),
+			);
+		});
+
+		it("passes versionId when provided, to pin a specific version", async () => {
+			await getPdfTemplateFieldsAction("tpl-1", { versionId: "ver-2" });
+
+			expect(getPdfTemplateFields).toHaveBeenCalledWith(
+				"tpl-1",
+				expect.objectContaining({ versionId: "ver-2" }),
+			);
+		});
+	});
+
+	describe("listPdfTemplateVersionsAction", () => {
+		it("calls listPdfTemplateVersions with the JWT from getJwt", async () => {
+			const result = await listPdfTemplateVersionsAction("tpl-1");
+
+			expect(getJwt).toHaveBeenCalled();
+			expect(listPdfTemplateVersions).toHaveBeenCalledWith("tpl-1", {
+				jwt: "mock-jwt-token",
+				bypassCache: undefined,
+			});
+			expect(result).toEqual(mockVersions);
+		});
+
+		it("passes undefined jwt when getJwt returns null", async () => {
+			vi.mocked(getJwt).mockResolvedValue(null);
+
+			await listPdfTemplateVersionsAction("tpl-1");
+
+			expect(listPdfTemplateVersions).toHaveBeenCalledWith("tpl-1", {
+				jwt: undefined,
+				bypassCache: undefined,
+			});
+		});
+
+		it("propagates errors from listPdfTemplateVersions", async () => {
+			vi.mocked(listPdfTemplateVersions).mockRejectedValue(
+				new Error("Template not found"),
+			);
+
+			await expect(listPdfTemplateVersionsAction("bad-id")).rejects.toThrow(
+				"Template not found",
+			);
+		});
+
+		it("passes bypassCache: true when provided", async () => {
+			await listPdfTemplateVersionsAction("tpl-1", { bypassCache: true });
+
+			expect(listPdfTemplateVersions).toHaveBeenCalledWith(
 				"tpl-1",
 				expect.objectContaining({ bypassCache: true }),
 			);

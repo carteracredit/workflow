@@ -2453,4 +2453,44 @@ describe("GeneratePDF node validation", () => {
 			),
 		).toBe(false);
 	});
+
+	it("should warn when a template is selected but no version is pinned", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [{ fieldName: "name", value: "${start.name}" }],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.severity === "warning" &&
+					e.message.includes("versión de plantilla fijada"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn about version pinning when pdfTemplateVersionId is set", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			pdfTemplateVersionId: "ver-2",
+			fieldMappings: [{ fieldName: "name", value: "${start.name}" }],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.message.includes("versión de plantilla fijada"),
+			),
+		).toBe(false);
+	});
+
+	it("should not warn about version pinning when no template is selected at all", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({ fieldMappings: [] });
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some((e) => e.message.includes("versión de plantilla fijada")),
+		).toBe(false);
+	});
 });

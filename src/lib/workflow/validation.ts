@@ -554,6 +554,14 @@ export function validateWorkflow(
 					severity: "warning",
 				});
 			}
+
+			if (pdfCfg?.pdfTemplateId && !pdfCfg.pdfTemplateVersionId) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": No tiene una versión de plantilla fijada — usará la versión activa al momento de generar el PDF`,
+					severity: "warning",
+				});
+			}
 		}
 
 		if (node.type === "Message") {

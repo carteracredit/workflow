@@ -300,6 +300,16 @@ export interface GeneratePdfNodeConfig extends Record<string, unknown> {
 	pdfTemplateId?: string;
 	/** Cached display name, so the panel can show a label before the template list has loaded. */
 	pdfTemplateName?: string;
+	/**
+	 * Pinned template version (mirrors the Form node's `formVersion`): when
+	 * set, the runtime always fills this exact version, so activating a
+	 * newer one (e.g. after a field rename) never changes what an already
+	 * published workflow generates. When unset, the runtime falls back to
+	 * the template's active version at generation time.
+	 */
+	pdfTemplateVersionId?: string;
+	/** Cached display version number, so the panel can show it before the version list has loaded. */
+	pdfTemplateVersion?: number;
 	fieldMappings: GeneratePdfFieldMapping[];
 }
 
