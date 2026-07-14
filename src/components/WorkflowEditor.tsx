@@ -980,7 +980,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	);
 
 	const handlePaste = useCallback(
-		(pastedNodes: WorkflowNode[], pastedEdges: WorkflowEdge[]) => {
+		(
+			pastedNodes: WorkflowNode[],
+			pastedEdges: WorkflowEdge[],
+			tokensRemapped: boolean,
+		) => {
 			applyHistoryChange((prev) => {
 				const newNodes = [
 					...prev.nodes,
@@ -994,8 +998,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					selectedEdgeIds: pastedEdges.map((e) => e.id),
 				};
 			});
+			if (tokensRemapped) {
+				toast.info(t("workflowEditor.toastPasteTokensRemapped"));
+			}
 		},
-		[applyHistoryChange],
+		[applyHistoryChange, t],
 	);
 
 	const handleUndo = useCallback(() => {

@@ -10,6 +10,7 @@ import {
 	createDefaultNLSConfig,
 	createDefaultExternalLinkConfig,
 	createDefaultAddCardConfig,
+	createDefaultGeneratePdfConfig,
 } from "@/lib/workflow/types";
 import {
 	XCircle,
@@ -28,6 +29,7 @@ import {
 	Banknote,
 	ExternalLink,
 	CreditCard,
+	FileOutput,
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 import {
@@ -49,6 +51,7 @@ const NODES_WITH_VISIBILITY_ROLES = new Set<NodeType>([
 	"NLS",
 	"ExternalLink",
 	"AddCard",
+	"GeneratePDF",
 ]);
 
 interface PaletteProps {
@@ -166,6 +169,13 @@ const NODE_CATEGORIES = [
 				bgColor: "var(--node-bg-add-card)",
 				iconColorVar: "--node-icon-add-card",
 			},
+			{
+				type: "GeneratePDF" as NodeType,
+				labelKey: "palette.nodeGeneratePdf",
+				icon: <FileOutput className="h-4 w-4" />,
+				bgColor: "var(--node-bg-generate-pdf)",
+				iconColorVar: "--node-icon-generate-pdf",
+			},
 		],
 	},
 	{
@@ -221,6 +231,9 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	}
 	if (type === "AddCard") {
 		return createDefaultAddCardConfig();
+	}
+	if (type === "GeneratePDF") {
+		return createDefaultGeneratePdfConfig();
 	}
 	return {};
 };

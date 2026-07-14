@@ -107,6 +107,21 @@ import type {
 	NlsFunctionDetail,
 } from "@/lib/workflow-api/nls-actions";
 import type { NLSNodeConfig, NLSFunctionId } from "@/lib/workflow/types";
+import {
+	listPdfTemplatesAction,
+	getPdfTemplateFieldsAction,
+	listPdfTemplateVersionsAction,
+} from "@/lib/workflow-api/pdf-templates-actions";
+import type {
+	PdfTemplateSummary,
+	PdfTemplateFieldsResult,
+	PdfTemplateVersionSummary,
+	PdfFormField,
+} from "@/lib/workflow-api/pdf-templates-actions";
+import type {
+	GeneratePdfNodeConfig,
+	GeneratePdfFieldMapping,
+} from "@/lib/workflow/types";
 import { buildOutputSchemaFromFields } from "@/lib/workflow/form-schema-utils";
 import { nlsOutputFieldsToSchema } from "@/lib/workflow/nls-output-mapper";
 import {
@@ -133,6 +148,50 @@ import { CollapsibleSection } from "@/components/workflow/collapsible-section";
 
 function generateSchemaId() {
 	return `prop_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Human-readable badge label for a GeneratePDF field's AcroForm type. */
+function getPdfFieldTypeLabel(
+	type: PdfFormField["type"],
+	t: (key: string) => string,
+): string {
+	switch (type) {
+		case "text":
+			return t("propertiesPanel.generatePdfFieldTypeText");
+		case "checkbox":
+			return t("propertiesPanel.generatePdfFieldTypeCheckbox");
+		case "radio":
+			return t("propertiesPanel.generatePdfFieldTypeRadio");
+		case "dropdown":
+			return t("propertiesPanel.generatePdfFieldTypeDropdown");
+		case "optionList":
+			return t("propertiesPanel.generatePdfFieldTypeOptionList");
+		default:
+			return type;
+	}
+}
+
+/** Help text shown under a GeneratePDF field mapping, guiding which values are valid. */
+function getPdfFieldHint(
+	field: PdfFormField,
+	t: (key: string) => string,
+): string | null {
+	if (field.type === "checkbox") {
+		return t("propertiesPanel.generatePdfCheckboxHint");
+	}
+	if (
+		(field.type === "radio" ||
+			field.type === "dropdown" ||
+			field.type === "optionList") &&
+		field.options &&
+		field.options.length > 0
+	) {
+		return t("propertiesPanel.generatePdfOptionsHint").replace(
+			"{options}",
+			field.options.join(", "),
+		);
+	}
+	return null;
 }
 
 function jsonValueToSchemaProperty(
@@ -416,6 +475,22 @@ export function PropertiesPanel({
 		useState<WorkflowForm | null>(null);
 	const [elFormVersionsLoading, setElFormVersionsLoading] = useState(false);
 
+	// ── GeneratePDF state ────────────────────────────────────────────
+	const [availablePdfTemplates, setAvailablePdfTemplates] = useState<
+		PdfTemplateSummary[]
+	>([]);
+	const [pdfTemplatesLoading, setPdfTemplatesLoading] = useState(false);
+	const [pdfTemplateFields, setPdfTemplateFields] =
+		useState<PdfTemplateFieldsResult | null>(null);
+	const [pdfFieldsLoading, setPdfFieldsLoading] = useState(false);
+	const [isRefreshingPdfTemplates, setIsRefreshingPdfTemplates] =
+		useState(false);
+	const [pdfTemplateVersions, setPdfTemplateVersions] = useState<
+		PdfTemplateVersionSummary[]
+	>([]);
+	const [pdfTemplateVersionsLoading, setPdfTemplateVersionsLoading] =
+		useState(false);
+
 	// Cargar forms publicados cuando hay un nodo Form seleccionado
 	useEffect(() => {
 		if (selectedNode?.type !== "Form") return;
@@ -522,6 +597,96 @@ export function PropertiesPanel({
 		selectedNode?.type,
 		(selectedNode?.config as NLSNodeConfig | undefined)?.functionId,
 	]);
+
+	// Cargar plantillas PDF cuando hay un nodo GeneratePDF seleccionado
+	useEffect(() => {
+		if (selectedNode?.type !== "GeneratePDF") return;
+		setPdfTemplatesLoading(true);
+		listPdfTemplatesAction()
+			.then((templates) => setAvailablePdfTemplates(templates))
+			.catch(() => setAvailablePdfTemplates([]))
+			.finally(() => setPdfTemplatesLoading(false));
+	}, [selectedNode?.type]);
+
+	// Cargar los campos de la version (fijada o activa) de la plantilla PDF seleccionada
+	useEffect(() => {
+		if (selectedNode?.type !== "GeneratePDF") {
+			setPdfTemplateFields(null);
+			return;
+		}
+		const cfg = selectedNode.config as GeneratePdfNodeConfig | undefined;
+		const pdfTemplateId = cfg?.pdfTemplateId;
+		if (!pdfTemplateId) {
+			setPdfTemplateFields(null);
+			return;
+		}
+		setPdfFieldsLoading(true);
+		getPdfTemplateFieldsAction(pdfTemplateId, {
+			versionId: cfg?.pdfTemplateVersionId,
+		})
+			.then((fields) => setPdfTemplateFields(fields))
+			.catch(() => setPdfTemplateFields(null))
+			.finally(() => setPdfFieldsLoading(false));
+	}, [
+		selectedNode?.type,
+		(selectedNode?.config as GeneratePdfNodeConfig | undefined)?.pdfTemplateId,
+		(selectedNode?.config as GeneratePdfNodeConfig | undefined)
+			?.pdfTemplateVersionId,
+	]);
+
+	// Cargar el historial de versiones de la plantilla PDF seleccionada (selector de version)
+	useEffect(() => {
+		if (selectedNode?.type !== "GeneratePDF") {
+			setPdfTemplateVersions([]);
+			return;
+		}
+		const pdfTemplateId = (
+			selectedNode.config as GeneratePdfNodeConfig | undefined
+		)?.pdfTemplateId;
+		if (!pdfTemplateId) {
+			setPdfTemplateVersions([]);
+			return;
+		}
+		setPdfTemplateVersionsLoading(true);
+		listPdfTemplateVersionsAction(pdfTemplateId)
+			.then((versions) => setPdfTemplateVersions(versions))
+			.catch(() => setPdfTemplateVersions([]))
+			.finally(() => setPdfTemplateVersionsLoading(false));
+	}, [
+		selectedNode?.type,
+		(selectedNode?.config as GeneratePdfNodeConfig | undefined)?.pdfTemplateId,
+	]);
+
+	// Sincroniza fieldMappings con los campos de texto descubiertos en la plantilla:
+	// conserva los valores ya configurados y agrega/elimina entradas según los
+	// campos actuales de la plantilla activa.
+	useEffect(() => {
+		if (selectedNode?.type !== "GeneratePDF" || !pdfTemplateFields) return;
+		const cfg = selectedNode.config as GeneratePdfNodeConfig;
+		if (cfg.pdfTemplateId !== pdfTemplateFields.pdfTemplateId) return;
+
+		const existing = cfg.fieldMappings ?? [];
+		const fillableFields = pdfTemplateFields.fields.filter(
+			(f) => f.type !== "unknown",
+		);
+		const merged: GeneratePdfFieldMapping[] = fillableFields.map((f) => {
+			const found = existing.find((m) => m.fieldName === f.name);
+			return found ?? { fieldName: f.name, value: "" };
+		});
+
+		const unchanged =
+			merged.length === existing.length &&
+			merged.every(
+				(m, i) =>
+					m.fieldName === existing[i]?.fieldName &&
+					m.value === existing[i]?.value,
+			);
+		if (unchanged) return;
+
+		onUpdateNode(selectedNode.id, {
+			config: { ...selectedNode.config, fieldMappings: merged },
+		});
+	}, [pdfTemplateFields, selectedNode?.id, selectedNode?.type]);
 
 	// Cargar el formulario completo (con versiones) cuando ya hay un formId en el config
 	useEffect(() => {
@@ -5081,6 +5246,319 @@ export function PropertiesPanel({
 										</div>
 									</div>
 								)}
+
+								{selectedNode.type === "GeneratePDF" &&
+									(() => {
+										const pdfConfig =
+											selectedNode.config as GeneratePdfNodeConfig;
+										const selectedTemplate = availablePdfTemplates.find(
+											(tpl) => tpl.id === pdfConfig.pdfTemplateId,
+										);
+										const allFields = pdfTemplateFields?.fields ?? [];
+										const fillableFields = allFields.filter(
+											(f) => f.type !== "unknown",
+										);
+										const unsupportedFields = allFields.filter(
+											(f) => f.type === "unknown",
+										);
+
+										const handleSelectTemplate = (id: string) => {
+											const tpl = availablePdfTemplates.find(
+												(t) => t.id === id,
+											);
+											onUpdateNode(selectedNode.id, {
+												config: {
+													...selectedNode.config,
+													pdfTemplateId: id,
+													pdfTemplateName: tpl?.name,
+													// Preseleccionar la version activa (patron Form: formVersion).
+													pdfTemplateVersionId: tpl?.activeVersion?.id,
+													pdfTemplateVersion: tpl?.activeVersion?.version,
+												},
+											});
+										};
+
+										const handleSelectVersion = (versionId: string) => {
+											const version = pdfTemplateVersions.find(
+												(v) => v.id === versionId,
+											);
+											onUpdateNode(selectedNode.id, {
+												config: {
+													...selectedNode.config,
+													pdfTemplateVersionId: versionId,
+													pdfTemplateVersion: version?.version,
+												},
+											});
+										};
+
+										const handleRefreshPdfTemplates = async () => {
+											setIsRefreshingPdfTemplates(true);
+											try {
+												const templates = await listPdfTemplatesAction({
+													bypassCache: true,
+												});
+												setAvailablePdfTemplates(templates);
+												if (pdfConfig.pdfTemplateId) {
+													setPdfTemplateVersionsLoading(true);
+													listPdfTemplateVersionsAction(
+														pdfConfig.pdfTemplateId,
+														{ bypassCache: true },
+													)
+														.then((versions) =>
+															setPdfTemplateVersions(versions),
+														)
+														.catch(() => setPdfTemplateVersions([]))
+														.finally(() =>
+															setPdfTemplateVersionsLoading(false),
+														);
+													setPdfFieldsLoading(true);
+													try {
+														const fields = await getPdfTemplateFieldsAction(
+															pdfConfig.pdfTemplateId,
+															{
+																bypassCache: true,
+																versionId: pdfConfig.pdfTemplateVersionId,
+															},
+														);
+														setPdfTemplateFields(fields);
+													} catch {
+														// silent fail — user can retry
+													} finally {
+														setPdfFieldsLoading(false);
+													}
+												}
+											} catch {
+												// silent fail — user can retry
+											} finally {
+												setIsRefreshingPdfTemplates(false);
+											}
+										};
+
+										const updateFieldMapping = (
+											fieldName: string,
+											value: string,
+										) => {
+											const existing = pdfConfig.fieldMappings ?? [];
+											const next = existing.some(
+												(m) => m.fieldName === fieldName,
+											)
+												? existing.map((m) =>
+														m.fieldName === fieldName ? { ...m, value } : m,
+													)
+												: [...existing, { fieldName, value }];
+											onUpdateNode(selectedNode.id, {
+												config: {
+													...selectedNode.config,
+													fieldMappings: next,
+												},
+											});
+										};
+
+										return (
+											<div className="space-y-4">
+												<div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+													<p className="font-medium text-foreground">
+														{t("propertiesPanel.generatePdfOutputsTitle")}
+													</p>
+													<p className="mt-1">
+														{t("propertiesPanel.generatePdfOutputsDesc")}
+													</p>
+												</div>
+
+												<div className="space-y-2">
+													<div className="flex items-center justify-between">
+														<Label htmlFor="generate-pdf-template">
+															{t("propertiesPanel.generatePdfTemplateLabel")}
+														</Label>
+														<button
+															type="button"
+															onClick={handleRefreshPdfTemplates}
+															disabled={
+																isRefreshingPdfTemplates || pdfFieldsLoading
+															}
+															title={t(
+																"propertiesPanel.generatePdfRefreshTooltip",
+															)}
+															className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-600 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-900/40"
+														>
+															<RefreshCw
+																className={`h-3 w-3 ${isRefreshingPdfTemplates ? "animate-spin" : ""}`}
+															/>
+														</button>
+													</div>
+													{availablePdfTemplates.length > 0 ? (
+														<Select
+															value={pdfConfig.pdfTemplateId ?? ""}
+															onValueChange={handleSelectTemplate}
+														>
+															<SelectTrigger
+																id="generate-pdf-template"
+																className="w-full"
+															>
+																<SelectValue
+																	placeholder={
+																		pdfTemplatesLoading
+																			? t(
+																					"propertiesPanel.generatePdfTemplateLoading",
+																				)
+																			: t(
+																					"propertiesPanel.generatePdfTemplatePlaceholder",
+																				)
+																	}
+																/>
+															</SelectTrigger>
+															<SelectContent>
+																{availablePdfTemplates.map((tpl) => (
+																	<SelectItem key={tpl.id} value={tpl.id}>
+																		{tpl.name}
+																		{tpl.activeVersion
+																			? ` (v${tpl.activeVersion.version})`
+																			: ""}
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													) : (
+														<p className="text-xs text-muted-foreground">
+															{pdfTemplatesLoading
+																? t(
+																		"propertiesPanel.generatePdfTemplateLoading",
+																	)
+																: t("propertiesPanel.generatePdfTemplateEmpty")}
+														</p>
+													)}
+													{selectedTemplate?.description && (
+														<p className="text-[10px] text-muted-foreground">
+															{selectedTemplate.description}
+														</p>
+													)}
+												</div>
+
+												{!!pdfConfig.pdfTemplateId &&
+													pdfTemplateVersions.length > 0 && (
+														<div className="space-y-2">
+															<Label htmlFor="generate-pdf-version">
+																{t("propertiesPanel.generatePdfVersionLabel")}
+															</Label>
+															<Select
+																value={pdfConfig.pdfTemplateVersionId ?? ""}
+																onValueChange={handleSelectVersion}
+																disabled={pdfTemplateVersionsLoading}
+															>
+																<SelectTrigger
+																	id="generate-pdf-version"
+																	className="w-full"
+																>
+																	<SelectValue
+																		placeholder={
+																			pdfTemplateVersionsLoading
+																				? t(
+																						"propertiesPanel.generatePdfVersionLoadingPlaceholder",
+																					)
+																				: t(
+																						"propertiesPanel.generatePdfVersionPlaceholder",
+																					)
+																		}
+																	/>
+																</SelectTrigger>
+																<SelectContent>
+																	{pdfTemplateVersions.map((v) => (
+																		<SelectItem key={v.id} value={v.id}>
+																			v{v.version}
+																			{v.isActive && (
+																				<span className="ml-2 text-xs text-muted-foreground">
+																					{t(
+																						"propertiesPanel.generatePdfVersionActive",
+																					)}
+																				</span>
+																			)}
+																		</SelectItem>
+																	))}
+																</SelectContent>
+															</Select>
+															{!pdfConfig.pdfTemplateVersionId && (
+																<p className="text-[10px] text-amber-600 dark:text-amber-400">
+																	{t(
+																		"propertiesPanel.generatePdfVersionUnpinnedNote",
+																	)}
+																</p>
+															)}
+														</div>
+													)}
+
+												<div className="space-y-2">
+													<Label>
+														{t("propertiesPanel.generatePdfFieldsTitle")}
+													</Label>
+													<p className="text-xs text-muted-foreground">
+														{t("propertiesPanel.generatePdfFieldsDesc")}
+													</p>
+													{pdfFieldsLoading ? (
+														<p className="text-xs text-muted-foreground">
+															{t("propertiesPanel.generatePdfFieldsLoading")}
+														</p>
+													) : fillableFields.length === 0 ? (
+														<p className="text-xs text-muted-foreground">
+															{t("propertiesPanel.generatePdfFieldsEmpty")}
+														</p>
+													) : (
+														<div className="space-y-2">
+															{fillableFields.map((field) => {
+																const mapping = (
+																	pdfConfig.fieldMappings ?? []
+																).find((m) => m.fieldName === field.name);
+																const hint = getPdfFieldHint(field, t);
+																return (
+																	<div key={field.name} className="space-y-1">
+																		<div className="flex items-center gap-2">
+																			<Label className="text-xs font-mono text-muted-foreground">
+																				{field.name}
+																			</Label>
+																			<span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+																				{getPdfFieldTypeLabel(field.type, t)}
+																			</span>
+																		</div>
+																		<VariableTemplateInput
+																			nodes={upstreamVariableNodes}
+																			value={parseTemplateStringToSegments(
+																				mapping?.value,
+																			)}
+																			placeholder="valor o expresión"
+																			onChange={(segs) =>
+																				updateFieldMapping(
+																					field.name,
+																					segmentsToTemplateString(segs),
+																				)
+																			}
+																		/>
+																		{hint && (
+																			<p className="text-[10px] text-muted-foreground">
+																				{hint}
+																			</p>
+																		)}
+																	</div>
+																);
+															})}
+														</div>
+													)}
+													{unsupportedFields.length > 0 && (
+														<div className="rounded-md border border-border/60 bg-muted/40 p-2 text-[10px] text-muted-foreground">
+															<p>
+																{t(
+																	"propertiesPanel.generatePdfUnsupportedFieldNote",
+																)}
+															</p>
+															<p className="mt-1 font-mono">
+																{unsupportedFields
+																	.map((f) => f.name)
+																	.join(", ")}
+															</p>
+														</div>
+													)}
+												</div>
+											</div>
+										);
+									})()}
 
 								{selectedNode.type === "Checkpoint" && (
 									<div className="space-y-3">

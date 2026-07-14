@@ -297,32 +297,43 @@ export function migrateWorkflowTokens(
 }
 
 /**
- * Rewrites all `${<fromAlias>.prop}` tokens in the given nodes' configs to
- * `${<toAlias>.prop}`. Used when renaming a node to propagate the alias change
- * across the entire workflow.
+ * Rewrites all `${<alias>.prop}` tokens in the given nodes' configs whose
+ * first segment is a key of `aliasRemap`, replacing it with the mapped
+ * value: `${<aliasRemap.get(alias)>.prop}`.
+ *
+ * All aliases in the map are replaced in a **single pass** over each string,
+ * so chained remaps (e.g. `a -> b` and `b -> c` present in the same map)
+ * never get applied sequentially to the same token — each token is rewritten
+ * at most once, based purely on its original first segment.
+ *
+ * `secret.*` tokens are always left untouched, matching the behavior of the
+ * other token-rewriting helpers in this module.
  *
  * The nodes array is mutated in-place.
  *
  * @returns The number of fields that were rewritten.
  */
-export function renameAliasInTokens(
+export function remapAliasesInTokens(
 	nodes: WorkflowNode[],
-	fromAlias: string,
-	toAlias: string,
+	aliasRemap: Map<string, string>,
 ): number {
 	let count = 0;
+	if (aliasRemap.size === 0) return count;
+
 	const tokenRe = /\$\{([^}]+)\}/g;
 
 	function rewriteStr(str: string): string | null {
 		let changed = false;
 		const result = str.replace(tokenRe, (match, path: string) => {
 			const trimmed = path.trim();
+			if (/^secret\./.test(trimmed)) return match;
 			const dotIdx = trimmed.indexOf(".");
 			const firstSeg = dotIdx >= 0 ? trimmed.slice(0, dotIdx) : trimmed;
-			if (firstSeg === fromAlias) {
+			const newSeg = aliasRemap.get(firstSeg);
+			if (newSeg !== undefined) {
 				changed = true;
 				const rest = dotIdx >= 0 ? trimmed.slice(dotIdx) : "";
-				return `\${${toAlias}${rest}}`;
+				return `\${${newSeg}${rest}}`;
 			}
 			return match;
 		});
@@ -361,6 +372,25 @@ export function renameAliasInTokens(
 	}
 
 	return count;
+}
+
+/**
+ * Rewrites all `${<fromAlias>.prop}` tokens in the given nodes' configs to
+ * `${<toAlias>.prop}`. Used when renaming a node to propagate the alias change
+ * across the entire workflow.
+ *
+ * Thin wrapper around `remapAliasesInTokens` with a single-entry map.
+ *
+ * The nodes array is mutated in-place.
+ *
+ * @returns The number of fields that were rewritten.
+ */
+export function renameAliasInTokens(
+	nodes: WorkflowNode[],
+	fromAlias: string,
+	toAlias: string,
+): number {
+	return remapAliasesInTokens(nodes, new Map([[fromAlias, toAlias]]));
 }
 
 /**

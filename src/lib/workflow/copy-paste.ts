@@ -1,8 +1,20 @@
 import type { WorkflowNode, WorkflowEdge, APIFailureHandling } from "./types";
+import { buildAliasMap } from "./node-alias";
+import { remapAliasesInTokens } from "./migrate-tokens";
 
 export interface CopiedSelection {
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
+	/**
+	 * Alias each copied node had at the moment of copying, computed from the
+	 * *entire* canvas (not just the selection). Variable tokens
+	 * (`${alias.prop}`) inside the copied nodes' configs were written using
+	 * these aliases, so they are needed later to remap tokens correctly when
+	 * pasting — see `deserializeSelection`. Optional for backwards
+	 * compatibility with callers that construct a `CopiedSelection` without
+	 * it (token remapping is simply skipped in that case).
+	 */
+	sourceAliases?: Record<string, string>;
 }
 
 const PASTE_OFFSET = 50; // Offset in pixels for pasted elements
@@ -40,9 +52,21 @@ export function serializeSelection(
 		return selectedNodeIdSet.has(edge.from) && selectedNodeIdSet.has(edge.to);
 	});
 
+	// Capture the aliases as seen by the whole canvas at copy time. Tokens
+	// (`${alias.prop}`) inside the copied nodes reference these aliases, so
+	// we need them later (at paste time) to know what a copied alias used to
+	// point to, in order to remap it to the pasted node's new alias.
+	const fullAliasMap = buildAliasMap(allNodes);
+	const sourceAliases: Record<string, string> = {};
+	for (const node of selectedNodes) {
+		const alias = fullAliasMap.get(node.id);
+		if (alias) sourceAliases[node.id] = alias;
+	}
+
 	return {
 		nodes: selectedNodes,
 		edges: selectedEdges,
+		sourceAliases,
 	};
 }
 
@@ -67,6 +91,12 @@ function regenerateIds(
 		return {
 			...node,
 			id: newId,
+			// Deep-clone the config so the pasted node never shares object
+			// references with the copied source node (which may still be on
+			// the canvas or cached in the clipboard). Without this, rewriting
+			// tokens below (or any later edit) could silently mutate the
+			// original node's configuration too.
+			config: structuredClone(node.config),
 		};
 	});
 
@@ -284,6 +314,12 @@ export function deserializeSelection(
 ): {
 	nodes: WorkflowNode[];
 	edges: WorkflowEdge[];
+	/**
+	 * `true` when at least one `${alias.prop}` variable token inside the
+	 * pasted nodes' configs was rewritten to point to the pasted (cloned)
+	 * node instead of the originally-copied one.
+	 */
+	tokensRemapped: boolean;
 } {
 	// Create set of original node IDs for dependency resolution (before ID regeneration)
 	const originalNodeIdSet = new Set(copiedSelection.nodes.map((n) => n.id));
@@ -362,6 +398,39 @@ export function deserializeSelection(
 		return node;
 	});
 
+	// Remap `${alias.prop}` variable tokens inside the pasted nodes so they
+	// point to the pasted (cloned) nodes instead of the originally-copied
+	// ones. Tokens referencing nodes outside the selection are left as-is.
+	//
+	// `oldAliasMap` reflects the aliases the copied nodes had on the *full*
+	// source canvas (captured at copy time in `serializeSelection`), since
+	// that's how their tokens were written. `newAliasMap` reflects the real
+	// aliases pasted nodes end up with once combined with the current canvas
+	// (title collisions get a numeric suffix).
+	const oldAliasMap = new Map(
+		Object.entries(copiedSelection.sourceAliases ?? {}),
+	);
+	const newAliasMap = buildAliasMap([...existingNodes, ...finalNodes]);
+
+	const aliasRemap = new Map<string, string>();
+	idMapping.forEach((newId, oldId) => {
+		const newAlias = newAliasMap.get(newId);
+		if (!newAlias) return;
+
+		const oldAlias = oldAliasMap.get(oldId);
+		if (oldAlias && oldAlias !== newAlias) {
+			aliasRemap.set(oldAlias, newAlias);
+		}
+
+		// Edge case: unmigrated legacy tokens store the raw node ID
+		// (`${node-<id>.prop}`) instead of an alias as the first segment.
+		if (oldId !== newAlias) {
+			aliasRemap.set(oldId, newAlias);
+		}
+	});
+
+	const tokensRemapped = remapAliasesInTokens(finalNodes, aliasRemap) > 0;
+
 	// Calculate offset if not provided
 	const pasteOffset = offset || calculatePasteOffset(existingNodes, finalNodes);
 
@@ -377,5 +446,6 @@ export function deserializeSelection(
 	return {
 		nodes: offsetNodes,
 		edges: resolvedEdges,
+		tokensRemapped,
 	};
 }

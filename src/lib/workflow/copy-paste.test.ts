@@ -511,6 +511,224 @@ describe("copy-paste", () => {
 		});
 	});
 
+	describe("token remapping on paste", () => {
+		function makeNode(
+			id: string,
+			type: WorkflowNode["type"],
+			title: string,
+			config: Record<string, unknown> = {},
+			position = { x: 0, y: 0 },
+		): WorkflowNode {
+			return {
+				id,
+				type,
+				title,
+				description: "",
+				roles: [],
+				config,
+				position,
+				groupId: null,
+			};
+		}
+
+		it("remaps ${alias.prop} tokens in a pasted subgraph to the pasted node's new alias", () => {
+			const form = makeNode("form-1", "Form", "Form");
+			const message = makeNode("message-1", "Message", "Message", {
+				body: "Hello ${form.name}",
+			});
+			const allNodes = [form, message];
+
+			const selection = serializeSelection(
+				["form-1", "message-1"],
+				[],
+				allNodes,
+				[],
+			);
+			expect(selection).not.toBeNull();
+			expect(selection?.sourceAliases).toEqual({
+				"form-1": "form",
+				"message-1": "message",
+			});
+
+			// The originals are still on the canvas when pasting (Ctrl+C does
+			// not remove them), so the pasted clones collide on title and get
+			// suffixed aliases.
+			const result = deserializeSelection(
+				selection as CopiedSelection,
+				allNodes,
+			);
+
+			const pastedMessage = result.nodes.find((n) => n.type === "Message");
+			const pastedForm = result.nodes.find((n) => n.type === "Form");
+			expect(pastedForm).toBeDefined();
+			expect(pastedMessage).toBeDefined();
+			expect(pastedMessage?.config.body).toBe("Hello ${form2.name}");
+			expect(result.tokensRemapped).toBe(true);
+		});
+
+		it("leaves tokens referencing a node outside the selection untouched", () => {
+			const form = makeNode("form-1", "Form", "Form");
+			const otherMsg = makeNode("other-1", "Message", "Other Msg", {
+				body: "${form.x}",
+			});
+			const allNodes = [form, otherMsg];
+
+			// Only "other-1" is copied — "form-1" stays external.
+			const selection = serializeSelection(["other-1"], [], allNodes, []);
+			expect(selection).not.toBeNull();
+
+			const result = deserializeSelection(
+				selection as CopiedSelection,
+				allNodes,
+			);
+
+			expect(result.nodes).toHaveLength(1);
+			expect(result.nodes[0].config.body).toBe("${form.x}");
+			expect(result.tokensRemapped).toBe(false);
+		});
+
+		it("remaps tokens inside GeneratePDF fieldMappings referencing a node in the selection", () => {
+			const form = makeNode("form-1", "Form", "Form");
+			const generatePdf = makeNode("pdf-1", "GeneratePDF", "Generate PDF", {
+				pdfTemplateId: "template-1",
+				fieldMappings: [{ fieldName: "name", value: "${form.name}" }],
+			});
+			const allNodes = [form, generatePdf];
+
+			const selection = serializeSelection(
+				["form-1", "pdf-1"],
+				[],
+				allNodes,
+				[],
+			);
+			expect(selection).not.toBeNull();
+
+			const result = deserializeSelection(
+				selection as CopiedSelection,
+				allNodes,
+			);
+
+			const pastedPdf = result.nodes.find((n) => n.type === "GeneratePDF");
+			const pastedForm = result.nodes.find((n) => n.type === "Form");
+			const fieldMappings = pastedPdf?.config.fieldMappings as Array<{
+				fieldName: string;
+				value: string;
+			}>;
+			expect(fieldMappings[0].value).toBe("${form2.name}");
+			expect(pastedForm).toBeDefined();
+			expect(result.tokensRemapped).toBe(true);
+		});
+
+		it("remaps colliding aliases simultaneously without corrupting a swap (a<->b)", () => {
+			// Two nodes with the same title get suffixed aliases based on id
+			// order ("aa" < "bb"): aa -> "form", bb -> "form2".
+			const nodeA = makeNode("aa", "Form", "Form");
+			const nodeB = makeNode("bb", "Form", "Form");
+			const consumer = makeNode("consumer-1", "Message", "Consumer", {
+				url: "${form.x} ${form2.y}",
+			});
+
+			// Selection order is [B, A, consumer] on purpose: ID regeneration
+			// assigns new IDs by array position, not by id-sort order, so B's
+			// clone gets the lexicographically-smaller new id and therefore
+			// wins the un-suffixed alias "form" — swapping what "form" and
+			// "form2" point to relative to the originals.
+			const allNodes = [nodeB, nodeA, consumer];
+			const selection = serializeSelection(
+				["bb", "aa", "consumer-1"],
+				[],
+				allNodes,
+				[],
+			);
+			expect(selection).not.toBeNull();
+			expect(selection?.nodes.map((n) => n.id)).toEqual([
+				"bb",
+				"aa",
+				"consumer-1",
+			]);
+
+			const result = deserializeSelection(
+				selection as CopiedSelection,
+				[], // paste into an empty canvas so only the pasted clones compete for aliases
+			);
+
+			const pastedConsumer = result.nodes.find((n) => n.type === "Message");
+			expect(pastedConsumer?.config.url).toBe("${form2.x} ${form.y}");
+			expect(result.tokensRemapped).toBe(true);
+		});
+
+		it("remaps legacy ${node-<id>.prop} tokens to the pasted node's alias", () => {
+			const source = makeNode("node-100", "Form", "Legacy Source");
+			const consumer = makeNode("node-200", "Message", "Consumer", {
+				note: "${node-100.value}",
+			});
+			const allNodes = [source, consumer];
+
+			const selection = serializeSelection(
+				["node-100", "node-200"],
+				[],
+				allNodes,
+				[],
+			);
+			expect(selection).not.toBeNull();
+
+			const result = deserializeSelection(selection as CopiedSelection, []);
+
+			const pastedSource = result.nodes.find((n) => n.type === "Form");
+			const pastedConsumer = result.nodes.find((n) => n.type === "Message");
+			expect(pastedConsumer?.config.note).toBe("${legacySource.value}");
+			expect(pastedSource).toBeDefined();
+			expect(result.tokensRemapped).toBe(true);
+		});
+
+		it("leaves ${secret.*} tokens untouched even when other tokens in the same field are remapped", () => {
+			const form = makeNode("form-1", "Form", "Form");
+			const message = makeNode("message-1", "Message", "Message", {
+				body: "${form.name} / ${secret.API_KEY}",
+			});
+			const allNodes = [form, message];
+
+			const selection = serializeSelection(
+				["form-1", "message-1"],
+				[],
+				allNodes,
+				[],
+			);
+			expect(selection).not.toBeNull();
+
+			const result = deserializeSelection(
+				selection as CopiedSelection,
+				allNodes,
+			);
+
+			const pastedMessage = result.nodes.find((n) => n.type === "Message");
+			expect(pastedMessage?.config.body).toBe(
+				"${form2.name} / ${secret.API_KEY}",
+			);
+		});
+
+		it("does not mutate the original copied node's config (deep clone on paste)", () => {
+			const form = makeNode("form-1", "Form", "Form");
+			const message = makeNode("message-1", "Message", "Message", {
+				body: "${form.name}",
+			});
+			const allNodes = [form, message];
+
+			const selection = serializeSelection(
+				["form-1", "message-1"],
+				[],
+				allNodes,
+				[],
+			);
+			expect(selection).not.toBeNull();
+
+			deserializeSelection(selection as CopiedSelection, allNodes);
+
+			// The original nodes on the canvas must be untouched.
+			expect(message.config.body).toBe("${form.name}");
+		});
+	});
+
 	describe("calculatePasteOffset", () => {
 		it("should return default offset for empty copied nodes", () => {
 			const offset = calculatePasteOffset([], []);

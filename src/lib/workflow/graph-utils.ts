@@ -8,6 +8,7 @@ import type {
 import { cloneCaseVariables } from "./case-variables";
 import { cloneChallengeOutputSchemaForType } from "./challenge-output";
 import { clonePromotionOutputSchema } from "./promotion-output";
+import { cloneGeneratePdfOutputSchema } from "./generate-pdf-output";
 import { getNlsOutputFieldsFromCache } from "./nls-functions-cache";
 import { cloneNlsOutputFieldsToSchema } from "./nls-output-mapper";
 import { buildAliasMap } from "./node-alias";
@@ -323,7 +324,7 @@ export function buildVariableSourceNodes(
 		const schema = node.config.outputSchema as OutputSchema | undefined;
 		const customProps = schema?.properties ?? [];
 
-		// Challenge, Promotion, and NLS nodes always expose a fixed output schema.
+		// Challenge, Promotion, GeneratePDF, and NLS nodes always expose a fixed output schema.
 		// User-declared custom properties are merged on top, but fixed fields
 		// win on collisions so downstream references are always resolvable at runtime.
 		let properties: OutputSchemaProperty[];
@@ -345,6 +346,11 @@ export function buildVariableSourceNodes(
 		} else if (node.type === "Promotion") {
 			properties = mergePropertiesByName(
 				clonePromotionOutputSchema(),
+				customProps,
+			);
+		} else if (node.type === "GeneratePDF") {
+			properties = mergePropertiesByName(
+				cloneGeneratePdfOutputSchema(),
 				customProps,
 			);
 		} else if (node.type === "NLS") {

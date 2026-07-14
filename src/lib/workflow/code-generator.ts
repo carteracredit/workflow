@@ -13,6 +13,7 @@ import type {
 	OutputSchema,
 	NLSNodeConfig,
 	NLSFunctionId,
+	GeneratePdfNodeConfig,
 } from "./types";
 import { slugify } from "../slugify";
 import {
@@ -1378,6 +1379,68 @@ function generateNLSStep(
 }
 
 /**
+ * Generate code for a GeneratePDF node.
+ *
+ * Fills the AcroForm text fields of the selected PDF template with the
+ * configured (possibly interpolated) values, flattens the result, and
+ * uploads it to doc-svc via `CASES_SVC.generatePdfDocument`. The RPC returns
+ * `{ documentId, fileName }`, captured in the node's output variable so
+ * downstream nodes can reference `${<alias>.documentId}`.
+ */
+function generateGeneratePdfStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const cfg = node.config as GeneratePdfNodeConfig | undefined;
+	const pdfTemplateId = cfg?.pdfTemplateId ?? "";
+	const pdfTemplateVersionId = cfg?.pdfTemplateVersionId;
+	const fieldMappings = cfg?.fieldMappings ?? [];
+	const stepName = createStepName(node);
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = isHoisted ? `${varName} = ` : `const ${varName} = `;
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	let code = `${indent}// Generate PDF: ${node.title}\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"in_progress",
+		undefined,
+		retryVarName,
+	);
+	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	code += `${indent}\tconst _pdfFieldValues: Record<string, string> = {};\n`;
+	for (const mapping of fieldMappings) {
+		if (!mapping.fieldName || !mapping.value) continue;
+		const valueExpr = emitInterpolatedString(mapping.value);
+		code += `${indent}\t_pdfFieldValues[${JSON.stringify(mapping.fieldName)}] = ${valueExpr};\n`;
+	}
+	code += `${indent}\treturn await this.env.CASES_SVC.generatePdfDocument({\n`;
+	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
+	code += `${indent}\t\tpdfTemplateId: ${emitInterpolatedString(pdfTemplateId)},\n`;
+	if (pdfTemplateVersionId) {
+		code += `${indent}\t\tpdfTemplateVersionId: ${JSON.stringify(pdfTemplateVersionId)},\n`;
+	}
+	code += `${indent}\t\tfieldValues: _pdfFieldValues,\n`;
+	code += `${indent}\t});\n`;
+	code += `${indent}});\n`;
+	code += generateCaseObjectCall(node, indent, varName, retryVarName);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
  * Generate a step.do that fetches an OAuth2 access token using client_credentials
  * (or password grant if oauth2Username/oauth2Password are set).
  * The token is stored in a local const for use in the subsequent API step.
@@ -2585,6 +2648,8 @@ function generateNodeCode(
 			return wrap(generateExternalLinkStep(node, indent, retryVar));
 		case "AddCard":
 			return wrap(generateAddCardStep(node, indent, retryVar));
+		case "GeneratePDF":
+			return wrap(generateGeneratePdfStep(node, indent, retryVar));
 		case "FlagChange":
 			return wrap(generateFlagChangeStep(node, indent, retryVar));
 		case "Join":
@@ -3188,6 +3253,7 @@ export function generateWorkflowCode(
 			(n.config as ChallengeNodeConfig | undefined)?.challengeType ===
 				"signature",
 	);
+	const hasGeneratePdfNodes = nodes.some((n) => n.type === "GeneratePDF");
 	code += `interface WorkflowEnv {\n`;
 	code += `\tWORKFLOW_SVC: {\n`;
 	code += `\t\tbatchUpdateFlagState: (input: {\n`;
@@ -3227,6 +3293,14 @@ export function generateWorkflowCode(
 		code += `\t\t\tworkflowNodeId: string;\n`;
 		code += `\t\t\tnodeConfig: Record<string, unknown>;\n`;
 		code += `\t\t}) => Promise<void>;\n`;
+	}
+	if (hasGeneratePdfNodes) {
+		code += `\t\tgeneratePdfDocument: (input: {\n`;
+		code += `\t\t\tcaseId: string;\n`;
+		code += `\t\t\tpdfTemplateId: string;\n`;
+		code += `\t\t\tpdfTemplateVersionId?: string;\n`;
+		code += `\t\t\tfieldValues: Record<string, string>;\n`;
+		code += `\t\t}) => Promise<{ documentId: string; fileName: string }>;\n`;
 	}
 	code += `\t};\n`;
 	if (hasNlsNodes) {

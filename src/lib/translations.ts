@@ -289,6 +289,8 @@ export const translations = {
 			toastSaveError: "Error saving",
 			toastCannotPublish: "Cannot publish",
 			toastSaveBeforeFlags: "Save the workflow before managing flags.",
+			toastPasteTokensRemapped:
+				"Variable references were updated to point to the pasted nodes",
 			confirmReset:
 				"Are you sure you want to reset the canvas? All unsaved changes will be lost.",
 			smallScreenTitle: "Screen too small",
@@ -368,6 +370,7 @@ export const translations = {
 			nodeNLS: "NLS",
 			nodeExternalLink: "External Link",
 			nodeAddCard: "Add Card",
+			nodeGeneratePdf: "Generate PDF",
 			nodeEnd: "End",
 			nodeReject: "Rejected",
 		},
@@ -821,6 +824,37 @@ export const translations = {
 			promotionOutputsTitle: "Outputs exposed by this node",
 			promotionOutputsDesc:
 				"The selected promotion snapshot (promotionId, selectedTerm, monthlyPayment, etc.) is automatically exposed to downstream nodes through the variable picker.",
+			generatePdfOutputsTitle: "Outputs exposed by this node",
+			generatePdfOutputsDesc:
+				"The generated document (documentId, fileName) is automatically exposed to downstream nodes through the variable picker.",
+			generatePdfTemplateLabel: "PDF Template",
+			generatePdfTemplatePlaceholder: "Select a template",
+			generatePdfTemplateLoading: "Loading templates…",
+			generatePdfTemplateEmpty:
+				"No templates available. Upload one from Admin → Settings → PDF Templates.",
+			generatePdfRefreshTooltip: "Reload templates and fields",
+			generatePdfVersionLabel: "Template version",
+			generatePdfVersionPlaceholder: "Select a version",
+			generatePdfVersionLoadingPlaceholder: "Loading versions…",
+			generatePdfVersionActive: "Active",
+			generatePdfVersionUnpinnedNote:
+				"No version pinned yet — this node currently resolves whichever version is active at generation time.",
+			generatePdfFieldsTitle: "Field mapping",
+			generatePdfFieldsDesc:
+				"Map each field discovered in the PDF template to a literal value or a variable.",
+			generatePdfFieldsLoading: "Loading template fields…",
+			generatePdfFieldsEmpty:
+				"This template has no fillable fields, or no template is selected yet.",
+			generatePdfUnsupportedFieldNote:
+				"Buttons (e.g. Print/Reset) can't be filled with variables and are shown for reference only.",
+			generatePdfFieldTypeText: "Text",
+			generatePdfFieldTypeCheckbox: "Checkbox",
+			generatePdfFieldTypeRadio: "Radio",
+			generatePdfFieldTypeDropdown: "Dropdown",
+			generatePdfFieldTypeOptionList: "Option list",
+			generatePdfCheckboxHint:
+				"Valid values: true/false (also accepts yes/no, on, 1, x, si/sí, checked).",
+			generatePdfOptionsHint: "Valid options: {options}",
 			nlsOutputsTitle: "Outputs exposed by this node",
 			nlsOutputsDesc:
 				"The NLS function result is automatically exposed to downstream nodes through the variable picker.",
@@ -1397,6 +1431,8 @@ export const translations = {
 			toastCannotPublish: "No se puede publicar",
 			toastSaveBeforeFlags:
 				"Guarda el workflow primero antes de gestionar flags.",
+			toastPasteTokensRemapped:
+				"Las referencias a variables fueron actualizadas para apuntar a los nodos pegados",
 			confirmReset:
 				"¿Estás seguro de que deseas reiniciar el canvas? Se perderán todos los cambios no guardados.",
 			smallScreenTitle: "Pantalla demasiado pequeña",
@@ -1476,6 +1512,7 @@ export const translations = {
 			nodeNLS: "NLS",
 			nodeExternalLink: "Link Externo",
 			nodeAddCard: "Agregar Tarjeta",
+			nodeGeneratePdf: "Generar PDF",
 			nodeEnd: "Fin",
 			nodeReject: "Rechazado",
 		},
@@ -1932,6 +1969,37 @@ export const translations = {
 			promotionOutputsTitle: "Salidas expuestas por este nodo",
 			promotionOutputsDesc:
 				"El snapshot de la promoción seleccionada (promotionId, selectedTerm, monthlyPayment, etc.) queda disponible automáticamente para los nodos siguientes a través del selector de variables.",
+			generatePdfOutputsTitle: "Salidas expuestas por este nodo",
+			generatePdfOutputsDesc:
+				"El documento generado (documentId, fileName) queda disponible automáticamente para los nodos siguientes a través del selector de variables.",
+			generatePdfTemplateLabel: "Plantilla PDF",
+			generatePdfTemplatePlaceholder: "Selecciona una plantilla",
+			generatePdfTemplateLoading: "Cargando plantillas…",
+			generatePdfTemplateEmpty:
+				"No hay plantillas disponibles. Sube una desde Admin → Configuración → Plantillas PDF.",
+			generatePdfRefreshTooltip: "Recargar plantillas y campos",
+			generatePdfVersionLabel: "Versión de la plantilla",
+			generatePdfVersionPlaceholder: "Selecciona una versión",
+			generatePdfVersionLoadingPlaceholder: "Cargando versiones…",
+			generatePdfVersionActive: "Activa",
+			generatePdfVersionUnpinnedNote:
+				"Aún no se ha fijado una versión — este nodo resuelve la versión que esté activa en el momento de generar el PDF.",
+			generatePdfFieldsTitle: "Mapeo de campos",
+			generatePdfFieldsDesc:
+				"Mapea cada campo detectado en la plantilla PDF a un valor literal o una variable.",
+			generatePdfFieldsLoading: "Cargando campos de la plantilla…",
+			generatePdfFieldsEmpty:
+				"Esta plantilla no tiene campos rellenables, o aún no se ha seleccionado una plantilla.",
+			generatePdfUnsupportedFieldNote:
+				"Los botones (p. ej. Print/Reset) no se pueden rellenar con variables y se muestran solo como referencia.",
+			generatePdfFieldTypeText: "Texto",
+			generatePdfFieldTypeCheckbox: "Checkbox",
+			generatePdfFieldTypeRadio: "Radio",
+			generatePdfFieldTypeDropdown: "Desplegable",
+			generatePdfFieldTypeOptionList: "Lista de opciones",
+			generatePdfCheckboxHint:
+				"Valores válidos: true/false (también acepta yes/no, on, 1, x, si/sí, checked).",
+			generatePdfOptionsHint: "Opciones válidas: {options}",
 			nlsOutputsTitle: "Salidas expuestas por este nodo",
 			nlsOutputsDesc:
 				"El resultado de la función NLS queda disponible automáticamente para los nodos siguientes a través del selector de variables.",

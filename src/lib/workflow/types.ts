@@ -14,7 +14,8 @@ export type NodeType =
 	| "FlagChange"
 	| "NLS"
 	| "ExternalLink"
-	| "AddCard";
+	| "AddCard"
+	| "GeneratePDF";
 
 export type CheckpointType = "normal" | "safe";
 
@@ -284,6 +285,49 @@ export function isAddCardNode(
 	return node.type === "AddCard";
 }
 
+/**
+ * Maps an AcroForm text field (by name, as extracted server-side by cases-svc
+ * from the PDF template) to a value expression. The value may be a literal
+ * string or contain `${nodeId.property}` variable-picker tokens, following
+ * the same convention as NLSFieldConfig.value / Message mergeVars.
+ */
+export interface GeneratePdfFieldMapping {
+	fieldName: string;
+	value: string;
+}
+
+export interface GeneratePdfNodeConfig extends Record<string, unknown> {
+	pdfTemplateId?: string;
+	/** Cached display name, so the panel can show a label before the template list has loaded. */
+	pdfTemplateName?: string;
+	/**
+	 * Pinned template version (mirrors the Form node's `formVersion`): when
+	 * set, the runtime always fills this exact version, so activating a
+	 * newer one (e.g. after a field rename) never changes what an already
+	 * published workflow generates. When unset, the runtime falls back to
+	 * the template's active version at generation time.
+	 */
+	pdfTemplateVersionId?: string;
+	/** Cached display version number, so the panel can show it before the version list has loaded. */
+	pdfTemplateVersion?: number;
+	fieldMappings: GeneratePdfFieldMapping[];
+}
+
+export function isGeneratePdfNode(node: WorkflowNode): node is WorkflowNode & {
+	type: "GeneratePDF";
+	config: GeneratePdfNodeConfig;
+} {
+	return node.type === "GeneratePDF";
+}
+
+export function createDefaultGeneratePdfConfig(): GeneratePdfNodeConfig {
+	return {
+		pdfTemplateId: undefined,
+		pdfTemplateName: undefined,
+		fieldMappings: [],
+	};
+}
+
 export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"Form",
 	"Decision",
@@ -295,6 +339,7 @@ export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"NLS",
 	"ExternalLink",
 	"AddCard",
+	"GeneratePDF",
 ];
 
 export interface StaleTimeoutConfig {

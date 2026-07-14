@@ -8,6 +8,7 @@ import type {
 	WorkflowEdge,
 	WorkflowMetadata,
 	NLSNodeConfig,
+	GeneratePdfNodeConfig,
 } from "./types";
 
 // Helper to create a basic node
@@ -6253,5 +6254,123 @@ describe("generateWorkflowCode – error recording try/catch wrapper", () => {
 
 		// No error recording for trivial start/end workflow
 		expect(code).not.toContain("recordInstanceError");
+	});
+});
+
+describe("GeneratePDF node code generation", () => {
+	function makeGeneratePdfWorkflow(config: GeneratePdfNodeConfig) {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "generate-pdf-1",
+				type: "GeneratePDF",
+				title: "Generar Contrato",
+				config: config as unknown as Record<string, unknown>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "generate-pdf-1"),
+			createEdge("generate-pdf-1", "end"),
+		];
+		return { nodes, edges };
+	}
+
+	it("should generate CASES_SVC.generatePdfDocument binding in WorkflowEnv when a GeneratePDF node is present", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("generatePdfDocument");
+		expect(result.code).toContain("pdfTemplateId: string;");
+		expect(result.code).toContain("fieldValues: Record<string, string>;");
+	});
+
+	it("should NOT include generatePdfDocument in WorkflowEnv when no GeneratePDF nodes exist", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [createEdge("start", "end")];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain("generatePdfDocument");
+	});
+
+	it("should call CASES_SVC.generatePdfDocument with the selected template and case ID", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-ucc-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("this.env.CASES_SVC.generatePdfDocument");
+		expect(result.code).toContain('pdfTemplateId: "tpl-ucc-1"');
+		expect(result.code).toContain("caseId: event.payload.caseId as string");
+	});
+
+	it("should build _pdfFieldValues from configured field mappings with variable interpolation", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [
+				{ fieldName: "debtor_name", value: "${start.applicantName}" },
+				{ fieldName: "amount", value: "1000" },
+			],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("_pdfFieldValues");
+		expect(result.code).toContain('_pdfFieldValues["debtor_name"]');
+		expect(result.code).toContain('_pdfFieldValues["amount"] = "1000"');
+	});
+
+	it("should skip field mappings with an empty fieldName or value", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [
+				{ fieldName: "", value: "orphan" },
+				{ fieldName: "empty_value", value: "" },
+				{ fieldName: "valid_field", value: "hello" },
+			],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain('_pdfFieldValues[""]');
+		expect(result.code).not.toContain('_pdfFieldValues["empty_value"]');
+		expect(result.code).toContain('_pdfFieldValues["valid_field"] = "hello"');
+	});
+
+	it("should capture the RPC result in a variable and persist it to the case object", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("generarContrato");
+		expect(result.code).toContain("updateCaseObject");
+	});
+
+	it("should pass pdfTemplateVersionId to the RPC when the node pins a version", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			pdfTemplateVersionId: "ver-2",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('pdfTemplateVersionId: "ver-2"');
+		expect(result.code).toContain("pdfTemplateVersionId?: string;");
+	});
+
+	it("should NOT pass pdfTemplateVersionId to the RPC when the node has no version pinned", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain("pdfTemplateVersionId:");
 	});
 });
