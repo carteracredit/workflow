@@ -1,3 +1,10 @@
+# [1.3.0-rc.43](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.42...v1.3.0-rc.43) (2026-07-15)
+
+
+### Features
+
+* enhance EdgeRenderer and NodeRenderer for ExternalLink challenge mode ([a91fb07](https://github.com/carteracredit/workflow/commit/a91fb07080310b4d13d3b71576fc7ca02ddeb3b0))
+
 # [1.3.0-rc.42](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.41...v1.3.0-rc.42) (2026-07-14)
 
 
