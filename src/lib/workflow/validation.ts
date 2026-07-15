@@ -9,6 +9,7 @@ import type {
 	NLSNodeConfig,
 	ExternalLinkNodeConfig,
 	GeneratePdfNodeConfig,
+	TimeoutUnit,
 } from "./types";
 import { MAX_CHALLENGE_RETRIES, ROLE_OPTIONS } from "./types";
 import {
@@ -44,6 +45,20 @@ const CHALLENGE_RESULT_METADATA: Record<
 		port: "bottom",
 	},
 };
+
+const TIMEOUT_UNIT_LABEL_ES: Record<TimeoutUnit, string> = {
+	seconds: "segundos",
+	minutes: "minutos",
+	hours: "horas",
+	days: "días",
+};
+
+function formatTimeoutForMessage(config: {
+	value: number;
+	unit: TimeoutUnit;
+}): string {
+	return `${config.value} ${TIMEOUT_UNIT_LABEL_ES[config.unit] ?? config.unit}`;
+}
 
 const DEFAULT_CHALLENGE_RESULTS: ChallengeResult[] = ["accepted", "rejected"];
 const CHALLENGE_RESULT_CONFIG_KEYS = [
@@ -671,7 +686,19 @@ export function validateWorkflow(
 				}
 			}
 
-			validateChallengeResultConnections(node, config, edges, errors);
+			const hasValidChallengeTimeout = Boolean(
+				config.challengeTimeout && config.challengeTimeout.value > 0,
+			);
+			const challengeTimeoutLabel = hasValidChallengeTimeout
+				? formatTimeoutForMessage(config.challengeTimeout!)
+				: null;
+			validateChallengeResultConnections(
+				node,
+				config,
+				edges,
+				errors,
+				challengeTimeoutLabel,
+			);
 		}
 
 		if (node.type === "ExternalLink") {
@@ -729,14 +756,35 @@ export function validateWorkflow(
 				}
 
 				if (config.mode === "challenge") {
-					if (
-						!config.challengeConfig?.timeout ||
-						config.challengeConfig.timeout.value <= 0
-					) {
+					const hasValidTimeout = Boolean(
+						config.challengeConfig?.timeout &&
+						config.challengeConfig.timeout.value > 0,
+					);
+					if (!hasValidTimeout) {
 						errors.push({
 							nodeId: node.id,
 							message: `"${node.title}" debe definir un timeout válido para el challenge`,
 							severity: "error",
+						});
+					}
+
+					const outgoingEdges = edges.filter((e) => e.from === node.id);
+					const hasRedBranch = outgoingEdges.some(
+						(e) => e.fromPort === "bottom",
+					);
+					const canFallbackToRedBranch =
+						outgoingEdges.length === 1 && !outgoingEdges[0].fromPort;
+					if (!hasRedBranch && !canFallbackToRedBranch) {
+						errors.push({
+							nodeId: node.id,
+							message: buildRedBranchMessage(
+								node.title,
+								"Rechazado",
+								hasValidTimeout
+									? formatTimeoutForMessage(config.challengeConfig!.timeout)
+									: null,
+							),
+							severity: "warning",
 						});
 					}
 				}
@@ -984,11 +1032,35 @@ function canReachNode(
 	return false;
 }
 
+/**
+ * Ports "bottom" concentran los resultados negativos del Challenge
+ * (rechazado/fallido). Como un `challengeTimeout` vencido se normaliza a
+ * este mismo camino (ver code-generator `waitForEventDurable` + timedOut →
+ * rejected), si ese puerto queda sin conexión el timeout llevaría a un
+ * camino inexistente y la instancia terminaría silenciosamente sin pasar
+ * por un End/Reject. Ver `buildRedBranchMessage` más abajo.
+ */
+function buildRedBranchMessage(
+	nodeTitle: string,
+	resultLabel: string,
+	challengeTimeoutLabel: string | null,
+): string {
+	if (challengeTimeoutLabel) {
+		return (
+			`"${nodeTitle}": el resultado "${resultLabel}" (rama roja) no tiene una conexión de salida configurada. ` +
+			`Como el timeout de challenge (${challengeTimeoutLabel}) también lleva a este camino, si se cumple el tiempo ` +
+			`límite la instancia se quedará sin ruta a seguir.`
+		);
+	}
+	return `"${nodeTitle}": El resultado "${resultLabel}" no tiene una conexión de salida configurada`;
+}
+
 function validateChallengeResultConnections(
 	node: WorkflowNode,
 	config: ChallengeNodeConfig,
 	edges: WorkflowEdge[],
 	errors: ValidationError[],
+	challengeTimeoutLabel: string | null = null,
 ) {
 	const configuredResults = getConfiguredChallengeResults(config);
 	if (configuredResults.length === 0) {
@@ -998,10 +1070,14 @@ function validateChallengeResultConnections(
 	const outgoingEdges = edges.filter((edge) => edge.from === node.id);
 	if (outgoingEdges.length === 0) {
 		configuredResults.forEach((result) => {
-			const label = CHALLENGE_RESULT_METADATA[result]?.label ?? result;
+			const metadata = CHALLENGE_RESULT_METADATA[result];
+			const label = metadata?.label ?? result;
+			const isRedBranch = metadata?.port === "bottom";
 			errors.push({
 				nodeId: node.id,
-				message: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
+				message: isRedBranch
+					? buildRedBranchMessage(node.title, label, challengeTimeoutLabel)
+					: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
 				severity: "warning",
 			});
 		});
@@ -1046,9 +1122,12 @@ function validateChallengeResultConnections(
 
 		if (!satisfied) {
 			const label = metadata?.label ?? result;
+			const isRedBranch = metadata?.port === "bottom";
 			errors.push({
 				nodeId: node.id,
-				message: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
+				message: isRedBranch
+					? buildRedBranchMessage(node.title, label, challengeTimeoutLabel)
+					: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
 				severity: "warning",
 			});
 		}

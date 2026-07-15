@@ -335,8 +335,10 @@ export function NodeRenderer({
 	// Conectores de salida en el costado derecho (layout horizontal)
 	// Las posiciones representan el centro del círculo conector
 	const singleOutputCenterY = node.position.y + realHeight / 2;
-	const multiOutputPositiveRatio = hasChallengeOutputs ? 0.35 : 0.33;
-	const multiOutputNegativeRatio = hasChallengeOutputs ? 0.65 : 0.67;
+	const multiOutputPositiveRatio =
+		hasChallengeOutputs || isExternalLinkChallengeMode ? 0.35 : 0.33;
+	const multiOutputNegativeRatio =
+		hasChallengeOutputs || isExternalLinkChallengeMode ? 0.65 : 0.67;
 
 	const rightConnectorPos = hasTwoOutputs
 		? null
@@ -816,7 +818,7 @@ export function NodeRenderer({
 											data-testid="output-connector-negative"
 										/>
 									</>
-								) : hasChallengeOutputs ? (
+								) : hasChallengeOutputs || isExternalLinkChallengeMode ? (
 									<>
 										<div
 											className={cn(

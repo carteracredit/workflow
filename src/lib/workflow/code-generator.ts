@@ -14,6 +14,8 @@ import type {
 	NLSNodeConfig,
 	NLSFunctionId,
 	GeneratePdfNodeConfig,
+	TimeoutUnit,
+	StaleTimeoutConfig,
 } from "./types";
 import { slugify } from "../slugify";
 import {
@@ -569,6 +571,114 @@ function retryStepNameExpr(baseName: string, retryVarName: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Durable wait chunking (generation-time helpers)
+//
+// Cloudflare Workflows' `step.waitForEvent` throws when its timeout elapses
+// instead of resolving to `null`, so an unwrapped call crashes the whole
+// instance into the unrecoverable `errored` state the moment a human is
+// slow to respond — even on nodes that have a perfectly good timeout/
+// negative branch to take instead. The runtime helpers emitted by
+// `generateDurableWaitHelpers` (`waitForEventOrNull` / `waitForEventDurable`)
+// fix this at the source: every node that waits for a human (Form, AddCard,
+// Promotion, Challenge, ExternalLink) now calls `waitForEventDurable`
+// instead of `step.waitForEvent` directly.
+//
+// `resolveWaitChunking` computes, at code-generation time, how that call
+// should be chunked:
+//   - No `staleTimeout` configured: a single chunk using the node's own
+//     hard timeout (or "365 days" when the node has no hard deadline at
+//     all) — the exact same total wait as before this change, just crash-
+//     proof.
+//   - `staleTimeout` configured: repeated `staleTimeout`-sized chunks, each
+//     one (except the last) triggering a durable "stale step" notification
+//     to cases-svc before waiting again. When the node also has a hard
+//     deadline (challengeTimeout / linkTtl), the number of chunks is capped
+//     so the total approximates that deadline (rounded up to the nearest
+//     whole chunk).
+// ---------------------------------------------------------------------------
+
+const TIMEOUT_UNIT_MS: Record<TimeoutUnit, number> = {
+	seconds: 1000,
+	minutes: 60_000,
+	hours: 3_600_000,
+	days: 86_400_000,
+};
+
+function timeoutConfigToMs(config: {
+	value: number;
+	unit: TimeoutUnit;
+}): number {
+	return config.value * (TIMEOUT_UNIT_MS[config.unit] ?? TIMEOUT_UNIT_MS.hours);
+}
+
+function timeoutConfigToStr(config: {
+	value: number;
+	unit: TimeoutUnit;
+}): string {
+	return `${config.value} ${config.unit}`;
+}
+
+interface WaitChunking {
+	/** Duration string (e.g. "24 hours") used for every chunk of the wait. */
+	chunkTimeoutStr: string;
+	/** `undefined` means "wait forever" (no hard deadline for this node). */
+	maxAttempts: number | undefined;
+}
+
+/**
+ * @param staleTimeout Node-level reminder config (`node.staleTimeout`).
+ * @param hardTimeoutMs The node's own hard deadline in ms, or `undefined`
+ *   when the node has no timeout/negative branch and must never give up
+ *   (Form, AddCard, Promotion, ExternalLink form mode).
+ * @param hardTimeoutStr Duration string matching `hardTimeoutMs`, used as
+ *   the single chunk when no `staleTimeout` is configured. Required unless
+ *   `hardTimeoutMs` is also `undefined`.
+ */
+function resolveWaitChunking(
+	staleTimeout: StaleTimeoutConfig | null | undefined,
+	hardTimeoutMs: number | undefined,
+	hardTimeoutStr: string | undefined,
+): WaitChunking {
+	if (!staleTimeout) {
+		return {
+			chunkTimeoutStr: hardTimeoutStr ?? "365 days",
+			maxAttempts: hardTimeoutMs === undefined ? undefined : 1,
+		};
+	}
+	const chunkTimeoutStr = timeoutConfigToStr(staleTimeout);
+	if (hardTimeoutMs === undefined) {
+		return { chunkTimeoutStr, maxAttempts: undefined };
+	}
+	const staleMs = timeoutConfigToMs(staleTimeout);
+	return {
+		chunkTimeoutStr,
+		maxAttempts: Math.max(1, Math.ceil(hardTimeoutMs / staleMs)),
+	};
+}
+
+/**
+ * Emits the arguments (after `baseStepName` and `eventType`) shared by every
+ * `waitForEventDurable` call site: chunk timeout, max attempts, and the
+ * stale-notification wiring for the node.
+ */
+function emitDurableWaitTailArgs(
+	node: WorkflowNode,
+	indent: string,
+	chunking: WaitChunking,
+): string {
+	const maxAttemptsExpr =
+		chunking.maxAttempts === undefined
+			? "undefined"
+			: String(chunking.maxAttempts);
+	const notifyStale = !!node.staleTimeout;
+	let code = "";
+	code += `${indent}\t"${escapeString(chunking.chunkTimeoutStr)}",\n`;
+	code += `${indent}\t${maxAttemptsExpr},\n`;
+	code += `${indent}\t${notifyStale},\n`;
+	return code;
+}
+
+// ---------------------------------------------------------------------------
 // Error recording helper
 // ---------------------------------------------------------------------------
 
@@ -869,6 +979,11 @@ function generateFormStep(
 			? ` | form: ${formId}${formVersion !== undefined ? ` v${formVersion}` : ""}`
 			: "";
 
+	// Form has no timeout/negative branch, so it must never give up: waits
+	// forever (chunked by staleTimeout when configured) instead of crashing
+	// the instance the way a raw, unwrapped 72h `step.waitForEvent` used to.
+	const chunking = resolveWaitChunking(node.staleTimeout, undefined, undefined);
+
 	let code = `${indent}// Form: ${node.title} (roles: ${roles}${formMeta})\n`;
 	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload }) from cases-svc\n`;
 	code += generateProgressCall(
@@ -878,10 +993,17 @@ function generateFormStep(
 		eventType,
 		retryVarName,
 	);
-	code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
+	code += `${indent}${varDecl}(await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
 	code += `${indent}\t${stepNameExpr},\n`;
-	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
-	code += `${indent})).payload as Record<string, unknown>;\n`;
+	code += `${indent}\t"${escapeString(eventType)}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
+	code += `${indent}))!.payload as Record<string, unknown>;\n`;
 	code += generateCaseObjectCall(
 		node,
 		indent,
@@ -895,6 +1017,53 @@ function generateFormStep(
 		retryVarName,
 	);
 
+	return code;
+}
+
+/**
+ * Emit the `catch` block for the API/NLS `failureHandling.onFailure ===
+ * "continue"` strategy: records the error (best-effort, non-fatal), marks
+ * the case object with a `_status: "failed"` marker so the UI can surface
+ * it, resets the node's output variable to `undefined`, and — crucially —
+ * does NOT re-throw. The workflow keeps running past this node instead of
+ * crashing into the unrecoverable `errored` state.
+ *
+ * Must be paired with a `try {` opened by the caller and a variable
+ * declared as `let ${varName}: Record<string, unknown> | undefined =
+ * undefined;` before the try (unless the node's output was already hoisted
+ * with that same shape).
+ */
+function emitContinueOnFailureCatch(
+	node: WorkflowNode,
+	indent: string,
+	varName: string,
+	catchVarName: string,
+): string {
+	const stepName = escapeString(createStepName(node));
+	const nodeId = escapeString(node.id);
+	const nodeType = escapeString(node.type);
+	const i1 = indent + "\t";
+	const i2 = indent + "\t\t";
+	let code = `${indent}} catch (${catchVarName}) {\n`;
+	code += `${i1}const _contMsg = ${catchVarName} instanceof Error ? ${catchVarName}.message : String(${catchVarName});\n`;
+	code += `${i1}try {\n`;
+	code += `${i2}await this.env.WORKFLOW_SVC.recordInstanceError({\n`;
+	code += `${i2}\tworkflowId: this.env.WORKFLOW_ID,\n`;
+	code += `${i2}\tinstanceId: event.instanceId,\n`;
+	code += `${i2}\tnodeId: "${nodeId}",\n`;
+	code += `${i2}\tnodeType: "${nodeType}",\n`;
+	code += `${i2}\tstepName: "${stepName}",\n`;
+	code += `${i2}\terrorMessage: _contMsg,\n`;
+	code += `${i2}});\n`;
+	code += `${i1}} catch { /* non-fatal: continue-on-failure must not crash the instance */ }\n`;
+	code += `${i1}try {\n`;
+	code += `${i2}await this.env.CASES_SVC.updateCaseObject(\n`;
+	code += `${i2}\tevent.payload.caseId as string,\n`;
+	code += `${i2}\t{"${stepName}": {_status: "failed", _type: "${nodeType}", _error: _contMsg}},\n`;
+	code += `${i2});\n`;
+	code += `${i1}} catch { /* non-fatal: continue-on-failure must not crash the instance */ }\n`;
+	code += `${i1}${varName} = undefined;\n`;
+	code += `${indent}}\n`;
 	return code;
 }
 
@@ -926,7 +1095,9 @@ function generateAPIStep(
 	// regardless of whether an explicit outputSchema is configured.
 	const varName = getVarName(node.id);
 	const isHoisted = _hoistedNodeIds.has(node.id);
-	const varDecl = isHoisted ? `${varName} = ` : `const ${varName} = `;
+	const isContinueOnFailure = failureHandling?.onFailure === "continue";
+	const varDecl =
+		isHoisted || isContinueOnFailure ? `${varName} = ` : `const ${varName} = `;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
@@ -954,6 +1125,16 @@ function generateAPIStep(
 
 	// Wrap in try/catch for return-to-checkpoint failure handling
 	if (isReturnToCheckpoint && retryVarName) {
+		code += `${indent}try {\n`;
+		indent += "\t";
+	}
+
+	// Wrap in try/catch for "continue" failure handling: swallow the error
+	// (recorded, not fatal) instead of letting the instance crash.
+	if (isContinueOnFailure) {
+		if (!isHoisted) {
+			code += `${indent}let ${varName}: Record<string, unknown> | undefined = undefined;\n`;
+		}
 		code += `${indent}try {\n`;
 		indent += "\t";
 	}
@@ -1099,13 +1280,15 @@ function generateAPIStep(
 
 	code += `${indent}});\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
-	code += generateProgressCall(
-		node,
-		indent,
-		"completed",
-		undefined,
-		retryVarName,
-	);
+	if (!isContinueOnFailure) {
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
+	}
 
 	// Close try/catch for return-to-checkpoint
 	if (isReturnToCheckpoint && retryVarName) {
@@ -1118,6 +1301,22 @@ function generateAPIStep(
 		code += `${indent}\t}\n`;
 		code += `${indent}\tthrow _apiErr; // Max retries exhausted — propagate error\n`;
 		code += `${indent}}\n`;
+	}
+
+	// Close try/catch for "continue" failure handling
+	if (isContinueOnFailure) {
+		indent = indent.slice(1);
+		code += emitContinueOnFailureCatch(node, indent, varName, "_apiContErr");
+		// Always mark the node as "completed" — the "continue" strategy means
+		// this step's attempt has concluded (successfully or not) and the
+		// workflow should move on, not keep showing it as in-progress.
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
 	}
 
 	return code;
@@ -1278,7 +1477,9 @@ function generateNLSStep(
 	const stepName = createStepName(node);
 	const varName = getVarName(node.id);
 	const isHoisted = _hoistedNodeIds.has(node.id);
-	const varDecl = isHoisted ? `${varName} = ` : `const ${varName} = `;
+	const isContinueOnFailure = failureHandling?.onFailure === "continue";
+	const varDecl =
+		isHoisted || isContinueOnFailure ? `${varName} = ` : `const ${varName} = `;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
@@ -1295,6 +1496,16 @@ function generateNLSStep(
 	);
 
 	if (isReturnToCheckpoint && retryVarName) {
+		code += `${indent}try {\n`;
+		indent += "\t";
+	}
+
+	// Wrap in try/catch for "continue" failure handling: swallow the error
+	// (recorded, not fatal) instead of letting the instance crash.
+	if (isContinueOnFailure) {
+		if (!isHoisted) {
+			code += `${indent}let ${varName}: Record<string, unknown> | undefined = undefined;\n`;
+		}
 		code += `${indent}try {\n`;
 		indent += "\t";
 	}
@@ -1356,13 +1567,15 @@ function generateNLSStep(
 			retryVarName,
 		);
 	}
-	code += generateProgressCall(
-		node,
-		indent,
-		"completed",
-		undefined,
-		retryVarName,
-	);
+	if (!isContinueOnFailure) {
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
+	}
 
 	if (isReturnToCheckpoint && retryVarName) {
 		indent = indent.slice(1);
@@ -1373,6 +1586,22 @@ function generateNLSStep(
 		code += `${indent}\t}\n`;
 		code += `${indent}\tthrow _nlsErr; // Max retries exhausted — propagate error\n`;
 		code += `${indent}}\n`;
+	}
+
+	// Close try/catch for "continue" failure handling
+	if (isContinueOnFailure) {
+		indent = indent.slice(1);
+		code += emitContinueOnFailureCatch(node, indent, varName, "_nlsContErr");
+		// Always mark the node as "completed" — the "continue" strategy means
+		// this step's attempt has concluded (successfully or not) and the
+		// workflow should move on, not keep showing it as in-progress.
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
 	}
 
 	return code;
@@ -1756,7 +1985,18 @@ function generateSignatureChallengeStep(
 	const acceptVar = `_${outputVar}AcceptEvt`;
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const timeout = config?.challengeTimeout;
-	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "72 hours";
+	const timeoutStr = timeout ? timeoutConfigToStr(timeout) : "72 hours";
+	const timeoutMs = timeout
+		? timeoutConfigToMs(timeout)
+		: timeoutConfigToMs({ value: 72, unit: "hours" });
+	// staleTimeout reminders (if configured) fire during either wait phase,
+	// but both phases still resolve to timedOut:true — never crash the
+	// instance — once challengeTimeout elapses.
+	const chunking = resolveWaitChunking(
+		node.staleTimeout,
+		timeoutMs,
+		timeoutStr,
+	);
 
 	const acceptStepName = `${stepName}-accept`;
 	const acceptStepNameExpr = retryVarName
@@ -1824,12 +2064,16 @@ function generateSignatureChallengeStep(
 		undefined,
 		"accept",
 	);
-	code += `${indent}${acceptVar} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+	code += `${indent}${acceptVar} = await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
 	code += `${indent}\t${acceptStepNameExpr},\n`;
-	code += `${indent}\t{\n`;
-	code += `${indent}\t\ttype: "signature_acceptance",\n`;
-	code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
-	code += `${indent}\t},\n`;
+	code += `${indent}\t"signature_acceptance",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
 	code += `${indent});\n`;
 
 	// Determine if the operator accepted
@@ -1894,12 +2138,16 @@ function generateSignatureChallengeStep(
 		undefined,
 		"sig",
 	);
-	code += `${i1}${rawVar} = await step.waitForEvent<{ signed?: boolean; reason?: string; signatureRequestId: string; documentId?: string }>(\n`;
+	code += `${i1}${rawVar} = await waitForEventDurable(\n`;
+	code += `${i1}\tstep,\n`;
+	code += `${i1}\tthis.env,\n`;
+	code += `${i1}\tevent.instanceId,\n`;
+	code += `${i1}\tevent.payload.caseId as string,\n`;
+	code += `${i1}\t"${escapeString(node.id)}",\n`;
+	code += `${i1}\t"${escapeString(node.type)}",\n`;
 	code += `${i1}\t${stepNameExpr},\n`;
-	code += `${i1}\t{\n`;
-	code += `${i1}\t\ttype: "signature_signed",\n`;
-	code += `${i1}\t\ttimeout: "${timeoutStr}",\n`;
-	code += `${i1}\t},\n`;
+	code += `${i1}\t"signature_signed",\n`;
+	code += emitDurableWaitTailArgs(node, i1, chunking);
 	code += `${i1});\n`;
 	code += generateCaseObjectCall(node, i1, rawVar, retryVarName);
 
@@ -1984,8 +2232,19 @@ function generateChallengeStep(
 	const outputVar = getVarName(node.id);
 	const rawVar = `_${outputVar}Evt`;
 	const timeout = config?.challengeTimeout;
-	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
+	const timeoutStr = timeout ? timeoutConfigToStr(timeout) : "24 hours";
+	const timeoutMs = timeout
+		? timeoutConfigToMs(timeout)
+		: timeoutConfigToMs({ value: 24, unit: "hours" });
 	const eventType = challengeType;
+	// staleTimeout reminders (if configured) fire during the wait, but the
+	// challenge always resolves to timedOut:true — never crashes the
+	// instance — once its own challengeTimeout elapses.
+	const chunking = resolveWaitChunking(
+		node.staleTimeout,
+		timeoutMs,
+		timeoutStr,
+	);
 
 	const inlineRetries = config?.retries;
 	const hasInlineRetry = inlineRetries && (inlineRetries.maxRetries ?? 0) > 0;
@@ -2027,12 +2286,16 @@ function generateChallengeStep(
 			retryVarName,
 			chVar,
 		);
-		code += `${innerIndent}${rawVar} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${innerIndent}${rawVar} = await waitForEventDurable(\n`;
+		code += `${innerIndent}\tstep,\n`;
+		code += `${innerIndent}\tthis.env,\n`;
+		code += `${innerIndent}\tevent.instanceId,\n`;
+		code += `${innerIndent}\tevent.payload.caseId as string,\n`;
+		code += `${innerIndent}\t"${escapeString(node.id)}",\n`;
+		code += `${innerIndent}\t"${escapeString(node.type)}",\n`;
 		code += `${innerIndent}\t${stepNameExpr},\n`;
-		code += `${innerIndent}\t{\n`;
-		code += `${innerIndent}\t\ttype: "${challengeType}",\n`;
-		code += `${innerIndent}\t\ttimeout: "${timeoutStr}",\n`;
-		code += `${innerIndent}\t},\n`;
+		code += `${innerIndent}\t"${challengeType}",\n`;
+		code += emitDurableWaitTailArgs(node, innerIndent, chunking);
 		code += `${innerIndent});\n`;
 		code += generateCaseObjectCall(
 			node,
@@ -2067,12 +2330,16 @@ function generateChallengeStep(
 			eventType,
 			retryVarName,
 		);
-		code += `${indent}${rawVar} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${indent}${rawVar} = await waitForEventDurable(\n`;
+		code += `${indent}\tstep,\n`;
+		code += `${indent}\tthis.env,\n`;
+		code += `${indent}\tevent.instanceId,\n`;
+		code += `${indent}\tevent.payload.caseId as string,\n`;
+		code += `${indent}\t"${escapeString(node.id)}",\n`;
+		code += `${indent}\t"${escapeString(node.type)}",\n`;
 		code += `${indent}\t${stepNameExpr},\n`;
-		code += `${indent}\t{\n`;
-		code += `${indent}\t\ttype: "${challengeType}",\n`;
-		code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
-		code += `${indent}\t},\n`;
+		code += `${indent}\t"${challengeType}",\n`;
+		code += emitDurableWaitTailArgs(node, indent, chunking);
 		code += `${indent});\n`;
 		code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
 		code += emitChallengeOutputAssignment(indent, rawVar, outputVar);
@@ -2143,6 +2410,12 @@ function generatePromotionStep(
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
 
+	// Promotion has no timeout/negative branch: it waits indefinitely
+	// (chunked by staleTimeout when configured) until cases-svc forwards the
+	// user's selection. Wrap with a Checkpoint upstream if the business
+	// wants to guard against this.
+	const chunking = resolveWaitChunking(node.staleTimeout, undefined, undefined);
+
 	let code = `${indent}// Promotion: ${node.title} (roles: ${roles})\n`;
 	code += generateProgressCall(
 		node,
@@ -2151,15 +2424,16 @@ function generatePromotionStep(
 		eventType,
 		retryVarName,
 	);
-	code += `${indent}${rawVar} = await step.waitForEvent<PromotionSelectionPayload>(\n`;
+	code += `${indent}${rawVar} = await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
 	code += `${indent}\t${stepNameExpr},\n`;
-	code += `${indent}\t{\n`;
-	code += `${indent}\t\ttype: "${eventType}",\n`;
-	// No timeout on purpose: the workflow waits indefinitely until cases-svc
-	// forwards the user's selection. Wrap with a Checkpoint upstream if the
-	// business wants to guard against this.
-	code += `${indent}\t\ttimeout: "365 days",\n`;
-	code += `${indent}\t},\n`;
+	code += `${indent}\t"${eventType}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
 	code += `${indent});\n`;
 	code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
 	code += emitPromotionOutputAssignment(indent, rawVar, outputVar);
@@ -2229,6 +2503,11 @@ function generateAddCardStep(
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
 
+	// AddCard has no timeout/negative branch, so it must never give up: waits
+	// forever (chunked by staleTimeout when configured) instead of crashing
+	// the instance the way a raw, unwrapped 72h `step.waitForEvent` used to.
+	const chunking = resolveWaitChunking(node.staleTimeout, undefined, undefined);
+
 	let code = `${indent}// AddCard: ${node.title} (roles: ${roles})\n`;
 	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload: { last4, brand } }) from cases-svc\n`;
 	code += generateProgressCall(
@@ -2238,10 +2517,17 @@ function generateAddCardStep(
 		eventType,
 		retryVarName,
 	);
-	code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
+	code += `${indent}${varDecl}(await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
 	code += `${indent}\t${stepNameExpr},\n`;
-	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
-	code += `${indent})).payload as Record<string, unknown>;\n`;
+	code += `${indent}\t"${escapeString(eventType)}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
+	code += `${indent}))!.payload as Record<string, unknown>;\n`;
 	code += generateCaseObjectCall(node, indent, varName);
 	code += generateProgressCall(
 		node,
@@ -2440,6 +2726,7 @@ function generateExternalLinkStep(
 	const ttlHours = ttlUnit === "days" ? ttlValue * 24 : ttlValue;
 	const graceHours = 1;
 	const waitTimeout = `${ttlHours + graceHours} hours`;
+	const waitTimeoutMs = (ttlHours + graceHours) * TIMEOUT_UNIT_MS.hours;
 
 	const eventType =
 		mode === "challenge"
@@ -2451,6 +2738,14 @@ function generateExternalLinkStep(
 		: `"${stepName}"`;
 
 	const isChallenge = mode === "challenge";
+	// Challenge mode has a rejected/timed-out branch, so once the (ttl +
+	// grace) deadline elapses it resolves to timedOut:true instead of
+	// crashing. Form mode has no such branch — the link's own ttl already
+	// bounds how long it stays *valid*, but the workflow step itself must
+	// keep waiting (in case ops resend a fresh link) instead of dying.
+	const chunking = isChallenge
+		? resolveWaitChunking(node.staleTimeout, waitTimeoutMs, waitTimeout)
+		: resolveWaitChunking(node.staleTimeout, undefined, waitTimeout);
 	const outputVar = getVarName(node.id);
 	const rawVar = isChallenge ? `_${outputVar}Evt` : outputVar;
 	// Always capture: form mode stores the external user's payload; challenge mode
@@ -2552,16 +2847,23 @@ function generateExternalLinkStep(
 
 	// Step 3: waitForEvent
 	if (isChallenge) {
-		code += `${indent}${varDecl}await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${indent}${varDecl}await waitForEventDurable(\n`;
 	} else {
-		code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
+		code += `${indent}${varDecl}(await waitForEventDurable(\n`;
 	}
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
 	code += `${indent}\t${stepNameExpr},\n`;
-	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "${waitTimeout}" },\n`;
+	code += `${indent}\t"${escapeString(eventType)}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
 	if (isChallenge) {
 		code += `${indent});\n`;
 	} else {
-		code += `${indent})).payload as Record<string, unknown>;\n`;
+		code += `${indent}))!.payload as Record<string, unknown>;\n`;
 	}
 
 	// Step 4: case object + progress
@@ -3254,6 +3556,18 @@ export function generateWorkflowCode(
 				"signature",
 	);
 	const hasGeneratePdfNodes = nodes.some((n) => n.type === "GeneratePDF");
+	// Nodes that wait for a human via `waitForEventDurable` (see the
+	// "Durable wait chunking" section above `resolveWaitChunking`).
+	const DURABLE_WAIT_NODE_TYPES = new Set([
+		"Form",
+		"AddCard",
+		"Promotion",
+		"Challenge",
+		"ExternalLink",
+	]);
+	const hasDurableWaitNodes = nodes.some((n) =>
+		DURABLE_WAIT_NODE_TYPES.has(n.type),
+	);
 	code += `interface WorkflowEnv {\n`;
 	code += `\tWORKFLOW_SVC: {\n`;
 	code += `\t\tbatchUpdateFlagState: (input: {\n`;
@@ -3302,6 +3616,20 @@ export function generateWorkflowCode(
 		code += `\t\t\tfieldValues: Record<string, string>;\n`;
 		code += `\t\t}) => Promise<{ documentId: string; fileName: string }>;\n`;
 	}
+	// Always declared alongside the durable-wait helpers below (which
+	// reference CASES_SVC.notifyStaleStep unconditionally, even for
+	// workflows where no individual node has staleTimeout configured).
+	if (hasDurableWaitNodes) {
+		code += `\t\tnotifyStaleStep: (input: {\n`;
+		code += `\t\t\tworkflowId: string;\n`;
+		code += `\t\t\tinstanceId: string;\n`;
+		code += `\t\t\tcaseId: string;\n`;
+		code += `\t\t\tnodeId: string;\n`;
+		code += `\t\t\tnodeType: string;\n`;
+		code += `\t\t\tstepName: string;\n`;
+		code += `\t\t\tattempt: number;\n`;
+		code += `\t\t}) => Promise<void>;\n`;
+	}
 	code += `\t};\n`;
 	if (hasNlsNodes) {
 		code += `\tPROXY_SVC: {\n`;
@@ -3343,6 +3671,96 @@ export function generateWorkflowCode(
 		code += `\tcommission: number;\n`;
 		code += `\tselectedBy: string;\n`;
 		code += `\tselectedAt: string;\n`;
+		code += `}\n\n`;
+	}
+
+	// Runtime helpers backing every Form/AddCard/Promotion/Challenge/
+	// ExternalLink wait (see the "Durable wait chunking" comment above
+	// `resolveWaitChunking` for the full rationale).
+	if (hasDurableWaitNodes) {
+		code += `/**\n`;
+		code += ` * Cloudflare Workflows throws a \`WorkflowTimeoutError\` when a\n`;
+		code += ` * \`step.waitForEvent\` call's timeout elapses, instead of resolving to\n`;
+		code += ` * \`null\`. Left uncaught, that crashes the whole instance into the\n`;
+		code += ` * unrecoverable "errored" state even when the node has a perfectly\n`;
+		code += ` * good timeout/negative branch to take instead. This normalizes the\n`;
+		code += ` * timeout into a \`null\` result so callers can treat "no event arrived\n`;
+		code += ` * in time" as data, not a crash. Any other error is re-thrown.\n`;
+		code += ` */\n`;
+		code += `async function waitForEventOrNull<T>(\n`;
+		code += `\tfn: () => Promise<T>,\n`;
+		code += `): Promise<T | null> {\n`;
+		code += `\ttry {\n`;
+		code += `\t\treturn await fn();\n`;
+		code += `\t} catch (err) {\n`;
+		code += `\t\tif (err instanceof Error && err.name === "WorkflowTimeoutError") {\n`;
+		code += `\t\t\treturn null;\n`;
+		code += `\t\t}\n`;
+		code += `\t\tthrow err;\n`;
+		code += `\t}\n`;
+		code += `}\n\n`;
+
+		code += `/**\n`;
+		code += ` * Waits for an event in one or more \`chunkTimeout\`-sized attempts.\n`;
+		code += ` *\n`;
+		code += ` * - \`maxAttempts === undefined\`: waits indefinitely. Used by nodes with\n`;
+		code += ` *   no timeout/negative branch (Form, AddCard, Promotion, ExternalLink\n`;
+		code += ` *   form mode) so a slow user can never crash the instance.\n`;
+		code += ` * - \`maxAttempts\` set: gives up (returns \`null\`) after that many\n`;
+		code += ` *   attempts. Used by nodes with a timeout/negative branch (Challenge,\n`;
+		code += ` *   ExternalLink challenge mode), where \`chunkTimeout\` x \`maxAttempts\`\n`;
+		code += ` *   approximates the node's configured timeout.\n`;
+		code += ` *\n`;
+		code += ` * When \`notifyStale\` is true and more than one attempt runs, cases-svc\n`;
+		code += ` * is notified (durably, using its own step.do) after every attempt that\n`;
+		code += ` * elapsed without the event except the final one — this is how\n`;
+		code += ` * \`staleTimeout\` reminders are emitted without ending the wait.\n`;
+		code += ` */\n`;
+		code += `async function waitForEventDurable(\n`;
+		code += `\tstep: WorkflowStep,\n`;
+		code += `\tenv: WorkflowEnv,\n`;
+		code += `\tinstanceId: string,\n`;
+		code += `\tcaseId: string,\n`;
+		code += `\tnodeId: string,\n`;
+		code += `\tnodeType: string,\n`;
+		code += `\tbaseStepName: string,\n`;
+		code += `\teventType: string,\n`;
+		code += `\tchunkTimeout: string,\n`;
+		code += `\tmaxAttempts: number | undefined,\n`;
+		code += `\tnotifyStale: boolean,\n`;
+		code += `) {\n`;
+		code += `\tfor (\n`;
+		code += `\t\tlet attempt = 0;\n`;
+		code += `\t\tmaxAttempts === undefined || attempt < maxAttempts;\n`;
+		code += `\t\tattempt++\n`;
+		code += `\t) {\n`;
+		code += `\t\tconst stepName =\n`;
+		code += `\t\t\tattempt === 0 ? baseStepName : \`\${baseStepName}-wait\${attempt}\`;\n`;
+		code += `\t\tconst result = await waitForEventOrNull(() =>\n`;
+		code += `\t\t\tstep.waitForEvent<Record<string, unknown>>(stepName, {\n`;
+		code += `\t\t\t\ttype: eventType,\n`;
+		code += `\t\t\t\ttimeout: chunkTimeout,\n`;
+		code += `\t\t\t}),\n`;
+		code += `\t\t);\n`;
+		code += `\t\tif (result !== null) return result;\n`;
+		code += `\t\tif (maxAttempts !== undefined && attempt === maxAttempts - 1) {\n`;
+		code += `\t\t\treturn null;\n`;
+		code += `\t\t}\n`;
+		code += `\t\tif (notifyStale) {\n`;
+		code += `\t\t\tawait step.do(\`_stale-\${stepName}\`, async () => {\n`;
+		code += `\t\t\t\tawait env.CASES_SVC.notifyStaleStep({\n`;
+		code += `\t\t\t\t\tworkflowId: env.WORKFLOW_ID,\n`;
+		code += `\t\t\t\t\tinstanceId,\n`;
+		code += `\t\t\t\t\tcaseId,\n`;
+		code += `\t\t\t\t\tnodeId,\n`;
+		code += `\t\t\t\t\tnodeType,\n`;
+		code += `\t\t\t\t\tstepName: baseStepName,\n`;
+		code += `\t\t\t\t\tattempt: attempt + 1,\n`;
+		code += `\t\t\t\t});\n`;
+		code += `\t\t\t});\n`;
+		code += `\t\t}\n`;
+		code += `\t}\n`;
+		code += `\treturn null;\n`;
 		code += `}\n\n`;
 	}
 

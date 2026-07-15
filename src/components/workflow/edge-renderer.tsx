@@ -66,9 +66,15 @@ export function EdgeRenderer({
 		};
 	};
 
+	const isExternalLinkChallengeSource =
+		fromNode.type === "ExternalLink" &&
+		(fromNode.config as { mode?: string }).mode === "challenge";
 	const hasDualOutputs =
-		fromNode.type === "Decision" || fromNode.type === "Challenge";
-	const isChallengeSource = fromNode.type === "Challenge";
+		fromNode.type === "Decision" ||
+		fromNode.type === "Challenge" ||
+		isExternalLinkChallengeSource;
+	const isChallengeSource =
+		fromNode.type === "Challenge" || isExternalLinkChallengeSource;
 
 	const hasMultipleInputs = toNode.type === "Join";
 

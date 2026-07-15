@@ -121,6 +121,67 @@ describe("NodeRenderer horizontal layout", () => {
 
 		expect(positiveTop).toBeLessThan(negativeTop);
 	});
+
+	it("stacks dual green/red outputs for an ExternalLink node in challenge mode", () => {
+		const externalLinkChallengeNode: WorkflowNode = {
+			...baseNode,
+			id: "node-3",
+			type: "ExternalLink",
+			title: "Enlace externo",
+			config: { mode: "challenge" },
+		};
+
+		const { getByTestId, queryByTestId } = renderWithTooltip(
+			<NodeRenderer
+				node={externalLinkChallengeNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		const positiveConnector = getByTestId("output-connector-positive");
+		const negativeConnector = getByTestId("output-connector-negative");
+
+		expect(positiveConnector.className).toContain("border-green-500");
+		expect(negativeConnector.className).toContain("border-red-500");
+		expect(positiveConnector).toHaveStyle({ right: "-6px" });
+		expect(negativeConnector).toHaveStyle({ right: "-6px" });
+
+		const positiveTop = parseFloat(positiveConnector.style.top || "0");
+		const negativeTop = parseFloat(negativeConnector.style.top || "0");
+		expect(positiveTop).toBeLessThan(negativeTop);
+
+		// A single-output connector must NOT be rendered for this node.
+		expect(queryByTestId("output-connector")).not.toBeInTheDocument();
+	});
+
+	it("renders a single output connector for an ExternalLink node NOT in challenge mode", () => {
+		const externalLinkFormNode: WorkflowNode = {
+			...baseNode,
+			id: "node-4",
+			type: "ExternalLink",
+			title: "Enlace externo",
+			config: { mode: "form" },
+		};
+
+		const { getByTestId, queryByTestId } = renderWithTooltip(
+			<NodeRenderer
+				node={externalLinkFormNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		expect(getByTestId("output-connector")).toBeInTheDocument();
+		expect(queryByTestId("output-connector-positive")).not.toBeInTheDocument();
+		expect(queryByTestId("output-connector-negative")).not.toBeInTheDocument();
+	});
 });
 
 describe("NodeRenderer connector visibility", () => {
