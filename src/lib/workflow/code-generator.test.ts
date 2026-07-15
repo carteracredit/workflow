@@ -379,16 +379,16 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain("step.waitForEvent<{ accepted: boolean }>(");
+		expect(result.code).toContain("await waitForEventDurable(");
 		expect(result.code).toContain('"manual-approval"');
 		// "Manual Approval" → alias "manualApproval"; rawVar = "_manualApprovalEvt"
 		expect(result.code).toContain("let _manualApprovalEvt: unknown = null;");
 		expect(result.code).toContain(
-			"_manualApprovalEvt = await step.waitForEvent",
+			"_manualApprovalEvt = await waitForEventDurable(",
 		);
 		expect(result.code).not.toContain("const manualApproval");
-		expect(result.code).toContain('type: "acceptance"');
-		expect(result.code).toContain('timeout: "48 hours"');
+		expect(result.code).toContain('"acceptance"');
+		expect(result.code).toContain('"48 hours"');
 	});
 
 	it("should generate Promotion (waitForEvent) step code", () => {
@@ -411,10 +411,8 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain(
-			"step.waitForEvent<PromotionSelectionPayload>(",
-		);
-		expect(result.code).toContain('type: "promotion_selection"');
+		expect(result.code).toContain("await waitForEventDurable(");
+		expect(result.code).toContain('"promotion_selection"');
 		expect(result.code).toContain('"seleccionar-promo"');
 		// "Seleccionar promo" → alias "seleccionarPromo"; rawVar = "_seleccionarPromoEvt"
 		expect(result.code).toContain("let _seleccionarPromoEvt: unknown = null;");
@@ -934,7 +932,7 @@ describe("generateWorkflowCode with Challenge branching", () => {
 		// Challenge nodes get a hoisted let variable used in the if/else branch.
 		// The raw event var uses the `_<alias>Evt` pattern; the output var uses the alias.
 		expect(result.code).toContain("let _approvalEvt: unknown = null;");
-		expect(result.code).toContain("_approvalEvt = await step.waitForEvent");
+		expect(result.code).toContain("_approvalEvt = await waitForEventDurable(");
 		expect(result.code).not.toContain("const approval");
 		expect(result.code).toContain("if (approval.accepted) {");
 		expect(result.code).toContain("return { success: true");
@@ -1439,8 +1437,8 @@ describe("generateWorkflowCode edge cases", () => {
 
 		// Signature challenges now use the signature_signed event (not the old "signature" waitForEvent type)
 		expect(result.code).toContain("CASES_SVC.createSignatureRequest");
-		expect(result.code).toContain('type: "signature_signed"');
-		expect(result.code).toContain('timeout: "72 hours"'); // default timeout
+		expect(result.code).toContain('"signature_signed"');
+		expect(result.code).toContain('"72 hours"'); // default timeout
 	});
 
 	it("should generate camelCase variable names for forms with special characters", () => {
@@ -2499,7 +2497,7 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 		// "Aprobacion Manual" → alias "aprobacionManual"; rawVar = "_aprobacionManualEvt"
 		expect(result.code).toContain("let _aprobacionManualEvt: unknown = null;");
 		expect(result.code).toContain(
-			"_aprobacionManualEvt = await step.waitForEvent",
+			"_aprobacionManualEvt = await waitForEventDurable(",
 		);
 		expect(result.code).not.toContain("const aprobacionManual");
 	});
@@ -2560,9 +2558,7 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 
 		// empty title → falls back to node.type "Challenge" → alias "challenge"; rawVar = "_challengeEvt"
 		expect(result.code).toContain("let _challengeEvt: unknown = null;");
-		expect(result.code).toContain(
-			"_challengeEvt = await step.waitForEvent<{ accepted: boolean }>(",
-		);
+		expect(result.code).toContain("_challengeEvt = await waitForEventDurable(");
 	});
 
 	it("should handle Spanish characters in challenge variable names", () => {
@@ -2588,7 +2584,7 @@ describe("generateWorkflowCode – let variable declarations for node output", (
 		// "Aprobación Básica" → alias "aprobacionBasica"; rawVar = "_aprobacionBasicaEvt"
 		expect(result.code).toContain("let _aprobacionBasicaEvt: unknown = null;");
 		expect(result.code).toContain(
-			"_aprobacionBasicaEvt = await step.waitForEvent<{ accepted: boolean }>(",
+			"_aprobacionBasicaEvt = await waitForEventDurable(",
 		);
 	});
 
@@ -3400,6 +3396,144 @@ describe("Pattern 3 — API return-to-checkpoint retry", () => {
 			buildPattern3Edges(),
 		);
 		expect(code).toContain("throw _apiErr;");
+	});
+});
+
+describe("Pattern 4 — API/NLS continue-on-failure", () => {
+	const buildContinueApiWorkflow = () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "api",
+				type: "API",
+				title: "External API",
+				config: {
+					url: "https://example.com/api",
+					method: "GET",
+					failureHandling: {
+						onFailure: "continue",
+						maxRetries: 0,
+						timeout: 30000,
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "api"),
+			createEdge("api", "end"),
+		];
+		return { nodes, edges };
+	};
+
+	it("wraps the API step.do call in try/catch that does NOT re-throw", () => {
+		const { nodes, edges } = buildContinueApiWorkflow();
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("try {");
+		expect(code).toContain("} catch (_apiContErr)");
+		// Unlike return-to-checkpoint / the generic error wrapper, this catch
+		// must NOT propagate the error — the instance must keep running.
+		expect(code).not.toContain("throw _apiContErr");
+	});
+
+	it("declares the output variable with `let ... | undefined` before the try", () => {
+		const { nodes, edges } = buildContinueApiWorkflow();
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain(
+			"let externalApi: Record<string, unknown> | undefined = undefined;",
+		);
+		const declIdx = code.indexOf(
+			"let externalApi: Record<string, unknown> | undefined = undefined;",
+		);
+		// The inner try (continue-on-failure) must open right after the
+		// declaration — search from declIdx to skip the OUTER try opened by
+		// the generic wrapWithErrorHandler wrapper earlier in the same node.
+		const tryIdx = code.indexOf("try {", declIdx);
+		expect(declIdx).toBeGreaterThanOrEqual(0);
+		expect(tryIdx).toBeGreaterThan(declIdx);
+	});
+
+	it("resets the output variable to undefined and records the error in the catch block", () => {
+		const { nodes, edges } = buildContinueApiWorkflow();
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("await this.env.WORKFLOW_SVC.recordInstanceError({");
+		expect(code).toContain('nodeId: "api"');
+		expect(code).toContain('nodeType: "API"');
+		expect(code).toContain("externalApi = undefined;");
+	});
+
+	it("marks the case object with a failed status marker inside the catch block", () => {
+		const { nodes, edges } = buildContinueApiWorkflow();
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain('_status: "failed"');
+		expect(code).toContain("_error: _contMsg");
+	});
+
+	it("still marks progress as completed even though the strategy is continue", () => {
+		const { nodes, edges } = buildContinueApiWorkflow();
+		const { code } = generateWorkflowCode(nodes, edges);
+		// The final progress-completed call must be OUTSIDE (after) the catch block,
+		// so it always runs regardless of success/failure.
+		const catchCloseIdx = code.lastIndexOf("} catch (_apiContErr)");
+		const progCompletedIdx = code.indexOf('status: "completed"', catchCloseIdx);
+		expect(progCompletedIdx).toBeGreaterThan(catchCloseIdx);
+	});
+
+	it("does NOT wrap in try/catch when onFailure is 'stop' (default/unhandled behavior)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "api",
+				type: "API",
+				title: "External API",
+				config: {
+					url: "https://example.com/api",
+					method: "GET",
+					failureHandling: {
+						onFailure: "stop",
+						maxRetries: 0,
+						timeout: 30000,
+					},
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "api"),
+			createEdge("api", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).not.toContain("_apiContErr");
+	});
+
+	it("wraps the NLS step.do call in try/catch that does NOT re-throw", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "nls-1",
+				type: "NLS",
+				title: "Cancel Loan",
+				config: {
+					functionId: "cancelLoan",
+					fields: [{ fieldId: "loanNumber", value: "99", source: "manual" }],
+					failureHandling: {
+						onFailure: "continue",
+						maxRetries: 0,
+						timeout: 30000,
+					},
+				} as unknown as Record<string, unknown>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "nls-1"),
+			createEdge("nls-1", "end"),
+		];
+		const { code } = generateWorkflowCode(nodes, edges);
+		expect(code).toContain("nlsCancelLoan");
+		expect(code).toContain("} catch (_nlsContErr)");
+		expect(code).not.toContain("throw _nlsContErr");
+		expect(code).toContain("cancelLoan = undefined;");
 	});
 });
 
@@ -4438,17 +4572,20 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 
 		// Inside the branch, the assignment should NOT use const
 		expect(result.code).toContain(
-			"alternateAddress = (await step.waitForEvent",
+			"alternateAddress = (await waitForEventDurable(",
 		);
 		expect(result.code).not.toMatch(
-			/const alternateAddress\s*=\s*\(await step\.waitForEvent/,
+			/const alternateAddress\s*=\s*\(await waitForEventDurable/,
 		);
 
-		// The Transform is generated post-merge (after the if/else block)
+		// The Transform is generated post-merge (after the if/else block).
+		// Search for "if (" starting from the hoisted `let` declaration to
+		// avoid matching unrelated "if (" occurrences inside the hoisted
+		// waitForEventDurable() helper function defined earlier in the file.
 		const hoistIdx = result.code.indexOf(
 			"let alternateAddress: Record<string, unknown> | undefined",
 		);
-		const ifIdx = result.code.indexOf("if (");
+		const ifIdx = result.code.indexOf("if (", hoistIdx);
 		const transformIdx = result.code.indexOf('step.do("transform-address"');
 		expect(hoistIdx).toBeLessThan(ifIdx);
 		expect(transformIdx).toBeGreaterThan(ifIdx);
@@ -4504,7 +4641,7 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 			"let myForm: Record<string, unknown> | undefined",
 		);
 		// Normal const assignment inside the branch
-		expect(result.code).toContain("const myForm = (await step.waitForEvent");
+		expect(result.code).toContain("const myForm = (await waitForEventDurable(");
 	});
 
 	it("hoists an API node that is in a Decision branch and referenced post-merge", () => {
@@ -4601,7 +4738,7 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 		);
 		// Normal const assignments
 		expect(result.code).toContain(
-			"const linearForm = (await step.waitForEvent",
+			"const linearForm = (await waitForEventDurable(",
 		);
 		expect(result.code).toContain("const linearApi = await step.do");
 	});
@@ -4654,8 +4791,8 @@ describe("generateWorkflowCode — Signature Challenge", () => {
 			customFields: [],
 		});
 		const result = generateWorkflowCode(nodes, edges);
-		expect(result.code).toContain('type: "signature_signed"');
-		expect(result.code).toContain('timeout: "24 hours"');
+		expect(result.code).toContain('"signature_signed"');
+		expect(result.code).toContain('"24 hours"');
 	});
 
 	it("emits the correct flow value", () => {
@@ -4750,10 +4887,21 @@ describe("generateWorkflowCode — Signature Challenge", () => {
 		);
 		// caseId must come from event.payload, not a bare `caseId` variable
 		expect(result.code).toContain("event.payload.caseId");
-		expect(result.code).not.toMatch(/caseId,\s*\n/);
 		// instanceId must come from event, not a bare `instanceId` variable
 		expect(result.code).toContain("event.instanceId");
-		expect(result.code).not.toMatch(/workflowInstanceId: instanceId,/);
+
+		// Scope the "no bare variable" checks to the createSignatureRequest call
+		// itself: the (unrelated) waitForEventDurable helper legitimately uses
+		// plain `caseId`/`instanceId` parameters via shorthand properties when
+		// forwarding a stale-step notification.
+		const createIdx = result.code.indexOf(
+			"this.env.CASES_SVC.createSignatureRequest({",
+		);
+		const createCallBlock = result.code.slice(createIdx, createIdx + 200);
+		expect(createCallBlock).not.toMatch(/caseId,\s*\n/);
+		expect(createCallBlock).not.toMatch(/workflowInstanceId: instanceId,/);
+		expect(createCallBlock).toContain("caseId: event.payload.caseId");
+		expect(createCallBlock).toContain("workflowInstanceId: event.instanceId");
 	});
 
 	it("includes createSignatureRequest in WorkflowEnv interface when signature challenge present", () => {
@@ -4805,8 +4953,8 @@ describe("generateWorkflowCode — Signature Challenge", () => {
 		});
 		const result = generateWorkflowCode(nodes, edges);
 
-		expect(result.code).toContain('type: "signature_acceptance"');
-		expect(result.code).toContain('type: "signature_signed"');
+		expect(result.code).toContain('"signature_acceptance"');
+		expect(result.code).toContain('"signature_signed"');
 
 		// signature_acceptance wait must appear before createSignatureRequest
 		const acceptIdx = result.code.indexOf('"signature_acceptance"');
@@ -6115,9 +6263,13 @@ describe("generateWorkflowCode – Challenge UI labels interpolation", () => {
 		// The prompt text should be emitted (as a literal or template string)
 		expect(code).toContain("Please review and approve.");
 		expect(code).toContain("Por favor revisa y aprueba.");
-		// The labels step.do must appear BEFORE the waitForEvent call
+		// The labels step.do must appear BEFORE the waitForEventDurable call
+		// (searched from the call site, not the helper's own definition,
+		// which is hoisted above the class and would always come first).
 		const labelStepIdx = code.indexOf("_aprobacion-labels");
-		const waitForEventIdx = code.indexOf("waitForEvent");
+		const waitForEventIdx = code.indexOf(
+			"_aprobacionEvt = await waitForEventDurable(",
+		);
 		expect(labelStepIdx).toBeGreaterThanOrEqual(0);
 		expect(waitForEventIdx).toBeGreaterThanOrEqual(0);
 		expect(labelStepIdx).toBeLessThan(waitForEventIdx);
