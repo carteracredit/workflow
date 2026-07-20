@@ -1,4 +1,332 @@
-# [1.3.0](https://github.com/carteracredit/workflow/compare/v1.2.0...v1.3.0) (2026-04-18)
+# [1.3.0-rc.43](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.42...v1.3.0-rc.43) (2026-07-15)
+
+
+### Features
+
+* enhance EdgeRenderer and NodeRenderer for ExternalLink challenge mode ([a91fb07](https://github.com/carteracredit/workflow/commit/a91fb07080310b4d13d3b71576fc7ca02ddeb3b0))
+
+# [1.3.0-rc.42](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.41...v1.3.0-rc.42) (2026-07-14)
+
+
+### Features
+
+* add GeneratePDF node functionality ([6300e68](https://github.com/carteracredit/workflow/commit/6300e6810dfb9632a37d953640cdc0941b4123b9))
+* add PDF template versioning support to GeneratePDF node ([0646f91](https://github.com/carteracredit/workflow/commit/0646f9121aa1fafa21442b8077ad6b0e9823b3a6))
+* enhance paste functionality with token remapping ([4f41fca](https://github.com/carteracredit/workflow/commit/4f41fcafd08a32f57ec55d6145c2479c89f3ebda))
+
+# [1.3.0-rc.41](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.40...v1.3.0-rc.41) (2026-07-09)
+
+
+### Features
+
+* enhance caseNumber injection logic for createLoan NLS function ([f668184](https://github.com/carteracredit/workflow/commit/f668184a67fa2b7ebc2a630f3212e0a820d43775))
+
+# [1.3.0-rc.40](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.39...v1.3.0-rc.40) (2026-07-03)
+
+
+### Features
+
+* add month mapping to formFieldTypeToSchemaType function ([e2904a8](https://github.com/carteracredit/workflow/commit/e2904a827f180e47a910014c82eb566ac3c1f1a1))
+
+# [1.3.0-rc.39](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.38...v1.3.0-rc.39) (2026-07-03)
+
+
+### Features
+
+* implement challenge UI labels interpolation in code generation ([9767bfb](https://github.com/carteracredit/workflow/commit/9767bfb4bc4c048f387e76ba8d81b624d92c54c1))
+
+# [1.3.0-rc.38](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.37...v1.3.0-rc.38) (2026-06-29)
+
+
+### Features
+
+* add tabs and collapsible sections to properties panel ([4e303f3](https://github.com/carteracredit/workflow/commit/4e303f3b85acf065f8dcc93c37e8c749a12eafbf))
+* add validation for invalid variable paths in workflow ([60b4348](https://github.com/carteracredit/workflow/commit/60b4348fe4fa861e03be11dc90c640877aa06deb))
+
+# [1.3.0-rc.37](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.36...v1.3.0-rc.37) (2026-06-26)
+
+
+### Features
+
+* add AddCard node support in workflow ([0fc99fe](https://github.com/carteracredit/workflow/commit/0fc99fefb07ee2743ea8df6fa138926a0680b159))
+* enhance workflow validation and code generation for duplicate titles ([7e79c50](https://github.com/carteracredit/workflow/commit/7e79c505721ec56be80c66d3253224ee1ab21f9a))
+
+# [1.3.0-rc.36](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.35...v1.3.0-rc.36) (2026-06-24)
+
+
+### Features
+
+* enhance workflow code generation and validation for Decision nodes ([9d6caa5](https://github.com/carteracredit/workflow/commit/9d6caa5a93cd570595f5b9a983d9d3ce24f37b2d))
+
+# [1.3.0-rc.35](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.34...v1.3.0-rc.35) (2026-06-11)
+
+
+### Features
+
+* add pull type configuration to challenge settings in properties panel ([1f5b6e2](https://github.com/carteracredit/workflow/commit/1f5b6e2a17259476f732e73a2f3e9e9bb5e59fda))
+
+# [1.3.0-rc.34](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.33...v1.3.0-rc.34) (2026-06-09)
+
+
+### Features
+
+* enhance export functionality in WorkflowList component ([2e182fb](https://github.com/carteracredit/workflow/commit/2e182fb9c1ba30dff42854c1d7587f6e8e6632c8))
+* implement JSON import/export functionality in WorkflowList ([958fd38](https://github.com/carteracredit/workflow/commit/958fd38fa9a822b8848eaee2f461541efbba7d89))
+
+# [1.3.0-rc.33](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.32...v1.3.0-rc.33) (2026-06-09)
+
+
+### Features
+
+* implement delete selected functionality in canvas toolbar ([4ee0946](https://github.com/carteracredit/workflow/commit/4ee094691cebd901dee302fbe62f92b6a6461778))
+
+# [1.3.0-rc.32](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.31...v1.3.0-rc.32) (2026-06-09)
+
+
+### Features
+
+* enhance JSON import/export functionality and workflow state management ([350bf32](https://github.com/carteracredit/workflow/commit/350bf32cb0833198edc9ec938564ec228bf75d11))
+
+# [1.3.0-rc.31](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.30...v1.3.0-rc.31) (2026-06-04)
+
+
+### Features
+
+* add visibility roles management to workflow nodes ([c9c56ec](https://github.com/carteracredit/workflow/commit/c9c56ec67fb0566cea6fb0fed604124453194ed6))
+* enforce visibility roles validation for responsible roles in workflow nodes ([7e9567e](https://github.com/carteracredit/workflow/commit/7e9567ec75a7cf433e95f329b1e6430abfc52c35))
+
+# [1.3.0-rc.30](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.29...v1.3.0-rc.30) (2026-06-03)
+
+
+### Features
+
+* add OutputSchemaEditor to PropertiesPanel for dynamic schema updates ([14d2fb6](https://github.com/carteracredit/workflow/commit/14d2fb650cf4592977f9d656459a8aece0af4e89))
+
+# [1.3.0-rc.29](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.28...v1.3.0-rc.29) (2026-06-03)
+
+
+### Bug Fixes
+
+* update email merge variable labels and descriptions in PropertiesPanel ([3c88408](https://github.com/carteracredit/workflow/commit/3c8840813ac9143b680630482f9cf52cafbca7f1))
+
+
+### Features
+
+* add URL variable name configuration to PropertiesPanel for email settings ([388ceb0](https://github.com/carteracredit/workflow/commit/388ceb0902ab42dc2eda4922c62636649e4535f3))
+* enhance PropertiesPanel for ExternalLink node configuration ([30ef242](https://github.com/carteracredit/workflow/commit/30ef2425b52f7a5f02121d8566f3565213c98b1c))
+* enhance PropertiesPanel to support dynamic output schema updates ([c88d723](https://github.com/carteracredit/workflow/commit/c88d72349373258bc39caf574a1479410b3e8a24))
+* introduce ExternalLink node with configuration and validation ([c83b584](https://github.com/carteracredit/workflow/commit/c83b584fd8f927cb0949b6eb1543d550f0824e4f))
+
+# [1.3.0-rc.28](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.27...v1.3.0-rc.28) (2026-05-27)
+
+
+### Features
+
+* refactor NLS output handling and introduce caching mechanism ([0e1ce43](https://github.com/carteracredit/workflow/commit/0e1ce4371234ba209589f043080dfd37c23f792b))
+
+# [1.3.0-rc.27](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.26...v1.3.0-rc.27) (2026-05-27)
+
+
+### Bug Fixes
+
+* update validation logic for API and NLS nodes with onFailure='stop' ([d267a84](https://github.com/carteracredit/workflow/commit/d267a844bfe114d2f44f0062e72865fb27acd725))
+
+
+### Features
+
+* expand NLS functionality with new loan-related operations and outputs ([01d245c](https://github.com/carteracredit/workflow/commit/01d245c7d4e383220b688e222b79aeca4c09abb6))
+
+# [1.3.0-rc.26](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.25...v1.3.0-rc.26) (2026-05-26)
+
+
+### Features
+
+* update NLS node code generation to match output schema ([5aeea09](https://github.com/carteracredit/workflow/commit/5aeea0927b5248368097d7d5a67cba9d090bc473))
+
+# [1.3.0-rc.25](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.24...v1.3.0-rc.25) (2026-05-25)
+
+
+### Features
+
+* enforce Cloudflare Workflows config order in step.do calls ([a7cd237](https://github.com/carteracredit/workflow/commit/a7cd237ec9d56a5892b39e9110da1daf7bc93992))
+
+# [1.3.0-rc.24](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.23...v1.3.0-rc.24) (2026-05-25)
+
+
+### Features
+
+* update NLS node connection rules in workflow ([2b42c93](https://github.com/carteracredit/workflow/commit/2b42c9337bd86bb1f5c52eada82f5080b7481b8d))
+
+# [1.3.0-rc.23](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.22...v1.3.0-rc.23) (2026-05-21)
+
+
+### Features
+
+* enhance NLS function label handling in NodeRenderer ([ae03a76](https://github.com/carteracredit/workflow/commit/ae03a76e214901252f74fa4ee7535c1d46fab4c3))
+* update NLS output schema and validation logic for prequalification ([b6b5d7f](https://github.com/carteracredit/workflow/commit/b6b5d7f7792f54b2c6c33121a32eaac9891038e0))
+* update workflow for prequalification functionality and NLS integration ([1c50a9a](https://github.com/carteracredit/workflow/commit/1c50a9aee46b3e183a095766a70927187424f8ca))
+
+# [1.3.0-rc.22](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.21...v1.3.0-rc.22) (2026-05-20)
+
+
+### Features
+
+* enhance NLS functionality in PropertiesPanel and translations ([a9969aa](https://github.com/carteracredit/workflow/commit/a9969aa8afd06ff836dc557936c02f9b895e0213))
+* enhance NLS label handling in PropertiesPanel and add new utility functions ([0428414](https://github.com/carteracredit/workflow/commit/0428414f2cee245e79fb9d046b78fcebe6301e3e))
+* implement precalification functionality in workflow ([b1ba690](https://github.com/carteracredit/workflow/commit/b1ba690a949745c5a1b0603def15a37bdf473f69))
+
+# [1.3.0-rc.21](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.20...v1.3.0-rc.21) (2026-05-19)
+
+
+### Bug Fixes
+
+* clarify terminal node conditions in NodeRenderer ([7327880](https://github.com/carteracredit/workflow/commit/732788039a53421c79042c8ab4f004213aa71191))
+
+
+### Features
+
+* integrate TooltipProvider into WorkflowEditor and NodeRenderer tests ([4d6c2e3](https://github.com/carteracredit/workflow/commit/4d6c2e3c2a726c9bf0a88592ab40935b173c17e0))
+
+# [1.3.0-rc.20](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.19...v1.3.0-rc.20) (2026-05-19)
+
+
+### Features
+
+* add NLS node integration for workflow ([d3ff8bf](https://github.com/carteracredit/workflow/commit/d3ff8bfcdaaada984ae83530394d293d206b88f0))
+* add prequalification variables to case workflow ([eab1d63](https://github.com/carteracredit/workflow/commit/eab1d63a247b1113e53b0b3ed5c43d3ec030e5b5))
+
+# [1.3.0-rc.19](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.18...v1.3.0-rc.19) (2026-05-12)
+
+
+### Features
+
+* integrate Sentry for error tracking and performance monitoring ([33d484d](https://github.com/carteracredit/workflow/commit/33d484ddc9d682f73daec39eb4070e8bc366713c))
+
+# [1.3.0-rc.18](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.17...v1.3.0-rc.18) (2026-05-05)
+
+
+### Features
+
+* add variable picker for raw JSON and XML modes in PropertiesPanel ([73ebec7](https://github.com/carteracredit/workflow/commit/73ebec7e26810ee7dcf5c38c9e6607c1e7f1dee7))
+
+# [1.3.0-rc.17](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.16...v1.3.0-rc.17) (2026-05-04)
+
+
+### Features
+
+* add XML body support in PropertiesPanel and validation logic ([b60d635](https://github.com/carteracredit/workflow/commit/b60d6359c5d93a4583ee3fdb8fe675697f77f502))
+
+# [1.3.0-rc.16](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.15...v1.3.0-rc.16) (2026-04-29)
+
+
+### Features
+
+* enhance signature challenge workflow code generation ([9f2b454](https://github.com/carteracredit/workflow/commit/9f2b45493fb927bb66cd2a55ba20c651eeb7ea74))
+
+# [1.3.0-rc.15](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.14...v1.3.0-rc.15) (2026-04-29)
+
+
+### Features
+
+* add translations for Dropbox Sign configuration in PropertiesPanel ([7f6a57a](https://github.com/carteracredit/workflow/commit/7f6a57a605581e290422db804b1e8d1aec4e6c78))
+* enhance challenge output schema and code generation for signature challenges ([0ca491c](https://github.com/carteracredit/workflow/commit/0ca491c879de749c7ff1c511d6d39dcdfd1559e8))
+
+# [1.3.0-rc.14](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.13...v1.3.0-rc.14) (2026-04-28)
+
+
+### Features
+
+* enhance signature challenge handling in workflow code generation ([342c091](https://github.com/carteracredit/workflow/commit/342c091cd188385fb9a5227618f4496504c1cb82))
+
+# [1.3.0-rc.13](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.12...v1.3.0-rc.13) (2026-04-28)
+
+
+### Features
+
+* add bypassCache option to signature template actions ([53ed45b](https://github.com/carteracredit/workflow/commit/53ed45b9a057d37f653b3f81a49fe544d5674cbf))
+* add refresh functionality for Dropbox Sign templates in PropertiesPanel ([2bc7bc0](https://github.com/carteracredit/workflow/commit/2bc7bc0142895dabba2aca8c2a28fb6bd0823236))
+* merge existing signers and custom fields when refreshing templates in PropertiesPanel ([a2f616c](https://github.com/carteracredit/workflow/commit/a2f616c392debac728b66a0e0e6b40923154d2ed))
+* replace input fields with VariableTemplateInput in PropertiesPanel ([2d07e10](https://github.com/carteracredit/workflow/commit/2d07e10f65ea518c8a280b38d0cd3a17295db367))
+
+# [1.3.0-rc.12](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.11...v1.3.0-rc.12) (2026-04-25)
+
+
+### Features
+
+* enhance PropertiesPanel with custom fields management ([7f4e84a](https://github.com/carteracredit/workflow/commit/7f4e84aca9428d2756f662c286645bc8c00f8a42))
+* standardize Start node title and alias handling ([16ec50f](https://github.com/carteracredit/workflow/commit/16ec50f1ce0f4ffd50494583a8465ad0111bb083))
+
+# [1.3.0-rc.11](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.10...v1.3.0-rc.11) (2026-04-24)
+
+
+### Features
+
+* integrate Dropbox Sign templates into PropertiesPanel ([71cc537](https://github.com/carteracredit/workflow/commit/71cc537b9c51c3311c514e8486c7c3259a469167))
+
+# [1.3.0-rc.10](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.9...v1.3.0-rc.10) (2026-04-24)
+
+
+### Features
+
+* add loading state for template refresh in PropertiesPanel ([3ef33eb](https://github.com/carteracredit/workflow/commit/3ef33eb60706a943677f593b213553783a0bf9f7))
+
+# [1.3.0-rc.9](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.8...v1.3.0-rc.9) (2026-04-24)
+
+
+### Features
+
+* implement signature challenge configuration and code generation ([06ff0d1](https://github.com/carteracredit/workflow/commit/06ff0d10dfe18c2b4e649b6fc87e7ff472d4e062))
+
+# [1.3.0-rc.8](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.7...v1.3.0-rc.8) (2026-04-22)
+
+
+### Features
+
+* enhance PropertiesPanel with description variable insertion and UI labels ([9ad3c10](https://github.com/carteracredit/workflow/commit/9ad3c1085004535d34d50450fcabd6f2fd2f5604))
+
+# [1.3.0-rc.7](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.6...v1.3.0-rc.7) (2026-04-22)
+
+
+### Features
+
+* enhance PropertiesPanel with title alias tracking and update logic ([33b8dcd](https://github.com/carteracredit/workflow/commit/33b8dcd73f7fe887819e1c7e14c3573748c87804))
+
+# [1.3.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.5...v1.3.0-rc.6) (2026-04-21)
+
+
+### Features
+
+* add variable-picker token substitution tests ([48df191](https://github.com/carteracredit/workflow/commit/48df191aaecb266022cf1b26157f323f7e891959))
+
+# [1.3.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.4...v1.3.0-rc.5) (2026-04-21)
+
+
+### Features
+
+* enhance WorkflowEditor with token migration and alias renaming ([8eec396](https://github.com/carteracredit/workflow/commit/8eec3968ffaae85fdf7120bd91bd355f3493b399))
+
+# [1.3.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.3...v1.3.0-rc.4) (2026-04-21)
+
+
+### Features
+
+* enhance WorkflowList with server-side pagination and filtering ([a8cf6ba](https://github.com/carteracredit/workflow/commit/a8cf6babc1779392b81d40c33d26ec7098303986))
+
+# [1.3.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.2...v1.3.0-rc.3) (2026-04-20)
+
+
+### Features
+
+* add Promotion node support to workflow ([e08b0d5](https://github.com/carteracredit/workflow/commit/e08b0d5d4fc3ef69fc537df2b51dffc2d9a14ed8))
+
+# [1.3.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.3.0-rc.1...v1.3.0-rc.2) (2026-04-19)
+
+
+### Features
+
+* enhance WorkflowEditor with case-level variables and secrets management ([ec003fb](https://github.com/carteracredit/workflow/commit/ec003fb41b4dd4802f1f7454486ec4d6fd16c963))
+
+# [1.3.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.2.0...v1.3.0-rc.1) (2026-04-18)
 
 
 ### Features

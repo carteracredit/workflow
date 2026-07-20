@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import { validateWorkflow, validateWorkflowWithSyntax } from "./validation";
 import {
 	createDefaultChallengeConfig,
+	createDefaultNLSConfig,
 	type WorkflowNode,
 	type WorkflowEdge,
+	type NLSNodeConfig,
 } from "./types";
 
 describe("validateWorkflow", () => {
@@ -165,6 +167,244 @@ describe("validateWorkflow", () => {
 		});
 	});
 
+	describe("Visibility roles validation", () => {
+		const startNode: WorkflowNode = {
+			id: "start-1",
+			type: "Start",
+			title: "Start",
+			description: "",
+			roles: [],
+			config: {},
+			position: { x: 0, y: 0 },
+			groupId: null,
+		};
+
+		it("should not error when visibilityRoles is undefined (back-compat)", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) => e.nodeId === "form-1" && e.message.includes("visib"),
+				),
+			).toBe(false);
+		});
+
+		it("should not error when visibilityRoles is an empty array", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "nls-1",
+					type: "NLS",
+					title: "NLS",
+					description: "",
+					roles: [],
+					visibilityRoles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) => e.nodeId === "nls-1" && e.message.includes("no válidos"),
+				),
+			).toBe(false);
+		});
+
+		it("should warn when Form/Challenge/Promotion have visibilityRoles: []", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Mi Formulario",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: [],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			const warn = errors.find(
+				(e) => e.nodeId === "form-1" && e.severity === "warning",
+			);
+			expect(warn).toBeDefined();
+			expect(warn?.message).toContain("nadie podrá ver");
+		});
+
+		it("should error when visibilityRoles contains invalid values", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Mi Formulario",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: ["seller", "unknown_role" as never],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			const err = errors.find(
+				(e) => e.nodeId === "form-1" && e.message.includes("no válidos"),
+			);
+			expect(err).toBeDefined();
+			expect(err?.severity).toBe("error");
+		});
+
+		it("should not error when visibilityRoles has valid subset of roles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Mi Formulario",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) => e.nodeId === "form-1" && e.message.includes("visib"),
+				),
+			).toBe(false);
+		});
+	});
+
+	describe("Responsible roles must be in visibility roles", () => {
+		const startNode: WorkflowNode = {
+			id: "start-1",
+			type: "Start",
+			title: "Start",
+			description: "",
+			roles: [],
+			config: {},
+			position: { x: 0, y: 0 },
+			groupId: null,
+		};
+
+		it("should error when a responsible role is not in visibilityRoles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Coapplicant",
+					description: "",
+					roles: ["client", "seller", "credit_agent", "org_manager"],
+					visibilityRoles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			const err = errors.find(
+				(e) =>
+					e.nodeId === "form-1" &&
+					e.severity === "error" &&
+					e.message.includes("roles responsables"),
+			);
+			expect(err).toBeDefined();
+			expect(err?.message).toContain("client");
+			expect(err?.message).toContain("org_manager");
+		});
+
+		it("should not error when all responsible roles are in visibilityRoles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller"],
+					visibilityRoles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "form-1" && e.message.includes("roles responsables"),
+				),
+			).toBe(false);
+		});
+
+		it("should not error when visibilityRoles is undefined (back-compat)", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller", "credit_agent"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "form-1" && e.message.includes("roles responsables"),
+				),
+			).toBe(false);
+		});
+
+		it("should not error when node has no responsible roles", () => {
+			const nodes: WorkflowNode[] = [
+				startNode,
+				{
+					id: "api-1",
+					type: "API",
+					title: "API",
+					description: "",
+					roles: [],
+					visibilityRoles: ["seller"],
+					config: { url: "https://example.com" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "api-1" && e.message.includes("roles responsables"),
+				),
+			).toBe(false);
+		});
+	});
+
 	describe("Decision node validation", () => {
 		it("should error when Decision node has less than 2 outgoing edges", () => {
 			const nodes: WorkflowNode[] = [
@@ -306,6 +546,168 @@ describe("validateWorkflow", () => {
 						e.message.includes("condición definida"),
 				),
 			).toBe(true);
+		});
+
+		it("should error when Decision node has whitespace-only condition", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "decision-1",
+					type: "Decision",
+					title: "Decision",
+					description: "",
+					roles: [],
+					config: { condition: "   " },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "decision-1" &&
+						e.message.includes("condición definida"),
+				),
+			).toBe(true);
+		});
+	});
+
+	describe("Duplicate title validation", () => {
+		it("should error when two nodes of the same type share a title", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "cp-1",
+					type: "Checkpoint",
+					title: "Checkpoint",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "cp-2",
+					type: "Checkpoint",
+					title: "Checkpoint",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 200, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const dupErrors = errors.filter((e) =>
+				e.message.includes("nombre duplicado"),
+			);
+			expect(dupErrors.length).toBe(2);
+			expect(dupErrors.some((e) => e.nodeId === "cp-1")).toBe(true);
+			expect(dupErrors.some((e) => e.nodeId === "cp-2")).toBe(true);
+		});
+
+		it("should not error when nodes of different types share a title", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "cp-1",
+					type: "Checkpoint",
+					title: "Shared Name",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Shared Name",
+					description: "",
+					roles: ["client"],
+					config: { formId: "f1" },
+					position: { x: 200, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+
+			const errors = validateWorkflow(nodes, edges);
+			const dupErrors = errors.filter((e) =>
+				e.message.includes("nombre duplicado"),
+			);
+			expect(dupErrors.length).toBe(0);
+		});
+
+		it("should not flag Start or End nodes for duplicates", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "end-1",
+					type: "End",
+					title: "End",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [
+				{
+					id: "e1",
+					from: "start-1",
+					to: "end-1",
+					label: null,
+				},
+			];
+
+			const errors = validateWorkflow(nodes, edges);
+			const dupErrors = errors.filter((e) =>
+				e.message.includes("nombre duplicado"),
+			);
+			expect(dupErrors.length).toBe(0);
 		});
 	});
 
@@ -529,7 +931,7 @@ describe("validateWorkflow", () => {
 			).toBe(true);
 		});
 
-		it("should error when API node with onFailure='stop' has outgoing edges", () => {
+		it("should NOT error when API node with onFailure='stop' has outgoing edges (success path is valid)", () => {
 			const nodes: WorkflowNode[] = [
 				{
 					id: "start-1",
@@ -577,14 +979,13 @@ describe("validateWorkflow", () => {
 			];
 
 			const errors = validateWorkflow(nodes, edges);
+			// onFailure='stop' only affects the failure path — success path connections are valid
 			expect(
 				errors.some(
 					(e) =>
-						e.nodeId === "api-1" &&
-						e.message.includes("Detener Workflow") &&
-						e.message.includes("conexiones salientes"),
+						e.nodeId === "api-1" && e.message.includes("conexiones salientes"),
 				),
-			).toBe(true);
+			).toBe(false);
 		});
 	});
 
@@ -1472,6 +1873,624 @@ describe("node title validation", () => {
 		const errors = validateWorkflow(nodes, edges);
 		expect(
 			errors.some((e) => e.message.includes("número o carácter especial")),
+		).toBe(false);
+	});
+});
+
+describe("NLS node validation", () => {
+	function makeNlsWorkflow(
+		nlsConfig: NLSNodeConfig,
+		extraNodes: WorkflowNode[] = [],
+		extraEdges: WorkflowEdge[] = [],
+	) {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "nls-1",
+				type: "NLS",
+				title: "NLS Node",
+				description: "",
+				roles: [],
+				config: nlsConfig as unknown as Record<string, unknown>,
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 200, y: 0 },
+				groupId: null,
+			},
+			...extraNodes,
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "nls-1", label: null },
+			{ id: "e2", from: "nls-1", to: "end", label: null },
+			...extraEdges,
+		];
+		return { nodes, edges };
+	}
+
+	it("should error when NLS node has no functionId", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: undefined,
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("función NLS seleccionada"),
+			),
+		).toBe(true);
+	});
+
+	it("should not error when NLS node has a valid functionId", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("función NLS seleccionada"),
+			),
+		).toBe(false);
+	});
+
+	it("should error when maxRetries exceeds 2", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "cancelLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				maxRetries: 5,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("máximo de reintentos es 2"),
+			),
+		).toBe(true);
+	});
+
+	it("should warn when timeout is out of bounds", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "getAmortization",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				timeout: 1000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.severity === "warning" &&
+					e.message.includes("timeout"),
+			),
+		).toBe(true);
+	});
+
+	it("should NOT error when onFailure=stop and node has outgoing edges (success path is valid)", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				onFailure: "stop",
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		// onFailure='stop' only affects the failure path — success path connections are valid
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("no puede tener conexiones salientes"),
+			),
+		).toBe(false);
+	});
+
+	it("should not error when onFailure=stop and no outgoing edges", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				onFailure: "stop",
+			},
+		};
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "nls-1",
+				type: "NLS",
+				title: "NLS Node",
+				description: "",
+				roles: [],
+				config: cfg as unknown as Record<string, unknown>,
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "nls-1", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("no puede tener conexiones salientes"),
+			),
+		).toBe(false);
+	});
+
+	it("should error when return-to-checkpoint has no prior checkpoint", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			failureHandling: {
+				...createDefaultNLSConfig().failureHandling,
+				onFailure: "return-to-checkpoint",
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.message.includes("No hay checkpoint anterior"),
+			),
+		).toBe(true);
+	});
+
+	describe("prequalification function", () => {
+		it("should not error for prequalification in applicant mode", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "prequalification",
+				fields: [
+					{ fieldId: "actorType", value: "applicant", source: "manual" },
+				],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" && e.message.includes("campos requeridos"),
+				),
+			).toBe(false);
+		});
+
+		it("should error for prequalification in coapplicant mode when identity fields are missing", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "prequalification",
+				fields: [
+					{ fieldId: "actorType", value: "coapplicant", source: "manual" },
+				],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("campos requeridos de identidad"),
+				),
+			).toBe(true);
+		});
+
+		it("should not error for prequalification in coapplicant mode when all required fields are provided", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "prequalification",
+				fields: [
+					{ fieldId: "actorType", value: "coapplicant", source: "manual" },
+					{ fieldId: "firstName", value: "John", source: "manual" },
+					{ fieldId: "lastName", value: "Doe", source: "manual" },
+					{ fieldId: "email", value: "john@test.com", source: "manual" },
+					{ fieldId: "addressStreetNumber", value: "123", source: "manual" },
+					{ fieldId: "addressStreetName", value: "Main St", source: "manual" },
+					{ fieldId: "addressCity", value: "Austin", source: "manual" },
+					{ fieldId: "addressState", value: "TX", source: "manual" },
+					{ fieldId: "addressZipCode", value: "78701", source: "manual" },
+				],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("campos requeridos de identidad"),
+				),
+			).toBe(false);
+		});
+
+		it("should error for findPrequalificationMatches when no match fields are provided", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "findPrequalificationMatches",
+				fields: [],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("al menos un campo de búsqueda"),
+				),
+			).toBe(true);
+		});
+
+		it("should not error for findPrequalificationMatches when at least one match field is provided", () => {
+			const cfg: NLSNodeConfig = {
+				...createDefaultNLSConfig(),
+				functionId: "findPrequalificationMatches",
+				fields: [
+					{ fieldId: "email", value: "test@test.com", source: "manual" },
+				],
+			};
+			const { nodes, edges } = makeNlsWorkflow(cfg);
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "nls-1" &&
+						e.message.includes("al menos un campo de búsqueda"),
+				),
+			).toBe(false);
+		});
+	});
+});
+
+// ── Invalid variable path validation ─────────────────────────────────────────
+
+describe("validateWorkflow – invalid variable paths", () => {
+	// Converts a camelCase alias to a spaced title so that titleToCamelCase
+	// correctly reverses it back to the original alias.
+	// e.g. "addressForm" → "Address Form" → alias "addressForm"
+	function aliasToTitle(alias: string): string {
+		const spaced = alias.replace(/([A-Z])/g, " $1");
+		return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+	}
+
+	function makeFormNode(id: string, alias: string): WorkflowNode {
+		return {
+			id,
+			type: "Form",
+			title: aliasToTitle(alias),
+			description: "",
+			roles: [],
+			config: {
+				formId: "form-abc",
+				outputSchema: {
+					name: alias,
+					properties: [
+						{
+							id: "prop-addr",
+							name: "address",
+							type: "object",
+							properties: [
+								{ id: "prop-street", name: "street", type: "string" },
+								{ id: "prop-city", name: "city", type: "string" },
+							],
+						},
+					],
+				},
+			},
+			position: { x: 100, y: 0 },
+			groupId: null,
+		};
+	}
+
+	function makeTransformNode(id: string, code: string): WorkflowNode {
+		return {
+			id,
+			type: "Transform",
+			title: "Transformar",
+			description: "",
+			roles: [],
+			config: { code },
+			position: { x: 200, y: 0 },
+			groupId: null,
+		};
+	}
+
+	const startNode: WorkflowNode = {
+		id: "start",
+		type: "Start",
+		title: "Start",
+		description: "",
+		roles: [],
+		config: {},
+		position: { x: 0, y: 0 },
+		groupId: null,
+	};
+
+	const endNode: WorkflowNode = {
+		id: "end",
+		type: "End",
+		title: "End",
+		description: "",
+		roles: [],
+		config: {},
+		position: { x: 400, y: 0 },
+		groupId: null,
+	};
+
+	it("should not error when path is valid in upstream schema", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { street: \${addressForm.address.street} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(errors.filter((e) => e.nodeId === "tx-1")).toHaveLength(0);
+	});
+
+	it("should error when referencing a non-existent nested property (typo)", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { street: \${addressForm.addr.street} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		const txErrors = errors.filter((e) => e.nodeId === "tx-1");
+		expect(txErrors.length).toBeGreaterThan(0);
+		expect(
+			txErrors.some((e) => e.message.includes("\${addressForm.addr.street}")),
+		).toBe(true);
+	});
+
+	it("should error when accessing a leaf property as an object", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { zip: \${addressForm.address.street.zip} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		const txErrors = errors.filter((e) => e.nodeId === "tx-1");
+		expect(txErrors.length).toBeGreaterThan(0);
+	});
+
+	it("should not error for secret references regardless of schema", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { key: \${secret.MY_API_KEY} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		expect(errors.filter((e) => e.nodeId === "tx-1")).toHaveLength(0);
+	});
+
+	it("should not flag unknown aliases (those are handled by findOrphanedTokens)", () => {
+		const form = makeFormNode("form-1", "addressForm");
+		const transform = makeTransformNode(
+			"tx-1",
+			"return { x: \${ghostNode.prop} }",
+		);
+		const nodes = [startNode, form, transform, endNode];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "form-1", label: null },
+			{ id: "e2", from: "form-1", to: "tx-1", label: null },
+			{ id: "e3", from: "tx-1", to: "end", label: null },
+		];
+		const errors = validateWorkflow(nodes, edges);
+		const txErrors = errors.filter((e) => e.nodeId === "tx-1");
+		const hasOrphanError = txErrors.some((e) => e.message.includes("huérfana"));
+		const hasPathError = txErrors.some((e) => e.message.includes("propiedad"));
+		expect(hasOrphanError).toBe(true);
+		expect(hasPathError).toBe(false);
+	});
+});
+
+describe("GeneratePDF node validation", () => {
+	function makeGeneratePdfWorkflow(config: Record<string, unknown>) {
+		const nodes: WorkflowNode[] = [
+			{
+				id: "start",
+				type: "Start",
+				title: "Inicio",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "pdf-1",
+				type: "GeneratePDF",
+				title: "Generar PDF",
+				description: "",
+				roles: [],
+				config,
+				position: { x: 100, y: 0 },
+				groupId: null,
+			},
+			{
+				id: "end",
+				type: "End",
+				title: "Fin",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 200, y: 0 },
+				groupId: null,
+			},
+		];
+		const edges: WorkflowEdge[] = [
+			{ id: "e1", from: "start", to: "pdf-1", label: null },
+			{ id: "e2", from: "pdf-1", to: "end", label: null },
+		];
+		return { nodes, edges };
+	}
+
+	it("should error when no PDF template is selected", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({ fieldMappings: [] });
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.message.includes("plantilla PDF seleccionada"),
+			),
+		).toBe(true);
+	});
+
+	it("should not error when a PDF template is selected", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [{ fieldName: "name", value: "${start.name}" }],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.message.includes("plantilla PDF seleccionada"),
+			),
+		).toBe(false);
+	});
+
+	it("should warn when every field mapping has an empty value", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [
+				{ fieldName: "name", value: "" },
+				{ fieldName: "amount", value: "  " },
+			],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.severity === "warning" &&
+					e.message.includes("Ningún campo del PDF"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn when at least one field mapping has a value", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [
+				{ fieldName: "name", value: "${start.name}" },
+				{ fieldName: "amount", value: "" },
+			],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" && e.message.includes("Ningún campo del PDF"),
+			),
+		).toBe(false);
+	});
+
+	it("should warn when a template is selected but no version is pinned", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [{ fieldName: "name", value: "${start.name}" }],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.severity === "warning" &&
+					e.message.includes("versión de plantilla fijada"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn about version pinning when pdfTemplateVersionId is set", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({
+			pdfTemplateId: "tpl-1",
+			pdfTemplateVersionId: "ver-2",
+			fieldMappings: [{ fieldName: "name", value: "${start.name}" }],
+		});
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "pdf-1" &&
+					e.message.includes("versión de plantilla fijada"),
+			),
+		).toBe(false);
+	});
+
+	it("should not warn about version pinning when no template is selected at all", () => {
+		const { nodes, edges } = makeGeneratePdfWorkflow({ fieldMappings: [] });
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some((e) => e.message.includes("versión de plantilla fijada")),
 		).toBe(false);
 	});
 });

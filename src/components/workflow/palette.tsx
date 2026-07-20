@@ -3,7 +3,15 @@
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { WorkflowNode, NodeType } from "@/lib/workflow/types";
-import { createDefaultChallengeConfig } from "@/lib/workflow/types";
+import {
+	ROLE_OPTIONS,
+	createDefaultChallengeConfig,
+	createDefaultPromotionConfig,
+	createDefaultNLSConfig,
+	createDefaultExternalLinkConfig,
+	createDefaultAddCardConfig,
+	createDefaultGeneratePdfConfig,
+} from "@/lib/workflow/types";
 import {
 	XCircle,
 	FileText,
@@ -17,8 +25,34 @@ import {
 	Circle,
 	Play,
 	Shield,
+	BadgePercent,
+	Banknote,
+	ExternalLink,
+	CreditCard,
+	FileOutput,
 } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+const NODES_WITH_VISIBILITY_ROLES = new Set<NodeType>([
+	"Form",
+	"Challenge",
+	"Message",
+	"Promotion",
+	"Decision",
+	"Transform",
+	"API",
+	"Checkpoint",
+	"FlagChange",
+	"NLS",
+	"ExternalLink",
+	"AddCard",
+	"GeneratePDF",
+]);
 
 interface PaletteProps {
 	onAddNode: (node: WorkflowNode) => void;
@@ -114,6 +148,47 @@ const NODE_CATEGORIES = [
 				bgColor: "var(--node-bg-message)",
 				iconColorVar: "--node-icon-message",
 			},
+			{
+				type: "Promotion" as NodeType,
+				labelKey: "palette.nodePromotion",
+				icon: <BadgePercent className="h-4 w-4" />,
+				bgColor: "var(--node-bg-promotion)",
+				iconColorVar: "--node-icon-promotion",
+			},
+			{
+				type: "ExternalLink" as NodeType,
+				labelKey: "palette.nodeExternalLink",
+				icon: <ExternalLink className="h-4 w-4" />,
+				bgColor: "var(--node-bg-external-link)",
+				iconColorVar: "--node-icon-external-link",
+			},
+			{
+				type: "AddCard" as NodeType,
+				labelKey: "palette.nodeAddCard",
+				icon: <CreditCard className="h-4 w-4" />,
+				bgColor: "var(--node-bg-add-card)",
+				iconColorVar: "--node-icon-add-card",
+			},
+			{
+				type: "GeneratePDF" as NodeType,
+				labelKey: "palette.nodeGeneratePdf",
+				icon: <FileOutput className="h-4 w-4" />,
+				bgColor: "var(--node-bg-generate-pdf)",
+				iconColorVar: "--node-icon-generate-pdf",
+			},
+		],
+	},
+	{
+		id: "integrations",
+		labelKey: "palette.categoryIntegrations",
+		nodes: [
+			{
+				type: "NLS" as NodeType,
+				labelKey: "palette.nodeNLS",
+				icon: <Banknote className="h-4 w-4" />,
+				bgColor: "var(--node-bg-nls)",
+				iconColorVar: "--node-icon-nls",
+			},
 		],
 	},
 	{
@@ -142,8 +217,23 @@ const getDefaultConfigForType = (type: NodeType): WorkflowNode["config"] => {
 	if (type === "Challenge") {
 		return createDefaultChallengeConfig();
 	}
+	if (type === "Promotion") {
+		return createDefaultPromotionConfig();
+	}
 	if (type === "Message") {
 		return { channel: "email", mergeVars: [] };
+	}
+	if (type === "NLS") {
+		return createDefaultNLSConfig();
+	}
+	if (type === "ExternalLink") {
+		return createDefaultExternalLinkConfig();
+	}
+	if (type === "AddCard") {
+		return createDefaultAddCardConfig();
+	}
+	if (type === "GeneratePDF") {
+		return createDefaultGeneratePdfConfig();
 	}
 	return {};
 };
@@ -154,6 +244,11 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 
 	const handleAddNode = (type: NodeType, labelKey: string) => {
 		const label = t(labelKey);
+		// For the Start node we always use the canonical English title so that the
+		// alias derived from it (titleToCamelCase → "start") is language-agnostic.
+		// The localized label is stored in titleEs for display purposes only.
+		const canonicalTitle = type === "Start" ? "Start" : label;
+		const titleEs = type === "Start" ? t(labelKey) : undefined;
 		const propertiesPanel = document.querySelector<HTMLElement>(
 			'[data-workflow-panel="properties"]',
 		);
@@ -176,9 +271,13 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 			id: `node-${Date.now()}`,
 			type,
 			checkpointType: type === "Checkpoint" ? "normal" : undefined,
-			title: label,
+			title: canonicalTitle,
+			titleEs,
 			description: "",
 			roles: [],
+			visibilityRoles: NODES_WITH_VISIBILITY_ROLES.has(type)
+				? [...ROLE_OPTIONS]
+				: undefined,
 			config: getDefaultConfigForType(type),
 			staleTimeout: null,
 			position: { x: centerX, y: centerY },
@@ -199,36 +298,32 @@ export function Palette({ onAddNode, zoom, pan, className }: PaletteProps) {
 				<div key={category.id} className="flex items-center gap-2">
 					{category.nodes.map(
 						({ type, labelKey, icon, bgColor, iconColorVar }) => (
-							<div key={type} className="group relative">
-								<button
-									type="button"
-									className="flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-									onClick={() => handleAddNode(type, labelKey)}
-									aria-label={t("palette.addNodeLabel").replace(
-										"{label}",
-										t(labelKey),
-									)}
-								>
-									<div
-										className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
-										style={{
-											backgroundColor: bgColor,
-											color: `var(${iconColorVar})`,
-										}}
+							<Tooltip key={type} delayDuration={200}>
+								<TooltipTrigger asChild>
+									<button
+										type="button"
+										className="group flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-card transition-all hover:border-border hover:bg-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										onClick={() => handleAddNode(type, labelKey)}
+										aria-label={t("palette.addNodeLabel").replace(
+											"{label}",
+											t(labelKey),
+										)}
 									>
-										{icon}
-									</div>
-								</button>
-								<div className="pointer-events-none absolute left-1/2 top-full z-50 flex -translate-x-1/2 translate-y-2 flex-col items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-									<span className="rounded-md border border-border bg-popover px-2 py-1.5 text-xs font-medium text-popover-foreground shadow-lg">
-										{t(labelKey)}
-									</span>
-									<span
-										className="mt-1 h-2 w-px rounded-full bg-border"
-										aria-hidden="true"
-									/>
-								</div>
-							</div>
+										<div
+											className="node-icon-container flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110"
+											style={{
+												backgroundColor: bgColor,
+												color: `var(${iconColorVar})`,
+											}}
+										>
+											{icon}
+										</div>
+									</button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom" sideOffset={8}>
+									<p>{t(labelKey)}</p>
+								</TooltipContent>
+							</Tooltip>
 						),
 					)}
 					{index < NODE_CATEGORIES.length - 1 && (

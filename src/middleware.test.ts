@@ -9,6 +9,40 @@ vi.mock("better-auth/cookies", () => ({
 import { getSessionCookie } from "better-auth/cookies";
 import { middleware } from "./middleware";
 
+function mockAuthFetches(options?: {
+	sessionBody?: Record<string, unknown>;
+	permissions?: { roleSlug: string | null; actions: string[] };
+}) {
+	vi.mocked(global.fetch).mockImplementation(async (input) => {
+		const url = String(input);
+		if (url.includes("/permissions/me")) {
+			return {
+				ok: true,
+				json: async () => ({
+					success: true,
+					data: options?.permissions ?? {
+						roleSlug: "superadmin",
+						actions: ["access:workflowapp"],
+					},
+				}),
+			} as Response;
+		}
+
+		return {
+			ok: true,
+			json: async () =>
+				options?.sessionBody ?? {
+					session: { id: "session-123" },
+					user: {
+						id: "user-123",
+						email: "admin@example.com",
+						role: "admin",
+					},
+				},
+		} as Response;
+	});
+}
+
 describe("middleware", () => {
 	const mockGetSessionCookie = vi.mocked(getSessionCookie);
 
@@ -145,15 +179,9 @@ describe("middleware", () => {
 			expect(response.headers.get("location")).toContain("/forbidden");
 		});
 
-		it("allows access when user has admin role", async () => {
+		it("allows access when user has admin role and workflow app access", async () => {
 			mockGetSessionCookie.mockReturnValue("session-token");
-			vi.mocked(global.fetch).mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					session: { id: "session-123" },
-					user: { id: "user-123", email: "admin@example.com", role: "admin" },
-				}),
-			} as Response);
+			mockAuthFetches();
 
 			const request = createRequest("/dashboard", {
 				cookies: { "better-auth.session_token": "session-token" },
@@ -163,6 +191,22 @@ describe("middleware", () => {
 
 			// NextResponse.next() returns undefined headers for location
 			expect(response.headers.get("location")).toBeNull();
+		});
+
+		it("redirects to forbidden when admin lacks workflow app access", async () => {
+			mockGetSessionCookie.mockReturnValue("session-token");
+			mockAuthFetches({
+				permissions: { roleSlug: "viewer", actions: ["read:workflow"] },
+			});
+
+			const request = createRequest("/dashboard", {
+				cookies: { "better-auth.session_token": "session-token" },
+			});
+
+			const response = await middleware(request);
+
+			expect(response.status).toBe(307);
+			expect(response.headers.get("location")).toContain("/forbidden");
 		});
 	});
 

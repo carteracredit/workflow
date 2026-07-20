@@ -97,6 +97,39 @@ describe("translations", () => {
 				translations.es.workflowList.createFieldDescriptionEsPlaceholder,
 			).toBe("Descripción en español");
 		});
+
+		it("should have NLS node translations in both languages", () => {
+			expect(translations.en.propertiesPanel.nlsOutputsTitle).toBeDefined();
+			expect(translations.es.propertiesPanel.nlsOutputsTitle).toBeDefined();
+
+			expect(translations.en.propertiesPanel.nlsFunctionLabel).toBe(
+				"NLS Function",
+			);
+			expect(translations.es.propertiesPanel.nlsFunctionLabel).toBe(
+				"Función NLS",
+			);
+
+			expect(translations.en.propertiesPanel.nlsUserIdAutoInfo).toBe(
+				"The userId from the current case will be used automatically.",
+			);
+			expect(translations.es.propertiesPanel.nlsUserIdAutoInfo).toBe(
+				"Se usará automáticamente el userId del caso actual.",
+			);
+
+			expect(translations.en.propertiesPanel.nlsFieldsLoading).toBe(
+				"Loading fields…",
+			);
+			expect(translations.es.propertiesPanel.nlsFieldsLoading).toBe(
+				"Cargando campos…",
+			);
+
+			expect(translations.en.propertiesPanel.nlsSelectPlaceholder).toBe(
+				"Select an option",
+			);
+			expect(translations.es.propertiesPanel.nlsSelectPlaceholder).toBe(
+				"Seleccionar opción",
+			);
+		});
 	});
 
 	describe("getLocaleForLanguage", () => {

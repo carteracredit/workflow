@@ -6,13 +6,25 @@ import type {
 	ChallengeNodeConfig,
 	Flag,
 	MessageNodeConfig,
+	NLSNodeConfig,
+	ExternalLinkNodeConfig,
+	GeneratePdfNodeConfig,
+	TimeoutUnit,
 } from "./types";
-import { MAX_CHALLENGE_RETRIES } from "./types";
-import { findNearestPreviousCheckpoint } from "./graph-utils";
+import { MAX_CHALLENGE_RETRIES, ROLE_OPTIONS } from "./types";
+import {
+	findNearestPreviousCheckpoint,
+	findUpstreamNodes,
+	buildVariableSourceNodes,
+	type VariableLeafNode,
+	type VariableSourceNode,
+} from "./graph-utils";
 import {
 	validateTransformCode,
 	validateConditionExpression,
 } from "./validate-code";
+import { buildAliasMap } from "./node-alias";
+import { findOrphanedTokens, findInvalidPathTokens } from "./migrate-tokens";
 
 type ChallengeResult = "accepted" | "rejected" | "failed";
 
@@ -33,6 +45,20 @@ const CHALLENGE_RESULT_METADATA: Record<
 		port: "bottom",
 	},
 };
+
+const TIMEOUT_UNIT_LABEL_ES: Record<TimeoutUnit, string> = {
+	seconds: "segundos",
+	minutes: "minutos",
+	hours: "horas",
+	days: "días",
+};
+
+function formatTimeoutForMessage(config: {
+	value: number;
+	unit: TimeoutUnit;
+}): string {
+	return `${config.value} ${TIMEOUT_UNIT_LABEL_ES[config.unit] ?? config.unit}`;
+}
 
 const DEFAULT_CHALLENGE_RESULTS: ChallengeResult[] = ["accepted", "rejected"];
 const CHALLENGE_RESULT_CONFIG_KEYS = [
@@ -63,8 +89,13 @@ export function validateWorkflow(
 		});
 	}
 
-	// Validación 2: Solo Form y Challenge requieren al menos un rol
-	const NODES_WITH_REQUIRED_ROLES = ["Form", "Challenge"];
+	// Validación 2: Form, Challenge y Promotion requieren al menos un rol
+	const NODES_WITH_REQUIRED_ROLES = [
+		"Form",
+		"Challenge",
+		"Promotion",
+		"AddCard",
+	];
 	nodes.forEach((node) => {
 		if (
 			NODES_WITH_REQUIRED_ROLES.includes(node.type) &&
@@ -73,6 +104,56 @@ export function validateWorkflow(
 			errors.push({
 				nodeId: node.id,
 				message: `"${node.title}" debe tener al menos un rol asignado`,
+				severity: "error",
+			});
+		}
+	});
+
+	// Validación 2b: visibilityRoles solo puede contener valores permitidos
+	const VALID_ROLES = new Set(ROLE_OPTIONS);
+	nodes.forEach((node) => {
+		if (node.visibilityRoles === undefined) return;
+		const invalid = node.visibilityRoles.filter((r) => !VALID_ROLES.has(r));
+		if (invalid.length > 0) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" tiene roles de visibilidad no válidos: ${invalid.join(", ")}`,
+				severity: "error",
+			});
+		}
+	});
+
+	// Validación 2c: warning si nodos con Responsible Roles tienen visibilityRoles vacío
+	const NODES_WITH_REQUIRED_INTERACTION_ROLES = [
+		"Form",
+		"Challenge",
+		"Promotion",
+		"AddCard",
+	];
+	nodes.forEach((node) => {
+		if (
+			NODES_WITH_REQUIRED_INTERACTION_ROLES.includes(node.type) &&
+			node.visibilityRoles !== undefined &&
+			node.visibilityRoles.length === 0
+		) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" no tiene roles de visibilidad asignados, nadie podrá ver este nodo en el caso`,
+				severity: "warning",
+			});
+		}
+	});
+
+	// Validación 2d: responsible roles must be included in visibility roles
+	nodes.forEach((node) => {
+		if (node.visibilityRoles === undefined) return;
+		if (node.roles.length === 0) return;
+		const visSet = new Set(node.visibilityRoles);
+		const missing = node.roles.filter((r) => !visSet.has(r));
+		if (missing.length > 0) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" tiene roles responsables que no están en roles de visibilidad: ${missing.join(", ")}`,
 				severity: "error",
 			});
 		}
@@ -107,10 +188,14 @@ export function validateWorkflow(
 	nodes.forEach((node) => {
 		const allowRetry = (node.config.allowRetry as boolean) === true;
 
+		const isExternalLinkChallenge =
+			node.type === "ExternalLink" &&
+			(node.config as ExternalLinkNodeConfig | undefined)?.mode === "challenge";
 		if (
 			node.type !== "End" &&
 			node.type !== "Reject" &&
-			node.type !== "Challenge"
+			node.type !== "Challenge" &&
+			!isExternalLinkChallenge
 		) {
 			const hasOutgoing = edges.some((e) => e.from === node.id);
 			if (!hasOutgoing) {
@@ -188,6 +273,35 @@ export function validateWorkflow(
 		}
 	});
 
+	// Validación: Títulos duplicados dentro del mismo tipo de nodo
+	const titlesByType = new Map<string, Map<string, WorkflowNode[]>>();
+	for (const node of nodes) {
+		if (node.type === "Start" || node.type === "End") continue;
+		const trimmedTitle = node.title.trim();
+		if (!trimmedTitle) continue;
+		if (!titlesByType.has(node.type)) {
+			titlesByType.set(node.type, new Map());
+		}
+		const typeMap = titlesByType.get(node.type)!;
+		if (!typeMap.has(trimmedTitle)) {
+			typeMap.set(trimmedTitle, []);
+		}
+		typeMap.get(trimmedTitle)!.push(node);
+	}
+	for (const [, typeMap] of titlesByType) {
+		for (const [title, dupes] of typeMap) {
+			if (dupes.length > 1) {
+				for (const node of dupes) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${title}" tiene un nombre duplicado — cada nodo debe tener un título único`,
+						severity: "error",
+					});
+				}
+			}
+		}
+	}
+
 	// Validación 6: Configuración específica por tipo
 	nodes.forEach((node) => {
 		if (node.type === "Form" && !node.config.formId) {
@@ -198,7 +312,10 @@ export function validateWorkflow(
 			});
 		}
 
-		if (node.type === "Decision" && !node.config.condition) {
+		if (
+			node.type === "Decision" &&
+			!(node.config.condition as string)?.trim()
+		) {
 			errors.push({
 				nodeId: node.id,
 				message: `"${node.title}" debe tener una condición definida`,
@@ -285,18 +402,6 @@ export function validateWorkflow(
 					});
 				}
 
-				// Validar que API con onFailure='stop' no tenga conexiones salientes
-				if (fh.onFailure === "stop") {
-					const outgoingEdges = edges.filter((e) => e.from === node.id);
-					if (outgoingEdges.length > 0) {
-						errors.push({
-							nodeId: node.id,
-							message: `"${node.title}": Un nodo API con "Detener Workflow" no puede tener conexiones salientes`,
-							severity: "error",
-						});
-					}
-				}
-
 				// Validar que API con return-to-checkpoint tenga checkpoint configurado
 				if (fh.onFailure === "return-to-checkpoint") {
 					const checkpointId = findNearestPreviousCheckpoint(
@@ -329,6 +434,148 @@ export function validateWorkflow(
 						});
 					}
 				}
+			}
+		}
+
+		if (node.type === "NLS") {
+			const nlsCfg = node.config as NLSNodeConfig | undefined;
+
+			if (!nlsCfg?.functionId) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener una función NLS seleccionada`,
+					severity: "error",
+				});
+			}
+
+			// Validations specific to prequalification function
+			if (nlsCfg?.functionId === "prequalification") {
+				const fields = nlsCfg.fields ?? [];
+				const fieldMap: Record<string, string> = {};
+				for (const f of fields) {
+					fieldMap[f.fieldId] = f.value;
+				}
+
+				const actorType = fieldMap["actorType"] ?? "applicant";
+				const isCoapplicant =
+					actorType === "coapplicant" || actorType === '"coapplicant"';
+
+				if (isCoapplicant) {
+					const requiredCoapplicantFields = [
+						"firstName",
+						"lastName",
+						"email",
+						"addressStreetNumber",
+						"addressStreetName",
+						"addressCity",
+						"addressState",
+						"addressZipCode",
+					];
+					const missingFields = requiredCoapplicantFields.filter(
+						(f) => !fieldMap[f]?.trim(),
+					);
+					if (missingFields.length > 0) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}": En modo cosolicitante, faltan campos requeridos de identidad: ${missingFields.join(", ")}`,
+							severity: "error",
+						});
+					}
+				}
+			}
+
+			// Validations specific to findPrequalificationMatches function
+			if (nlsCfg?.functionId === "findPrequalificationMatches") {
+				const fields = nlsCfg.fields ?? [];
+				const fieldMap: Record<string, string> = {};
+				for (const f of fields) {
+					fieldMap[f.fieldId] = f.value;
+				}
+
+				const matchFields = ["taxIdNumber", "phone", "email", "userId"];
+				const hasAtLeastOne = matchFields.some((f) => fieldMap[f]?.trim());
+				if (!hasAtLeastOne) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": Se requiere al menos un campo de búsqueda (SSN/ITIN, teléfono, email o userId)`,
+						severity: "error",
+					});
+				}
+			}
+
+			const fh = nlsCfg?.failureHandling as
+				| (APIFailureHandling & { checkpointId?: string })
+				| undefined;
+			if (fh) {
+				if (fh.maxRetries > 2) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": El número máximo de reintentos es 2`,
+						severity: "error",
+					});
+				}
+				if (fh.maxRetries < 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": El número de reintentos no puede ser negativo`,
+						severity: "error",
+					});
+				}
+				if (fh.onFailure === "return-to-checkpoint") {
+					const checkpointId = findNearestPreviousCheckpoint(
+						node.id,
+						nodes,
+						edges,
+					);
+					if (!checkpointId) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}": No hay checkpoint anterior para regresar en caso de fallo`,
+							severity: "error",
+						});
+					}
+				}
+				if (fh.timeout < 5000 || fh.timeout > 300000) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": El timeout debe estar entre 5 y 300 segundos`,
+						severity: "warning",
+					});
+				}
+				if (fh.onFailure === "stop") {
+					// onFailure='stop' solo aplica al camino de error:
+					// el nodo puede y debe tener conexiones salientes para el camino de éxito.
+				}
+			}
+		}
+
+		if (node.type === "GeneratePDF") {
+			const pdfCfg = node.config as GeneratePdfNodeConfig | undefined;
+
+			if (!pdfCfg?.pdfTemplateId) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener una plantilla PDF seleccionada`,
+					severity: "error",
+				});
+			}
+
+			const mappings = pdfCfg?.fieldMappings ?? [];
+			const emptyMappings = mappings.filter((m) => !m.value?.trim());
+			if (mappings.length > 0 && emptyMappings.length === mappings.length) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": Ningún campo del PDF tiene un valor asignado`,
+					severity: "warning",
+				});
+			}
+
+			if (pdfCfg?.pdfTemplateId && !pdfCfg.pdfTemplateVersionId) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": No tiene una versión de plantilla fijada — usará la versión activa al momento de generar el PDF`,
+					severity: "warning",
+				});
 			}
 		}
 
@@ -439,7 +686,129 @@ export function validateWorkflow(
 				}
 			}
 
-			validateChallengeResultConnections(node, config, edges, errors);
+			const hasValidChallengeTimeout = Boolean(
+				config.challengeTimeout && config.challengeTimeout.value > 0,
+			);
+			const challengeTimeoutLabel = hasValidChallengeTimeout
+				? formatTimeoutForMessage(config.challengeTimeout!)
+				: null;
+			validateChallengeResultConnections(
+				node,
+				config,
+				edges,
+				errors,
+				challengeTimeoutLabel,
+			);
+		}
+
+		if (node.type === "ExternalLink") {
+			const config = node.config as ExternalLinkNodeConfig | undefined;
+			if (!config) {
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}" debe tener una configuración definida`,
+					severity: "error",
+				});
+			} else {
+				if (!config.channels || config.channels.length === 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener al menos un canal de entrega (email/sms)`,
+						severity: "error",
+					});
+				}
+
+				if (config.channels?.includes("email")) {
+					if (!config.recipient?.emailExpression?.trim()) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" requiere una expresión de email cuando el canal email está activo`,
+							severity: "error",
+						});
+					}
+					if (!config.emailConfig?.templateName?.trim()) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe tener un nombre de template de Mandrill`,
+							severity: "error",
+						});
+					}
+				}
+
+				if (config.channels?.includes("sms")) {
+					if (!config.recipient?.phoneExpression?.trim()) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" requiere una expresión de teléfono cuando el canal SMS está activo`,
+							severity: "error",
+						});
+					}
+				}
+
+				if (config.mode === "form") {
+					if (!config.formConfig?.formId) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe tener un formulario seleccionado`,
+							severity: "error",
+						});
+					}
+				}
+
+				if (config.mode === "challenge") {
+					const hasValidTimeout = Boolean(
+						config.challengeConfig?.timeout &&
+						config.challengeConfig.timeout.value > 0,
+					);
+					if (!hasValidTimeout) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe definir un timeout válido para el challenge`,
+							severity: "error",
+						});
+					}
+
+					const outgoingEdges = edges.filter((e) => e.from === node.id);
+					const hasRedBranch = outgoingEdges.some(
+						(e) => e.fromPort === "bottom",
+					);
+					const canFallbackToRedBranch =
+						outgoingEdges.length === 1 && !outgoingEdges[0].fromPort;
+					if (!hasRedBranch && !canFallbackToRedBranch) {
+						errors.push({
+							nodeId: node.id,
+							message: buildRedBranchMessage(
+								node.title,
+								"Rechazado",
+								hasValidTimeout
+									? formatTimeoutForMessage(config.challengeConfig!.timeout)
+									: null,
+							),
+							severity: "warning",
+						});
+					}
+				}
+
+				if (!config.linkTtl || config.linkTtl.value <= 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener un TTL de link válido`,
+						severity: "error",
+					});
+				} else {
+					const ttlHours =
+						config.linkTtl.unit === "days"
+							? config.linkTtl.value * 24
+							: config.linkTtl.value;
+					if (ttlHours < 1 || ttlHours > 720) {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" el TTL del link debe estar entre 1 hora y 30 días`,
+							severity: "error",
+						});
+					}
+				}
+			}
 		}
 	});
 
@@ -548,7 +917,62 @@ export function validateWorkflow(
 			});
 	}
 
+	// Validación: tokens huérfanos (referencias a alias que no existen en el workflow)
+	// y validación de paths completos contra el outputSchema de los nodos upstream.
+	{
+		const aliasMap = buildAliasMap(nodes);
+		const knownAliases = new Set(aliasMap.values());
+
+		for (const node of nodes) {
+			// 1. Tokens cuyo alias raíz no existe (nodo eliminado o renombrado)
+			const orphans = findOrphanedTokens(node, aliasMap);
+			if (orphans.length > 0) {
+				const uniqueOrphans = [...new Set(orphans)];
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": referencia a variable(s) huérfana(s) — ${uniqueOrphans.join(", ")}. El nodo de origen ya no existe o fue renombrado.`,
+					severity: "error",
+				});
+			}
+
+			// 2. Tokens con alias conocido pero path inválido en el outputSchema upstream
+			const upstreamNodes = findUpstreamNodes(node.id, nodes, edges);
+			const sources = buildVariableSourceNodes(upstreamNodes, {
+				allNodes: nodes,
+			});
+			const validPaths = collectVariablePaths(sources);
+
+			const invalidPaths = findInvalidPathTokens(
+				node,
+				validPaths,
+				knownAliases,
+			);
+			if (invalidPaths.length > 0) {
+				const unique = [...new Set(invalidPaths)];
+				errors.push({
+					nodeId: node.id,
+					message: `"${node.title}": referencia(s) a propiedad(es) que no existen en el schema del nodo origen — ${unique.join(", ")}. Revisa el nombre de la propiedad o el schema del nodo de origen.`,
+					severity: "error",
+				});
+			}
+		}
+	}
+
 	return errors;
+}
+
+function collectVariablePaths(sources: VariableSourceNode[]): Set<string> {
+	const paths = new Set<string>();
+
+	const walkLeaf = (leaves: VariableLeafNode[]): void => {
+		for (const leaf of leaves) {
+			paths.add(leaf.path);
+			if (leaf.children) walkLeaf(leaf.children);
+		}
+	};
+
+	for (const src of sources) walkLeaf(src.variables);
+	return paths;
 }
 
 function buildAdjacencyMaps(edges: WorkflowEdge[]) {
@@ -608,11 +1032,35 @@ function canReachNode(
 	return false;
 }
 
+/**
+ * Ports "bottom" concentran los resultados negativos del Challenge
+ * (rechazado/fallido). Como un `challengeTimeout` vencido se normaliza a
+ * este mismo camino (ver code-generator `waitForEventDurable` + timedOut →
+ * rejected), si ese puerto queda sin conexión el timeout llevaría a un
+ * camino inexistente y la instancia terminaría silenciosamente sin pasar
+ * por un End/Reject. Ver `buildRedBranchMessage` más abajo.
+ */
+function buildRedBranchMessage(
+	nodeTitle: string,
+	resultLabel: string,
+	challengeTimeoutLabel: string | null,
+): string {
+	if (challengeTimeoutLabel) {
+		return (
+			`"${nodeTitle}": el resultado "${resultLabel}" (rama roja) no tiene una conexión de salida configurada. ` +
+			`Como el timeout de challenge (${challengeTimeoutLabel}) también lleva a este camino, si se cumple el tiempo ` +
+			`límite la instancia se quedará sin ruta a seguir.`
+		);
+	}
+	return `"${nodeTitle}": El resultado "${resultLabel}" no tiene una conexión de salida configurada`;
+}
+
 function validateChallengeResultConnections(
 	node: WorkflowNode,
 	config: ChallengeNodeConfig,
 	edges: WorkflowEdge[],
 	errors: ValidationError[],
+	challengeTimeoutLabel: string | null = null,
 ) {
 	const configuredResults = getConfiguredChallengeResults(config);
 	if (configuredResults.length === 0) {
@@ -622,10 +1070,14 @@ function validateChallengeResultConnections(
 	const outgoingEdges = edges.filter((edge) => edge.from === node.id);
 	if (outgoingEdges.length === 0) {
 		configuredResults.forEach((result) => {
-			const label = CHALLENGE_RESULT_METADATA[result]?.label ?? result;
+			const metadata = CHALLENGE_RESULT_METADATA[result];
+			const label = metadata?.label ?? result;
+			const isRedBranch = metadata?.port === "bottom";
 			errors.push({
 				nodeId: node.id,
-				message: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
+				message: isRedBranch
+					? buildRedBranchMessage(node.title, label, challengeTimeoutLabel)
+					: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
 				severity: "warning",
 			});
 		});
@@ -670,9 +1122,12 @@ function validateChallengeResultConnections(
 
 		if (!satisfied) {
 			const label = metadata?.label ?? result;
+			const isRedBranch = metadata?.port === "bottom";
 			errors.push({
 				nodeId: node.id,
-				message: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
+				message: isRedBranch
+					? buildRedBranchMessage(node.title, label, challengeTimeoutLabel)
+					: `"${node.title}": El resultado "${label}" no tiene una conexión de salida configurada`,
 				severity: "warning",
 			});
 		}

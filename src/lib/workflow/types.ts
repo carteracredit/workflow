@@ -8,9 +8,14 @@ export type NodeType =
 	| "API"
 	| "Message"
 	| "Challenge"
+	| "Promotion"
 	| "Checkpoint"
-	| "Join" // Added Join node type for merging multiple flows
-	| "FlagChange"; // Nodo para cambiar flags del workflow
+	| "Join"
+	| "FlagChange"
+	| "NLS"
+	| "ExternalLink"
+	| "AddCard"
+	| "GeneratePDF";
 
 export type CheckpointType = "normal" | "safe";
 
@@ -74,7 +79,7 @@ export interface APIHeaderEntry {
 }
 
 // Request body configuration
-export type APIBodyMode = "none" | "raw-json" | "field-mapping";
+export type APIBodyMode = "none" | "raw-json" | "raw-xml" | "field-mapping";
 
 export interface APIBodyFieldMapping {
 	sourceExpression: string; // ${nodeId.prop} or literal
@@ -84,6 +89,7 @@ export interface APIBodyFieldMapping {
 export interface APIBodyConfig {
 	mode: APIBodyMode;
 	rawJson?: string;
+	rawXml?: string;
 	fieldMappings?: APIBodyFieldMapping[];
 }
 
@@ -113,9 +119,104 @@ export interface AcceptanceChallengeConfig extends Record<string, unknown> {
 	challengeTimeout: ChallengeTimeoutConfig;
 	deliveryMethod: ChallengeDeliveryMethod;
 	retries?: ChallengeRetryConfig;
+	/** Optional UI labels shown in the cases resolver. Fallback to hardcoded defaults when absent. */
+	labels?: ChallengeLabels;
 }
 
-export type ChallengeNodeConfig = AcceptanceChallengeConfig;
+export interface ChallengeLabels {
+	/** Prompt text shown above the approve/reject buttons (EN) */
+	prompt?: string;
+	/** Prompt text shown above the approve/reject buttons (ES) */
+	promptEs?: string;
+	/** Label for the positive/approve button (EN) */
+	approveLabel?: string;
+	/** Label for the positive/approve button (ES) */
+	approveLabelEs?: string;
+	/** Label for the negative/reject button (EN) */
+	rejectLabel?: string;
+	/** Label for the negative/reject button (ES) */
+	rejectLabelEs?: string;
+}
+
+export type ChallengeNodeConfig =
+	| AcceptanceChallengeConfig
+	| SignatureChallengeConfig;
+
+// ─── Signature Challenge Config ────────────────────────────────────────────────
+
+export type SignatureFlow = "embedded" | "email_only" | "email_and_sms";
+
+/**
+ * Configuration for a single signer in a Dropbox Sign signature request.
+ * source === "case_role" auto-resolves email/name from the case at runtime.
+ * source === "variable" uses VariableTemplateInput expressions.
+ */
+export interface SignatureSignerConfig {
+	/** Role name as defined in the Dropbox Sign template (e.g. "Client", "Dealer"). */
+	role: string;
+	source: "case_role" | "variable";
+	/** Only set when source === "case_role". Mapped to a user in cases-svc. */
+	caseRole?: "client" | "seller" | "credit_agent" | "org_manager";
+	/** Template expression for email when source === "variable". */
+	email?: string;
+	/** Template expression for name when source === "variable". */
+	name?: string;
+	/** E.164 phone for SMS Delivery add-on. Only used when flow === "email_and_sms". */
+	smsPhoneNumber?: string;
+}
+
+/**
+ * Configuration for a single custom field injected into the Dropbox Sign template.
+ * source === "discovered" means the field was loaded via API (auto-discover).
+ * source === "manual" means the user added it manually.
+ */
+export interface SignatureCustomFieldConfig {
+	apiId: string;
+	name: string;
+	/** "text" | "checkbox" | "date_signed" | "dropdown" | "initials" */
+	type?: string;
+	/** Template expression value (may reference workflow variables). */
+	value: string;
+	required?: boolean;
+	source: "discovered" | "manual";
+}
+
+/**
+ * Full config for a Challenge node with challengeType === "signature".
+ * Extends AcceptanceChallengeConfig (inherits timeout, deliveryMethod, retries, labels).
+ *
+ * NOTE: deliveryMethod on AcceptanceChallengeConfig controls how the actor is
+ * NOTIFIED that a challenge is waiting. It has NO relation to the Dropbox Sign
+ * email/SMS delivery flow (controlled by `flow` here).
+ */
+export interface SignatureChallengeConfig extends AcceptanceChallengeConfig {
+	challengeType: "signature";
+	/**
+	 * Dropbox Sign template ID. Accepts a workflow variable expression such as
+	 * `${case.templates.withCoBuyer}` so the correct template can be chosen
+	 * dynamically by an upstream Transform/Decision node.
+	 */
+	templateId: string;
+	/** How the signature request is delivered to signers. */
+	flow: SignatureFlow;
+	/** Optional title (admite template expressions). */
+	title?: string;
+	/** Optional email subject sent by Dropbox Sign. */
+	subject?: string;
+	/** Optional message body in the Dropbox Sign email. */
+	message?: string;
+	signers: SignatureSignerConfig[];
+	customFields: SignatureCustomFieldConfig[];
+	/** CC email addresses for the Dropbox Sign request. */
+	ccEmailAddresses?: string[];
+	/**
+	 * When true, forces test_mode on this node regardless of the env variable.
+	 * When false, forces production mode. When undefined, uses env default.
+	 */
+	testMode?: boolean;
+	/** When true, adds SMS authentication (OTP) for signers with phone number. */
+	smsAuthentication?: boolean;
+}
 
 export const DEFAULT_CHALLENGE_TIMEOUT: ChallengeTimeoutConfig = {
 	value: 5,
@@ -135,10 +236,95 @@ export function createDefaultChallengeConfig(
 		...(options?.challengeTimeout ?? DEFAULT_CHALLENGE_TIMEOUT),
 	};
 
+	if (challengeType === "signature") {
+		const base: SignatureChallengeConfig = {
+			challengeType: "signature",
+			challengeTimeout: timeout,
+			deliveryMethod: "none",
+			templateId: "",
+			flow: "email_only",
+			signers: [],
+			customFields: [],
+		};
+		return base;
+	}
+
 	return {
 		challengeType,
 		challengeTimeout: timeout,
 		deliveryMethod: "none",
+	};
+}
+
+/**
+ * Promotion node no longer carries a commission field — the commission is
+ * resolved from the promotion's own condition (operator + threshold +
+ * match/default) at selection time in cases-svc.
+ */
+export interface PromotionNodeConfig extends Record<string, unknown> {}
+
+export function createDefaultPromotionConfig(): PromotionNodeConfig {
+	return {};
+}
+
+export interface AddCardNodeConfig extends Record<string, unknown> {
+	acceptedBrands: string[];
+	requireAddress: boolean;
+}
+
+export function createDefaultAddCardConfig(): AddCardNodeConfig {
+	return {
+		acceptedBrands: ["visa", "mastercard", "amex", "discover"],
+		requireAddress: false,
+	};
+}
+
+export function isAddCardNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "AddCard"; config: AddCardNodeConfig } {
+	return node.type === "AddCard";
+}
+
+/**
+ * Maps an AcroForm text field (by name, as extracted server-side by cases-svc
+ * from the PDF template) to a value expression. The value may be a literal
+ * string or contain `${nodeId.property}` variable-picker tokens, following
+ * the same convention as NLSFieldConfig.value / Message mergeVars.
+ */
+export interface GeneratePdfFieldMapping {
+	fieldName: string;
+	value: string;
+}
+
+export interface GeneratePdfNodeConfig extends Record<string, unknown> {
+	pdfTemplateId?: string;
+	/** Cached display name, so the panel can show a label before the template list has loaded. */
+	pdfTemplateName?: string;
+	/**
+	 * Pinned template version (mirrors the Form node's `formVersion`): when
+	 * set, the runtime always fills this exact version, so activating a
+	 * newer one (e.g. after a field rename) never changes what an already
+	 * published workflow generates. When unset, the runtime falls back to
+	 * the template's active version at generation time.
+	 */
+	pdfTemplateVersionId?: string;
+	/** Cached display version number, so the panel can show it before the version list has loaded. */
+	pdfTemplateVersion?: number;
+	fieldMappings: GeneratePdfFieldMapping[];
+}
+
+export function isGeneratePdfNode(node: WorkflowNode): node is WorkflowNode & {
+	type: "GeneratePDF";
+	config: GeneratePdfNodeConfig;
+} {
+	return node.type === "GeneratePDF";
+}
+
+export function createDefaultGeneratePdfConfig(): GeneratePdfNodeConfig {
+	return {
+		pdfTemplateId: undefined,
+		pdfTemplateName: undefined,
+		fieldMappings: [],
 	};
 }
 
@@ -149,6 +335,11 @@ export const STALE_SUPPORTED_NODE_TYPES: NodeType[] = [
 	"API",
 	"Message",
 	"Challenge",
+	"Promotion",
+	"NLS",
+	"ExternalLink",
+	"AddCard",
+	"GeneratePDF",
 ];
 
 export interface StaleTimeoutConfig {
@@ -165,6 +356,7 @@ export interface WorkflowNode {
 	description: string;
 	descriptionEs?: string;
 	roles: Role[];
+	visibilityRoles?: Role[];
 	config: Record<string, unknown>;
 	staleTimeout?: StaleTimeoutConfig | null;
 	position: { x: number; y: number };
@@ -175,6 +367,12 @@ export function isChallengeNode(
 	node: WorkflowNode,
 ): node is WorkflowNode & { type: "Challenge"; config: ChallengeNodeConfig } {
 	return node.type === "Challenge";
+}
+
+export function isPromotionNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "Promotion"; config: PromotionNodeConfig } {
+	return node.type === "Promotion";
 }
 
 export type MessageChannel = "email" | "sms";
@@ -198,6 +396,77 @@ export function isMessageNode(
 	node: WorkflowNode,
 ): node is WorkflowNode & { type: "Message"; config: MessageNodeConfig } {
 	return node.type === "Message";
+}
+
+// ─── ExternalLink Node Config ────────────────────────────────────────────────
+
+export type ExternalLinkMode = "form" | "challenge";
+export type ExternalLinkChannel = "email" | "sms";
+
+export interface ExternalRecipientConfig {
+	source: "variable" | "literal";
+	emailExpression?: string;
+	phoneExpression?: string;
+	nameExpression?: string;
+}
+
+export interface ExternalLinkTtlConfig {
+	value: number;
+	unit: "hours" | "days";
+}
+
+export interface ExternalLinkEmailConfig {
+	templateName: string;
+	subject: string;
+	mergeVars: MessageMergeVar[];
+	/**
+	 * Name of the Mandrill merge variable that will receive the generated
+	 * access link (e.g. *|URL|* in the template). Defaults to "URL".
+	 * Set to an empty string to skip automatic URL injection entirely.
+	 */
+	urlVarName?: string;
+}
+
+export interface ExternalLinkSmsConfig {
+	body: string;
+}
+
+export interface ExternalLinkNodeConfig extends Record<string, unknown> {
+	mode: ExternalLinkMode;
+	linkTtl: ExternalLinkTtlConfig;
+	recipient: ExternalRecipientConfig;
+	channels: ExternalLinkChannel[];
+	emailConfig?: ExternalLinkEmailConfig;
+	smsConfig?: ExternalLinkSmsConfig;
+	formConfig?: {
+		formId: string;
+		formVersion?: number;
+		outputSchema?: OutputSchema;
+	};
+	challengeConfig?: {
+		challengeType: "acceptance";
+		labels?: ChallengeLabels;
+		timeout: ChallengeTimeoutConfig;
+		pullType?: "soft" | "hard" | "new";
+	};
+}
+
+export function isExternalLinkNode(node: WorkflowNode): node is WorkflowNode & {
+	type: "ExternalLink";
+	config: ExternalLinkNodeConfig;
+} {
+	return node.type === "ExternalLink";
+}
+
+export function createDefaultExternalLinkConfig(): ExternalLinkNodeConfig {
+	return {
+		mode: "form",
+		linkTtl: { value: 72, unit: "hours" },
+		recipient: { source: "variable" },
+		channels: ["email"],
+		emailConfig: { templateName: "", subject: "", mergeVars: [] },
+		formConfig: { formId: "" },
+	};
 }
 
 export interface WorkflowEdge {
@@ -260,11 +529,85 @@ export interface OutputSchemaProperty {
 	enumValues?: string[]; // only when type === "enum"
 	items?: OutputSchemaProperty; // only when type === "array"
 	properties?: OutputSchemaProperty[]; // only when type === "object"
+	/**
+	 * When `true`, the property is system-provided (e.g. fixed case data that
+	 * always arrives with the workflow payload) and cannot be edited or removed
+	 * from the output schema editor. It is still selectable in VariablePickers.
+	 */
+	readOnly?: boolean;
 }
 
 export interface OutputSchema {
 	name: string;
 	properties: OutputSchemaProperty[];
+}
+
+// ─── NLS Node Config ────────────────────────────────────────────────────────
+
+export type NLSFunctionId =
+	| "createLoan"
+	| "cancelLoan"
+	| "getAmortization"
+	| "prequalification"
+	| "findPrequalificationMatches"
+	// Loan Reads
+	| "getLoan"
+	| "getLoanDetail1"
+	| "getPaymentInfo"
+	| "getCollectionFields"
+	| "getStatuses"
+	| "getPaymentHistory"
+	| "getPaymentsDue"
+	| "getPayoffAmounts"
+	| "getPayoffDetails"
+	// Collection Comments
+	| "addCollectionComment"
+	| "updateCollectionComment"
+	// Contacts & Search
+	| "getContact"
+	| "searchContacts"
+	| "searchLoans"
+	// Calculations
+	| "calculateAmortizedPayment"
+	// Nuevas funciones
+	| "getContactLoans"
+	| "getContactPortfolio"
+	| "getContactEmployments"
+	| "getLoanTransactions"
+	| "getAmortizationSchedule"
+	| "advancePeriod"
+	| "getLoanStatusCodes";
+
+export interface NLSFieldConfig {
+	fieldId: string;
+	value: string;
+	source: "discovered" | "manual";
+}
+
+export interface NLSNodeConfig extends Record<string, unknown> {
+	functionId?: NLSFunctionId;
+	fields: NLSFieldConfig[];
+	failureHandling: APIFailureHandling;
+}
+
+export function isNLSNode(
+	node: WorkflowNode,
+): node is WorkflowNode & { type: "NLS"; config: NLSNodeConfig } {
+	return node.type === "NLS";
+}
+
+export function createDefaultNLSConfig(): NLSNodeConfig {
+	return {
+		functionId: undefined,
+		fields: [],
+		failureHandling: {
+			onFailure: "stop",
+			maxRetries: 0,
+			retryCount: 0,
+			cacheStrategy: "always-execute",
+			timeout: 30000,
+		},
+	};
 }
 
 export interface WorkflowState {

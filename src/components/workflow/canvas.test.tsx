@@ -110,6 +110,84 @@ describe("Canvas Selection Behavior", () => {
 	});
 });
 
+describe("Trash toolbar button - delete selected logic", () => {
+	it("deletes all selected non-Start nodes", () => {
+		const nodes = [
+			{ id: "start-1", type: "Start" },
+			{ id: "step-1", type: "Manual" },
+			{ id: "step-2", type: "API" },
+		];
+		const selectedNodeIds = ["start-1", "step-1"];
+
+		const deleted: string[] = [];
+		selectedNodeIds.forEach((nodeId) => {
+			const node = nodes.find((n) => n.id === nodeId);
+			if (node && node.type !== "Start") {
+				deleted.push(nodeId);
+			}
+		});
+
+		// Start node is protected, only step-1 should be deleted
+		expect(deleted).toEqual(["step-1"]);
+	});
+
+	it("deletes all selected edges", () => {
+		const selectedEdgeIds = ["edge-1", "edge-2"];
+
+		const deleted: string[] = [];
+		selectedEdgeIds.forEach((edgeId) => {
+			deleted.push(edgeId);
+		});
+
+		expect(deleted).toEqual(["edge-1", "edge-2"]);
+	});
+
+	it("button should be disabled when nothing is selected", () => {
+		const selectedNodeIds: string[] = [];
+		const selectedEdgeIds: string[] = [];
+
+		const isDisabled =
+			selectedNodeIds.length === 0 && selectedEdgeIds.length === 0;
+
+		expect(isDisabled).toBe(true);
+	});
+
+	it("button should be enabled when at least one node is selected", () => {
+		const selectedNodeIds = ["step-1"];
+		const selectedEdgeIds: string[] = [];
+
+		const isDisabled =
+			selectedNodeIds.length === 0 && selectedEdgeIds.length === 0;
+
+		expect(isDisabled).toBe(false);
+	});
+
+	it("button should be enabled when at least one edge is selected", () => {
+		const selectedNodeIds: string[] = [];
+		const selectedEdgeIds = ["edge-1"];
+
+		const isDisabled =
+			selectedNodeIds.length === 0 && selectedEdgeIds.length === 0;
+
+		expect(isDisabled).toBe(false);
+	});
+
+	it("does not delete Start nodes even when selected", () => {
+		const nodes = [{ id: "start-1", type: "Start" }];
+		const selectedNodeIds = ["start-1"];
+
+		const deleted: string[] = [];
+		selectedNodeIds.forEach((nodeId) => {
+			const node = nodes.find((n) => n.id === nodeId);
+			if (node && node.type !== "Start") {
+				deleted.push(nodeId);
+			}
+		});
+
+		expect(deleted).toEqual([]);
+	});
+});
+
 describe("getCanvasGridStyle", () => {
 	it("syncs background position with pan offsets", () => {
 		const style = getCanvasGridStyle({ x: 150.5, y: -75 }, 1);

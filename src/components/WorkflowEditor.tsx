@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TopBar } from "./workflow/top-bar";
@@ -44,8 +44,17 @@ import {
 	updateWorkflow as updateWorkflowApi,
 } from "@/lib/workflow-api/workflows";
 import { listFlags } from "@/lib/workflow-api/flags";
+import { listVariables } from "@/lib/workflow-api/variables";
+import type { WorkflowVariable } from "@/lib/workflow-api/variables";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import type { Workflow, WorkflowFlag } from "@/lib/workflow-api/types";
+import {
+	buildSecretsSource,
+	type VariableSourceNode,
+} from "@/lib/workflow/graph-utils";
+import { migrateWorkflowTokens } from "@/lib/workflow/migrate-tokens";
+import { renameAliasInTokens } from "@/lib/workflow/migrate-tokens";
+import { buildAliasMap } from "@/lib/workflow/node-alias";
 import { Monitor } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
@@ -88,14 +97,16 @@ function migrateLegacyNodes(
 ): WorkflowNode[] {
 	return nodes.map((node) => {
 		const nodeType = node.type as string;
-		// Migrar Status a FlagChange
+		// Migrar Status a FlagChange (preserve existing flagChanges if present)
 		if (nodeType === "Status") {
 			return {
 				...node,
 				type: "FlagChange" as const,
 				config: {
 					...node.config,
-					flagChanges: [],
+					flagChanges: Array.isArray(node.config.flagChanges)
+						? node.config.flagChanges
+						: [],
 				},
 			};
 		}
@@ -307,19 +318,49 @@ function parseDefinitionJson(definition: string | Record<string, unknown>): {
 	zoom: number;
 	pan: { x: number; y: number };
 	metadata?: DefinitionMetadata;
+	migratedTokens?: boolean;
 } | null {
 	try {
 		const parsed =
 			typeof definition === "string" ? JSON.parse(definition) : definition;
+		const nodes: WorkflowNode[] = migrateLegacyNodes(parsed.nodes || []).map(
+			withDefaultStaleTimeout,
+		);
+		const edges: WorkflowEdge[] = parsed.edges || [];
+
+		// Migrate legacy ${node-<id>.prop} tokens to ${<alias>.prop}.
+		// This is idempotent: already-migrated workflows produce no change.
+		const { changed: migratedTokens } = migrateWorkflowTokens(nodes, edges);
+
+		// Normalize Start node title to "Start" so the alias is always "start"
+		// regardless of the language the workflow was created in. If the node was
+		// saved as "Inicio" (Spanish), rename the alias in all token references
+		// across all nodes before the editor mounts (lazy migration on open).
+		let startAliasMigrated = false;
+		for (const node of nodes) {
+			if (node.type === "Start" && node.title !== "Start") {
+				const oldAlias = node.title
+					? node.title
+							.toLowerCase()
+							.replace(/[^a-z0-9]+(.)/g, (_, c: string) => c.toUpperCase())
+							.replace(/[^a-z0-9]/gi, "")
+					: "inicio";
+				// renameAliasInTokens mutates nodes in-place
+				renameAliasInTokens(nodes, oldAlias, "start");
+				node.titleEs = node.titleEs ?? node.title;
+				node.title = "Start";
+				startAliasMigrated = true;
+			}
+		}
+
 		return {
-			nodes: migrateLegacyNodes(parsed.nodes || []).map(
-				withDefaultStaleTimeout,
-			),
-			edges: parsed.edges || [],
+			nodes,
+			edges,
 			flags: parsed.flags || [],
 			zoom: parsed.zoom ?? 1,
 			pan: parsed.pan || { ...DEFAULT_START_NODE_PAN },
 			metadata: parsed.metadata || undefined,
+			migratedTokens: migratedTokens || startAliasMigrated,
 		};
 	} catch {
 		return null;
@@ -484,6 +525,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 								selectedEdgeIds: [],
 							}),
 						);
+						if (parsed.migratedTokens) {
+							toast.info(
+								"Las variables del workflow fueron actualizadas al nuevo formato (alias por nombre de nodo). Guarda para persistir los cambios.",
+								{ duration: 6000 },
+							);
+						}
 					} else {
 						const metadata: WorkflowMetadata = {
 							name: wf.name,
@@ -564,6 +611,40 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	const [showCode, setShowCode] = useState(false);
 	const [showFlagManager, setShowFlagManager] = useState(false);
 	const [showVariables, setShowVariables] = useState(false);
+	// Workflow-level variables/secrets exposed as a VariablePicker source so
+	// any node can reference them via `${secret.NAME}` tokens. Loaded lazily
+	// once we have an API id; refreshed whenever the user closes the
+	// Variables manager dialog so newly created entries become available
+	// without reloading the editor.
+	const [workflowVariables, setWorkflowVariables] = useState<
+		WorkflowVariable[]
+	>([]);
+
+	const reloadWorkflowVariables = useCallback(async () => {
+		if (!workflowApiId) {
+			setWorkflowVariables([]);
+			return;
+		}
+		try {
+			const vars = await listVariables(workflowApiId);
+			setWorkflowVariables(vars);
+		} catch (err) {
+			// Non-fatal: the picker simply won't show the secrets source.
+			console.error("[WorkflowEditor] Failed to load workflow variables:", err);
+			setWorkflowVariables([]);
+		}
+	}, [workflowApiId]);
+
+	useEffect(() => {
+		void reloadWorkflowVariables();
+	}, [reloadWorkflowVariables]);
+
+	const extraVariableSources = useMemo<VariableSourceNode[]>(() => {
+		const source = buildSecretsSource(workflowVariables, {
+			name: t("propertiesPanel.secretsSourceLabel"),
+		});
+		return source ? [source] : [];
+	}, [workflowVariables, t]);
 	const [showWorkflowProperties, setShowWorkflowProperties] = useState(false);
 	const [showPublish, setShowPublish] = useState(false);
 	const [panelWidth, setPanelWidth] = useState(320);
@@ -790,6 +871,46 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 		[applyHistoryChange],
 	);
 
+	/**
+	 * Renames a node's title and (optionally) rewrites all token references
+	 * pointing to its old alias so they point to the new alias.
+	 */
+	const renameNodeAlias = useCallback(
+		(
+			nodeId: string,
+			oldAlias: string,
+			newTitle: string,
+			renameAll: boolean,
+		) => {
+			applyHistoryChange((prev) => {
+				let nextNodes = prev.nodes.map((n) => {
+					if (n.id !== nodeId) return n;
+					return withDefaultStaleTimeout({ ...n, title: newTitle });
+				});
+
+				if (renameAll) {
+					const newAliasMap = buildAliasMap(nextNodes);
+					const newAlias = newAliasMap.get(nodeId) ?? "";
+
+					if (oldAlias !== newAlias) {
+						// Deep-clone configs so prev state is not mutated
+						nextNodes = nextNodes.map((n) => ({
+							...n,
+							config: JSON.parse(JSON.stringify(n.config)) as Record<
+								string,
+								unknown
+							>,
+						}));
+						renameAliasInTokens(nextNodes, oldAlias, newAlias);
+					}
+				}
+
+				return { nodes: nextNodes, edges: prev.edges, recordHistory: true };
+			});
+		},
+		[applyHistoryChange],
+	);
+
 	const deleteNode = useCallback(
 		(nodeId: string) => {
 			applyHistoryChange((prev) => {
@@ -859,7 +980,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 	);
 
 	const handlePaste = useCallback(
-		(pastedNodes: WorkflowNode[], pastedEdges: WorkflowEdge[]) => {
+		(
+			pastedNodes: WorkflowNode[],
+			pastedEdges: WorkflowEdge[],
+			tokensRemapped: boolean,
+		) => {
 			applyHistoryChange((prev) => {
 				const newNodes = [
 					...prev.nodes,
@@ -873,8 +998,11 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 					selectedEdgeIds: pastedEdges.map((e) => e.id),
 				};
 			});
+			if (tokensRemapped) {
+				toast.info(t("workflowEditor.toastPasteTokensRemapped"));
+			}
 		},
-		[applyHistoryChange],
+		[applyHistoryChange, t],
 	);
 
 	const handleUndo = useCallback(() => {
@@ -1369,7 +1497,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						)}
 
 						<div
-							className={`absolute inset-y-0 left-0 z-30 flex transition-opacity duration-200 ${
+							className={`absolute top-0 left-0 z-30 flex transition-opacity duration-200 ${
 								shouldShowPropertiesOverlay
 									? "pointer-events-auto opacity-100"
 									: "pointer-events-none opacity-0"
@@ -1408,6 +1536,7 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 								onUpdateMetadata={updateMetadata}
 								onAddEdge={addEdge}
 								onDeleteEdge={deleteEdge}
+								onRenameNodeAlias={renameNodeAlias}
 								showWorkflowProperties={showWorkflowProperties}
 								onCloseWorkflowProperties={() =>
 									setShowWorkflowProperties(false)
@@ -1419,6 +1548,14 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 										: panelWidth
 								}
 								onWidthChange={isTablet ? undefined : setPanelWidth}
+								extraVariableSources={extraVariableSources}
+								onManageVariables={() => {
+									if (!workflowApiId) {
+										toast.warning(t("workflowEditor.toastSaveBeforeFlags"));
+										return;
+									}
+									setShowVariables(true);
+								}}
 							/>
 						</div>
 					</div>
@@ -1440,23 +1577,39 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 						nodes: workflowState.nodes,
 						edges: workflowState.edges,
 						flags: workflowState.flags,
+						zoom: workflowState.zoom,
+						pan: workflowState.pan,
+						metadata: {
+							nameEs: workflowState.metadata.nameEs,
+							descriptionEs: workflowState.metadata.descriptionEs,
+						},
 					}}
 					onClose={() => setShowJSON(false)}
 					onImport={(data) => {
-						// Migrar nodos legacy antes de importar
-						const migratedNodes = migrateLegacyNodes(data.nodes);
+						const parsed = parseDefinitionJson(data);
+						if (!parsed) {
+							toast.error(t("jsonModal.errorParseJson"));
+							return;
+						}
 						applyHistoryChange((prev) => ({
-							nodes: migratedNodes.map(withDefaultStaleTimeout),
-							edges: data.edges,
+							nodes: parsed.nodes,
+							edges: parsed.edges,
 							selectedNodeIds: [],
 							selectedEdgeIds: [],
 						}));
-						// Also restore flags from the imported JSON (backwards-compatible: defaults to [])
-						setWorkflowState((prev) => ({ ...prev, flags: data.flags }));
+						setWorkflowState((prev) => ({
+							...prev,
+							flags: parsed.flags,
+							zoom: parsed.zoom ?? prev.zoom,
+							pan: parsed.pan ?? prev.pan,
+						}));
 						setShowJSON(false);
 						setValidationErrors([]);
 						setValidationStatus("idle");
 						setLastValidationErrorCount(0);
+						if (parsed.migratedTokens) {
+							toast.info(t("jsonModal.tokensMigrated"));
+						}
 					}}
 				/>
 			)}
@@ -1473,7 +1626,12 @@ export function WorkflowEditor({ workflowId }: WorkflowEditorProps = {}) {
 			{showVariables && workflowApiId && (
 				<VariablesPanel
 					workflowId={workflowApiId}
-					onClose={() => setShowVariables(false)}
+					onClose={() => {
+						setShowVariables(false);
+						// Refresh the picker source so any variables/secrets the user
+						// just created/deleted appear (or disappear) immediately.
+						void reloadWorkflowVariables();
+					}}
 				/>
 			)}
 

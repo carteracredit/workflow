@@ -185,7 +185,8 @@ function PropertyRow({
 		onUpdate({ ...property, ...patch });
 
 	const isInvalidName =
-		property.name.length > 0 && /^[^a-zA-Z_]/.test(property.name);
+		property.name.length > 0 &&
+		!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(property.name);
 
 	const handleTypeChange = (newType: SchemaPropertyType) => {
 		const patch: Partial<OutputSchemaProperty> = { type: newType };
@@ -251,7 +252,18 @@ function PropertyRow({
 				<div className="flex flex-col flex-1 min-w-0">
 					<Input
 						value={property.name}
-						onChange={(e) => update({ name: e.target.value })}
+						onChange={(e) => {
+							// Only allow characters valid in a TypeScript identifier.
+							// Filter out any character that isn't [a-zA-Z0-9_$],
+							// and additionally prevent a digit as the first character.
+							const raw = e.target.value;
+							const filtered = raw.replace(/[^a-zA-Z0-9_$]/g, "");
+							// If the filtered string starts with a digit, strip it too
+							const safe = /^[0-9]/.test(filtered)
+								? filtered.slice(1)
+								: filtered;
+							update({ name: safe });
+						}}
 						placeholder={t("outputSchemaEditor.propNamePlaceholder")}
 						className={cn(
 							"h-7 text-xs font-mono",
@@ -261,7 +273,7 @@ function PropertyRow({
 					/>
 					{isInvalidName && (
 						<p className="text-[10px] text-destructive mt-0.5 leading-tight">
-							{t("outputSchemaEditor.propNameError")}
+							{t("outputSchemaEditor.propNameInvalidChars")}
 						</p>
 					)}
 				</div>

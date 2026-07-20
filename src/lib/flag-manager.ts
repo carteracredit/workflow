@@ -31,14 +31,14 @@ export const TAILWIND_COLORS_500 = [
 export type TailwindColor500 = (typeof TAILWIND_COLORS_500)[number];
 
 /**
- * Genera un ID único para flags y opciones
+ * Genera un UUID v4 compatible con el backend (que valida formato UUID estándar).
  */
 export function generateFlagId(): string {
-	return `flag-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+	return crypto.randomUUID();
 }
 
 export function generateFlagOptionId(): string {
-	return `option-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+	return crypto.randomUUID();
 }
 
 /**

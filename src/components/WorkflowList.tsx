@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
 	Plus,
@@ -16,6 +16,10 @@ import {
 	CheckCircle2,
 	FileEdit,
 	Archive,
+	ChevronLeft,
+	ChevronRight,
+	Download,
+	Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,13 +63,19 @@ import {
 	deleteWorkflow,
 	updateWorkflow,
 	cloneWorkflow,
+	getWorkflow,
 } from "@/lib/workflow-api/workflows";
+import {
+	JSONModal,
+	type WorkflowExportData,
+} from "@/components/workflow/json-modal";
 import { useLanguage } from "@/components/LanguageProvider";
 import { getLocaleForLanguage } from "@/lib/translations";
 import { slugify } from "@/lib/slugify";
 import type { Workflow } from "@/lib/workflow-api/types";
 import { ApiError, extractApiErrorMessage } from "@/lib/workflow-api/http";
 import { SessionControls } from "@/components/SessionControls";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,6 +132,7 @@ interface WorkflowCardRowProps {
 	onArchive: (wf: Workflow) => void;
 	onDelete: (wf: Workflow) => void;
 	onClone: (wf: Workflow) => void;
+	onExport: (wf: Workflow) => void;
 	deletingId: string | null;
 	cloningId: string | null;
 }
@@ -144,6 +155,7 @@ function WorkflowCardRow({
 	onArchive,
 	onDelete,
 	onClone,
+	onExport,
 	deletingId,
 	cloningId,
 }: WorkflowCardRowProps) {
@@ -213,6 +225,10 @@ function WorkflowCardRow({
 						<DropdownMenuItem onClick={() => onClone(workflow)}>
 							<Copy className="mr-2 h-4 w-4" />
 							{t("workflowList.rowActionClone")}
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => onExport(workflow)}>
+							<Download className="mr-2 h-4 w-4" />
+							{t("workflowList.rowActionExportJson")}
 						</DropdownMenuItem>
 						{workflow.current_major_version === 0 &&
 							workflow.status === "draft" && (
@@ -534,50 +550,76 @@ export function WorkflowList() {
 	const router = useRouter();
 	const { t, language, getFieldLabel } = useLanguage();
 	const locale = getLocaleForLanguage(language);
-	const [search, setSearch] = useState("");
+	const [searchInput, setSearchInput] = useState("");
+	const debouncedSearch = useDebouncedValue(searchInput, 350);
 	const [searchScope, setSearchScope] = useState<SearchScope>("all");
 	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
 	const [activeTab, setActiveTab] = useState("all");
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [cloningId, setCloningId] = useState<string | null>(null);
+	const [importModalOpen, setImportModalOpen] = useState(false);
+	const [exportModalOpen, setExportModalOpen] = useState(false);
+	const [exportModalData, setExportModalData] =
+		useState<WorkflowExportData | null>(null);
+	const [page, setPage] = useState(1);
+	const [perPage, setPerPage] = useState(20);
 
-	const { workflows, data, isLoading, error, mutate } = useWorkflows();
+	useEffect(() => {
+		setPage(1);
+	}, [debouncedSearch]);
 
-	// Client-side filter
+	const { workflows, resultInfo, isLoading, error, mutate } = useWorkflows({
+		search: debouncedSearch || undefined,
+		status: activeTab === "all" ? undefined : activeTab,
+		page,
+		per_page: perPage,
+	});
+
+	// Lightweight stat calls (per_page=1) to get real total counts per status
+	const { resultInfo: statsAll } = useWorkflows({ per_page: 1 });
+	const { resultInfo: statsPublished } = useWorkflows({
+		status: "published",
+		per_page: 1,
+	});
+	const { resultInfo: statsDraft } = useWorkflows({
+		status: "draft",
+		per_page: 1,
+	});
+	const { resultInfo: statsArchived } = useWorkflows({
+		status: "archived",
+		per_page: 1,
+	});
+
+	// Client-side filter: only versionFilter applies (search/status handled server-side)
 	const filtered = useMemo(() => {
 		return workflows.filter((wf) => {
-			const matchesSearch = (() => {
-				if (!search) return true;
-				const q = search.toLowerCase();
-				if (searchScope === "name") return wf.name.toLowerCase().includes(q);
-				if (searchScope === "description")
-					return wf.description.toLowerCase().includes(q);
-				return (
-					wf.name.toLowerCase().includes(q) ||
-					wf.description.toLowerCase().includes(q)
-				);
-			})();
-			const matchesStatus = activeTab === "all" || wf.status === activeTab;
 			const matchesVersion = (() => {
 				if (versionFilter === "all") return true;
 				if (versionFilter === "unpublished")
 					return wf.current_major_version === 0;
 				return wf.current_major_version === versionFilter;
 			})();
-			return matchesSearch && matchesStatus && matchesVersion;
+			return matchesVersion;
 		});
-	}, [workflows, search, searchScope, activeTab, versionFilter]);
+	}, [workflows, versionFilter]);
 
 	// Stats
 	const stats = useMemo(() => {
 		return {
-			total: workflows.length,
-			published: workflows.filter((w) => w.status === "published").length,
-			draft: workflows.filter((w) => w.status === "draft").length,
-			archived: workflows.filter((w) => w.status === "archived").length,
+			total: statsAll?.total_count ?? 0,
+			published: statsPublished?.total_count ?? 0,
+			draft: statsDraft?.total_count ?? 0,
+			archived: statsArchived?.total_count ?? 0,
 		};
-	}, [workflows]);
+	}, [statsAll, statsPublished, statsDraft, statsArchived]);
+
+	// Pagination helpers
+	const totalPages = resultInfo
+		? Math.ceil(resultInfo.total_count / resultInfo.per_page)
+		: 1;
+	const canGoPrev = page > 1;
+	const canGoNext = page < totalPages;
 
 	// Unique versions for filter (excluding 0)
 	const availableVersions = useMemo(() => {
@@ -657,9 +699,72 @@ export function WorkflowList() {
 		}
 	};
 
+	const handleExportJson = async (wf: Workflow) => {
+		try {
+			const full = await getWorkflow(wf.id);
+			const def =
+				typeof full.definition === "string"
+					? (JSON.parse(full.definition) as Record<string, unknown>)
+					: ((full.definition ?? {}) as Record<string, unknown>);
+
+			const workflowData: WorkflowExportData = {
+				nodes: (def.nodes as WorkflowExportData["nodes"]) ?? [],
+				edges: (def.edges as WorkflowExportData["edges"]) ?? [],
+				flags: (def.flags as WorkflowExportData["flags"]) ?? [],
+				zoom: (def.zoom as number) ?? 1,
+				pan: (def.pan as { x: number; y: number }) ?? { x: 0, y: 0 },
+				...(def.metadata
+					? {
+							metadata: def.metadata as {
+								nameEs?: string;
+								descriptionEs?: string;
+							},
+						}
+					: {}),
+			};
+
+			setExportModalData(workflowData);
+			setExportModalOpen(true);
+		} catch {
+			toast.error(t("workflowList.toastExportError"));
+		}
+	};
+
+	const handleImportNew = async (data: Record<string, unknown>) => {
+		try {
+			// Extract definition — support canonical v2.0 and legacy bare-root
+			const def =
+				(data.definition as Record<string, unknown> | undefined) ?? data;
+			const meta = (def.metadata ?? data.metadata) as
+				| Record<string, unknown>
+				| undefined;
+			const importedName =
+				(meta?.nameEs as string | undefined) ||
+				(data.name as string | undefined) ||
+				t("workflowList.newWorkflow");
+			const uniqueName =
+				`${t("workflowList.rowActionClone").replace("Clone", "Imported")} ${importedName}`.trim();
+
+			const created = await createWorkflow({
+				name: uniqueName,
+				slug: slugify(uniqueName),
+				description: (data.description as string | undefined) ?? "",
+				status: "draft",
+				class_name: toClassName(uniqueName),
+				current_major_version: 0,
+				definition: def as Record<string, unknown>,
+			});
+
+			toast.success(t("workflowList.toastImportSuccess"));
+			router.push(`/editor/${created.id}`);
+		} catch {
+			toast.error(t("workflowList.toastImportError"));
+		}
+	};
+
 	// Skeleton until we have received a response (data defined) or error. Show empty
 	// state only when loading is done and data is available (possibly empty array).
-	const showSkeleton = !error && data === undefined;
+	const showSkeleton = !error && resultInfo === null && isLoading;
 
 	if (showSkeleton) {
 		return <WorkflowListSkeleton />;
@@ -682,6 +787,14 @@ export function WorkflowList() {
 						</div>
 					</div>
 					<div className="flex w-full min-w-0 max-w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:shrink-0">
+						<Button
+							variant="outline"
+							onClick={() => setImportModalOpen(true)}
+							className="shrink-0"
+						>
+							<Upload className="mr-2 h-4 w-4" />
+							{t("workflowList.importJson")}
+						</Button>
 						<Button
 							onClick={() => setCreateDialogOpen(true)}
 							className="shrink-0"
@@ -749,7 +862,10 @@ export function WorkflowList() {
 						return (
 							<button
 								key={stat.label}
-								onClick={() => setActiveTab(stat.tab)}
+								onClick={() => {
+									setActiveTab(stat.tab);
+									setPage(1);
+								}}
 								className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-all hover:bg-accent ${
 									isActive
 										? `${stat.activeBorder} ${stat.activeBg} shadow-sm`
@@ -780,8 +896,8 @@ export function WorkflowList() {
 						<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
 							placeholder={t("workflowList.searchPlaceholder")}
-							value={search}
-							onChange={(e) => setSearch(e.target.value)}
+							value={searchInput}
+							onChange={(e) => setSearchInput(e.target.value)}
 							className="pl-9"
 						/>
 					</div>
@@ -875,20 +991,22 @@ export function WorkflowList() {
 								className="h-10 w-auto opacity-30"
 							/>
 							<p className="text-sm">
-								{search || activeTab !== "all" || versionFilter !== "all"
+								{searchInput || activeTab !== "all" || versionFilter !== "all"
 									? t("workflowList.noWorkflowsFiltered")
 									: t("workflowList.noWorkflows")}
 							</p>
-							{!search && activeTab === "all" && versionFilter === "all" && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setCreateDialogOpen(true)}
-								>
-									<Plus className="mr-2 h-4 w-4" />
-									{t("workflowList.newWorkflow")}
-								</Button>
-							)}
+							{!searchInput &&
+								activeTab === "all" &&
+								versionFilter === "all" && (
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => setCreateDialogOpen(true)}
+									>
+										<Plus className="mr-2 h-4 w-4" />
+										{t("workflowList.newWorkflow")}
+									</Button>
+								)}
 						</div>
 					) : (
 						<>
@@ -902,6 +1020,7 @@ export function WorkflowList() {
 										onArchive={handleArchive}
 										onDelete={handleDelete}
 										onClone={handleClone}
+										onExport={handleExportJson}
 										deletingId={deletingId}
 										cloningId={cloningId}
 									/>
@@ -1019,6 +1138,12 @@ export function WorkflowList() {
 																	<Copy className="mr-2 h-4 w-4" />
 																	{t("workflowList.rowActionClone")}
 																</DropdownMenuItem>
+																<DropdownMenuItem
+																	onClick={() => handleExportJson(wf)}
+																>
+																	<Download className="mr-2 h-4 w-4" />
+																	{t("workflowList.rowActionExportJson")}
+																</DropdownMenuItem>
 																{wf.current_major_version === 0 &&
 																	wf.status === "draft" && (
 																		<>
@@ -1041,6 +1166,64 @@ export function WorkflowList() {
 									</TableBody>
 								</Table>
 							</div>
+
+							{/* Pagination controls */}
+							{resultInfo && resultInfo.total_count > 0 && (
+								<div className="flex flex-col items-center justify-between gap-3 border-t px-4 py-3 sm:flex-row">
+									<div className="flex items-center gap-2">
+										<span className="text-sm text-muted-foreground">
+											{t("workflowList.rowsPerPage")}
+										</span>
+										<Select
+											value={String(perPage)}
+											onValueChange={(v) => {
+												setPerPage(Number(v));
+												setPage(1);
+											}}
+										>
+											<SelectTrigger className="h-8 w-[72px]">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{[10, 20, 50, 100].map((n) => (
+													<SelectItem key={n} value={String(n)}>
+														{n}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+									<div className="flex items-center gap-3">
+										<span className="text-sm text-muted-foreground">
+											{t("workflowList.pageInfo")
+												.replace("{page}", String(page))
+												.replace("{total}", String(totalPages))}
+										</span>
+										<div className="flex items-center gap-1">
+											<Button
+												variant="outline"
+												size="icon"
+												className="h-8 w-8"
+												disabled={!canGoPrev}
+												onClick={() => setPage((p) => p - 1)}
+												aria-label={t("workflowList.prevPage")}
+											>
+												<ChevronLeft className="h-4 w-4" />
+											</Button>
+											<Button
+												variant="outline"
+												size="icon"
+												className="h-8 w-8"
+												disabled={!canGoNext}
+												onClick={() => setPage((p) => p + 1)}
+												aria-label={t("workflowList.nextPage")}
+											>
+												<ChevronRight className="h-4 w-4" />
+											</Button>
+										</div>
+									</div>
+								</div>
+							)}
 						</>
 					)}
 				</Card>
@@ -1051,6 +1234,30 @@ export function WorkflowList() {
 				onOpenChange={setCreateDialogOpen}
 				onCreated={handleCreated}
 			/>
+
+			{importModalOpen && (
+				<JSONModal
+					mode="import"
+					workflow={{ nodes: [], edges: [], flags: [] }}
+					onClose={() => setImportModalOpen(false)}
+					onImport={(data) => {
+						setImportModalOpen(false);
+						void handleImportNew(data);
+					}}
+				/>
+			)}
+
+			{exportModalOpen && exportModalData && (
+				<JSONModal
+					mode="export"
+					workflow={exportModalData}
+					onClose={() => {
+						setExportModalOpen(false);
+						setExportModalData(null);
+					}}
+					onImport={() => {}}
+				/>
+			)}
 		</div>
 	);
 }

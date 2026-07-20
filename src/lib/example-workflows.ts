@@ -7,7 +7,8 @@ export const EXAMPLE_WORKFLOWS = {
 			{
 				id: "start-1",
 				type: "Start" as const,
-				title: "Inicio",
+				title: "Start",
+				titleEs: "Inicio",
 				description: "Punto de inicio del flujo",
 				roles: ["client"],
 				config: {},
@@ -67,7 +68,8 @@ export const EXAMPLE_WORKFLOWS = {
 			{
 				id: "start-2",
 				type: "Start" as const,
-				title: "Inicio",
+				title: "Start",
+				titleEs: "Inicio",
 				description: "",
 				roles: ["client"],
 				config: {},
@@ -179,7 +181,8 @@ export const EXAMPLE_WORKFLOWS = {
 			{
 				id: "start-3",
 				type: "Start" as const,
-				title: "Inicio",
+				title: "Start",
+				titleEs: "Inicio",
 				description: "",
 				roles: ["client"],
 				config: {},

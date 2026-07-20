@@ -54,7 +54,11 @@ describe("workflow API functions", () => {
 
 	describe("listWorkflows", () => {
 		it("fetches workflows from correct URL", async () => {
-			mockFetch({ success: true, result: [mockWorkflow] });
+			mockFetch({
+				success: true,
+				result: [mockWorkflow],
+				result_info: { page: 1, per_page: 20, count: 1, total_count: 1 },
+			});
 
 			const result = await listWorkflows();
 
@@ -62,11 +66,18 @@ describe("workflow API functions", () => {
 				`${BASE_URL}/workflows`,
 				expect.objectContaining({ headers: expect.any(Object) }),
 			);
-			expect(result).toEqual([mockWorkflow]);
+			expect(result).toEqual({
+				workflows: [mockWorkflow],
+				resultInfo: { page: 1, per_page: 20, count: 1, total_count: 1 },
+			});
 		});
 
 		it("appends search param when provided", async () => {
-			mockFetch({ success: true, result: [] });
+			mockFetch({
+				success: true,
+				result: [],
+				result_info: { page: 1, per_page: 20, count: 0, total_count: 0 },
+			});
 
 			await listWorkflows({ search: "credit" });
 
@@ -75,7 +86,11 @@ describe("workflow API functions", () => {
 		});
 
 		it("appends status param when provided", async () => {
-			mockFetch({ success: true, result: [] });
+			mockFetch({
+				success: true,
+				result: [],
+				result_info: { page: 1, per_page: 20, count: 0, total_count: 0 },
+			});
 
 			await listWorkflows({ status: "draft" });
 
@@ -84,7 +99,11 @@ describe("workflow API functions", () => {
 		});
 
 		it("passes JWT in Authorization header", async () => {
-			mockFetch({ success: true, result: [] });
+			mockFetch({
+				success: true,
+				result: [],
+				result_info: { page: 1, per_page: 20, count: 0, total_count: 0 },
+			});
 
 			await listWorkflows({ jwt: "my-token" });
 

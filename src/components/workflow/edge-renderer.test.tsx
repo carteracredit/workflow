@@ -98,3 +98,140 @@ describe("EdgeRenderer horizontal layout", () => {
 		);
 	});
 });
+
+describe("EdgeRenderer dual green/red output colors", () => {
+	it("colors the 'top' (positive) edge green and the 'bottom' (negative) edge red for a Challenge source", () => {
+		const source = createNode({
+			id: "source",
+			type: "Challenge",
+			position: { x: 300, y: 100 },
+		});
+		const target = createNode({ id: "target", position: { x: 700, y: 150 } });
+		const topEdge: WorkflowEdge = {
+			id: "edge-top",
+			from: "source",
+			to: "target",
+			fromPort: "top",
+			label: null,
+		};
+		const bottomEdge: WorkflowEdge = {
+			id: "edge-bottom",
+			from: "source",
+			to: "target",
+			fromPort: "bottom",
+			label: null,
+		};
+
+		const { container } = render(
+			<svg>
+				<EdgeRenderer
+					edge={topEdge}
+					nodes={[source, target]}
+					edges={[topEdge, bottomEdge]}
+					selected={false}
+					onSelect={noop}
+					onDelete={noop}
+				/>
+				<EdgeRenderer
+					edge={bottomEdge}
+					nodes={[source, target]}
+					edges={[topEdge, bottomEdge]}
+					selected={false}
+					onSelect={noop}
+					onDelete={noop}
+				/>
+			</svg>,
+		);
+
+		const visiblePaths = Array.from(
+			container.querySelectorAll("path[marker-end]"),
+		);
+		expect(visiblePaths).toHaveLength(2);
+		expect(visiblePaths[0].getAttribute("stroke")).toBe("rgb(34, 197, 94)");
+		expect(visiblePaths[1].getAttribute("stroke")).toBe("rgb(239, 68, 68)");
+	});
+
+	it("colors the 'top'/'bottom' edges green/red for an ExternalLink source in challenge mode", () => {
+		const source = createNode({
+			id: "source",
+			type: "ExternalLink",
+			config: { mode: "challenge" },
+			position: { x: 300, y: 100 },
+		});
+		const target = createNode({ id: "target", position: { x: 700, y: 150 } });
+		const topEdge: WorkflowEdge = {
+			id: "edge-top",
+			from: "source",
+			to: "target",
+			fromPort: "top",
+			label: null,
+		};
+		const bottomEdge: WorkflowEdge = {
+			id: "edge-bottom",
+			from: "source",
+			to: "target",
+			fromPort: "bottom",
+			label: null,
+		};
+
+		const { container } = render(
+			<svg>
+				<EdgeRenderer
+					edge={topEdge}
+					nodes={[source, target]}
+					edges={[topEdge, bottomEdge]}
+					selected={false}
+					onSelect={noop}
+					onDelete={noop}
+				/>
+				<EdgeRenderer
+					edge={bottomEdge}
+					nodes={[source, target]}
+					edges={[topEdge, bottomEdge]}
+					selected={false}
+					onSelect={noop}
+					onDelete={noop}
+				/>
+			</svg>,
+		);
+
+		const visiblePaths = Array.from(
+			container.querySelectorAll("path[marker-end]"),
+		);
+		expect(visiblePaths).toHaveLength(2);
+		expect(visiblePaths[0].getAttribute("stroke")).toBe("rgb(34, 197, 94)");
+		expect(visiblePaths[1].getAttribute("stroke")).toBe("rgb(239, 68, 68)");
+	});
+
+	it("does NOT apply dual green/red colors for an ExternalLink source NOT in challenge mode", () => {
+		const source = createNode({
+			id: "source",
+			type: "ExternalLink",
+			config: { mode: "form" },
+			position: { x: 300, y: 100 },
+		});
+		const target = createNode({ id: "target", position: { x: 700, y: 150 } });
+		const edge: WorkflowEdge = {
+			id: "edge-1",
+			from: "source",
+			to: "target",
+			label: null,
+		};
+
+		const { container } = render(
+			<svg>
+				<EdgeRenderer
+					edge={edge}
+					nodes={[source, target]}
+					edges={[edge]}
+					selected={false}
+					onSelect={noop}
+					onDelete={noop}
+				/>
+			</svg>,
+		);
+
+		const visiblePath = container.querySelector("path[marker-end]");
+		expect(visiblePath?.getAttribute("stroke")).toBe("var(--muted-foreground)");
+	});
+});

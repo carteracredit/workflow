@@ -41,7 +41,11 @@ export async function validateTransformCode(
 	const semantic = runSemanticChecks(code);
 	if (!semantic.valid) return semantic;
 
-	const wrapped = `async function __validate() {\n${code}\n}`;
+	// Replace ${...} variable-picker tokens with a valid TS identifier so the
+	// parser does not raise false-positive syntax errors on bare ${...} usage
+	// (the same substitution that validateConditionExpression applies).
+	const normalized = substituteVariableRefs(code);
+	const wrapped = `async function __validate() {\n${normalized}\n}`;
 	return parseTypeScript(wrapped);
 }
 

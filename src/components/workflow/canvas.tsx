@@ -207,7 +207,11 @@ interface CanvasProps {
 		status: "idle" | "valid" | "invalid";
 	};
 	onCopy?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
-	onPaste?: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
+	onPaste?: (
+		nodes: WorkflowNode[],
+		edges: WorkflowEdge[],
+		tokensRemapped: boolean,
+	) => void;
 	onUndo?: () => void;
 	canUndo?: boolean;
 	onRedo?: () => void;
@@ -712,9 +716,12 @@ export function Canvas({
 			) {
 				e.preventDefault();
 				if (onPaste && copiedDataRef.current) {
-					const { nodes: pastedNodes, edges: pastedEdges } =
-						deserializeSelection(copiedDataRef.current, nodes);
-					onPaste(pastedNodes, pastedEdges);
+					const {
+						nodes: pastedNodes,
+						edges: pastedEdges,
+						tokensRemapped,
+					} = deserializeSelection(copiedDataRef.current, nodes);
+					onPaste(pastedNodes, pastedEdges, tokensRemapped);
 				}
 				return;
 			}
@@ -1355,8 +1362,21 @@ export function Canvas({
 						<Button
 							variant="ghost"
 							size="sm"
-							onClick={onReset}
-							title={t("canvas.toolbarReset")}
+							disabled={
+								selectedNodeIds.length === 0 && selectedEdgeIds.length === 0
+							}
+							onClick={() => {
+								selectedNodeIds.forEach((nodeId) => {
+									const node = nodes.find((n) => n.id === nodeId);
+									if (node && node.type !== "Start") {
+										onDeleteNode(nodeId);
+									}
+								});
+								selectedEdgeIds.forEach((edgeId) => {
+									onDeleteEdge(edgeId);
+								});
+							}}
+							title={t("canvas.toolbarDeleteSelected")}
 						>
 							<Trash2 className="h-4 w-4" />
 						</Button>
@@ -1752,9 +1772,12 @@ export function Canvas({
 						disabled={!hasCopiedData || !copiedDataRef.current}
 						onClick={() => {
 							if (onPaste && copiedDataRef.current) {
-								const { nodes: pastedNodes, edges: pastedEdges } =
-									deserializeSelection(copiedDataRef.current, nodes);
-								onPaste(pastedNodes, pastedEdges);
+								const {
+									nodes: pastedNodes,
+									edges: pastedEdges,
+									tokensRemapped,
+								} = deserializeSelection(copiedDataRef.current, nodes);
+								onPaste(pastedNodes, pastedEdges, tokensRemapped);
 							}
 						}}
 					>

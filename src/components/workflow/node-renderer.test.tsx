@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, fireEvent } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { NodeRenderer } from "./node-renderer";
 import type { WorkflowNode } from "@/lib/workflow/types";
+
+const renderWithTooltip = (ui: React.ReactElement) =>
+	render(<TooltipProvider>{ui}</TooltipProvider>);
 
 let mockLanguage = "es";
 vi.mock("@/components/LanguageProvider", async () => {
@@ -67,7 +71,7 @@ describe("NodeRenderer horizontal layout", () => {
 	});
 
 	it("renders single output/input connectors on right/left sides", () => {
-		const { getByTestId } = render(
+		const { getByTestId } = renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={false}
@@ -95,7 +99,7 @@ describe("NodeRenderer horizontal layout", () => {
 			title: "Decisión corta",
 		};
 
-		const { getByTestId } = render(
+		const { getByTestId } = renderWithTooltip(
 			<NodeRenderer
 				node={decisionNode}
 				selected={false}
@@ -117,6 +121,67 @@ describe("NodeRenderer horizontal layout", () => {
 
 		expect(positiveTop).toBeLessThan(negativeTop);
 	});
+
+	it("stacks dual green/red outputs for an ExternalLink node in challenge mode", () => {
+		const externalLinkChallengeNode: WorkflowNode = {
+			...baseNode,
+			id: "node-3",
+			type: "ExternalLink",
+			title: "Enlace externo",
+			config: { mode: "challenge" },
+		};
+
+		const { getByTestId, queryByTestId } = renderWithTooltip(
+			<NodeRenderer
+				node={externalLinkChallengeNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		const positiveConnector = getByTestId("output-connector-positive");
+		const negativeConnector = getByTestId("output-connector-negative");
+
+		expect(positiveConnector.className).toContain("border-green-500");
+		expect(negativeConnector.className).toContain("border-red-500");
+		expect(positiveConnector).toHaveStyle({ right: "-6px" });
+		expect(negativeConnector).toHaveStyle({ right: "-6px" });
+
+		const positiveTop = parseFloat(positiveConnector.style.top || "0");
+		const negativeTop = parseFloat(negativeConnector.style.top || "0");
+		expect(positiveTop).toBeLessThan(negativeTop);
+
+		// A single-output connector must NOT be rendered for this node.
+		expect(queryByTestId("output-connector")).not.toBeInTheDocument();
+	});
+
+	it("renders a single output connector for an ExternalLink node NOT in challenge mode", () => {
+		const externalLinkFormNode: WorkflowNode = {
+			...baseNode,
+			id: "node-4",
+			type: "ExternalLink",
+			title: "Enlace externo",
+			config: { mode: "form" },
+		};
+
+		const { getByTestId, queryByTestId } = renderWithTooltip(
+			<NodeRenderer
+				node={externalLinkFormNode}
+				selected={false}
+				errors={[]}
+				connecting={false}
+				onMouseDown={noop}
+				onConnectorClick={noop}
+			/>,
+		);
+
+		expect(getByTestId("output-connector")).toBeInTheDocument();
+		expect(queryByTestId("output-connector-positive")).not.toBeInTheDocument();
+		expect(queryByTestId("output-connector-negative")).not.toBeInTheDocument();
+	});
 });
 
 describe("NodeRenderer connector visibility", () => {
@@ -132,7 +197,7 @@ describe("NodeRenderer connector visibility", () => {
 	});
 
 	it("hides connectors when node is not selected, not hovered, and no connection in progress", () => {
-		const { getByTestId } = render(
+		const { getByTestId } = renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={false}
@@ -152,7 +217,7 @@ describe("NodeRenderer connector visibility", () => {
 	});
 
 	it("shows connectors when node is selected", () => {
-		const { getByTestId } = render(
+		const { getByTestId } = renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={true}
@@ -172,7 +237,7 @@ describe("NodeRenderer connector visibility", () => {
 	});
 
 	it("shows connectors when connecting from this node", () => {
-		const { getByTestId } = render(
+		const { getByTestId } = renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={false}
@@ -189,7 +254,7 @@ describe("NodeRenderer connector visibility", () => {
 	});
 
 	it("shows connectors when any connection is in progress (for input connectors on other nodes)", () => {
-		const { getByTestId } = render(
+		const { getByTestId } = renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={false}
@@ -206,7 +271,7 @@ describe("NodeRenderer connector visibility", () => {
 	});
 
 	it("shows connectors when node is hovered", () => {
-		const { getByTestId, container } = render(
+		const { getByTestId, container } = renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={false}
@@ -218,7 +283,9 @@ describe("NodeRenderer connector visibility", () => {
 			/>,
 		);
 
-		const outerDiv = container.firstChild as HTMLElement;
+		const outerDiv = container.querySelector(
+			".pointer-events-auto",
+		) as HTMLElement;
 		fireEvent.mouseEnter(outerDiv);
 
 		const outputConnector = getByTestId("output-connector");
@@ -239,7 +306,7 @@ describe("NodeRenderer cursor style", () => {
 	});
 
 	it("uses cursor-pointer on the node card", () => {
-		const { container } = render(
+		const { container } = renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={false}
@@ -270,7 +337,7 @@ describe("NodeRenderer onHeightMeasured callback", () => {
 
 	it("calls onHeightMeasured with the node id and measured height", () => {
 		const onHeightMeasured = vi.fn();
-		render(
+		renderWithTooltip(
 			<NodeRenderer
 				node={baseNode}
 				selected={false}
@@ -312,7 +379,7 @@ describe("NodeRenderer bilingual support", () => {
 			titleEs: "Carga de documentos",
 		};
 
-		const { container } = render(
+		const { container } = renderWithTooltip(
 			<NodeRenderer
 				node={bilingualNode}
 				selected={false}
@@ -334,7 +401,7 @@ describe("NodeRenderer bilingual support", () => {
 			title: "Upload Documents",
 		};
 
-		const { container } = render(
+		const { container } = renderWithTooltip(
 			<NodeRenderer
 				node={englishOnlyNode}
 				selected={false}
@@ -356,7 +423,7 @@ describe("NodeRenderer bilingual support", () => {
 			titleEs: "Carga de documentos",
 		};
 
-		const { container } = render(
+		const { container } = renderWithTooltip(
 			<NodeRenderer
 				node={bilingualNode}
 				selected={false}
@@ -379,7 +446,7 @@ describe("NodeRenderer bilingual support", () => {
 			descriptionEs: "Formulario para carga de documentos",
 		};
 
-		const { container } = render(
+		const { container } = renderWithTooltip(
 			<NodeRenderer
 				node={bilingualNode}
 				selected={false}
@@ -402,7 +469,7 @@ describe("NodeRenderer bilingual support", () => {
 			description: "Form for uploading documents",
 		};
 
-		const { container } = render(
+		const { container } = renderWithTooltip(
 			<NodeRenderer
 				node={englishOnlyNode}
 				selected={false}

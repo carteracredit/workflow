@@ -3,6 +3,7 @@ import type {
 	WorkflowEdge,
 	WorkflowMetadata,
 	ChallengeNodeConfig,
+	SignatureChallengeConfig,
 	APIFailureHandling,
 	APIAuthConfig,
 	APIHeaderEntry,
@@ -10,12 +11,19 @@ import type {
 	APIResponseConfig,
 	MessageNodeConfig,
 	OutputSchema,
+	NLSNodeConfig,
+	NLSFunctionId,
+	GeneratePdfNodeConfig,
+	TimeoutUnit,
+	StaleTimeoutConfig,
 } from "./types";
 import { slugify } from "../slugify";
 import {
 	validateTransformCode,
 	validateConditionExpression,
 } from "./validate-code";
+import { buildAliasMap, isLegacyNodeId } from "./node-alias";
+import { isValidJson, isWellFormedXml } from "./xml-validation";
 
 /**
  * Configuration for code generation
@@ -103,28 +111,196 @@ function escapeString(str: string): string {
 }
 
 /**
- * Converts a node ID into a valid JavaScript identifier by replacing hyphens
- * with underscores. E.g. "node-1773093521695" → "node_1773093521695".
+ * Whether a template string contains `${...}` variable interpolation markers
+ * produced by `VariableTemplateInput`.
  */
-function nodeIdToVarName(nodeId: string): string {
-	return nodeId.replace(/-/g, "_");
+function hasTemplateVars(str: string): boolean {
+	return /\$\{[^}]+\}/.test(str);
 }
 
 /**
- * Expands variable-picker references of the form `${nodeId.property}` into
- * valid JavaScript property-access expressions.
+ * Convert a template string like `"Hello ${event.payload.x}"` into a JS
+ * template literal like `` `Hello ${event.payload.x}` ``.
+ * Backticks and backslashes inside literal text sections are escaped.
+ */
+function toJsTemplateLiteral(str: string): string {
+	// Escape backtick and backslash in the raw string, but preserve ${...} intact
+	const escaped = str.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+	return `\`${escaped}\``;
+}
+
+/**
+ * Module-level alias map populated at the start of `generateWorkflowCode` so
+ * that all internal step-generator helpers can resolve camelCase aliases from
+ * node IDs without threading the map through every function signature.
+ *
+ * JavaScript is single-threaded; this is safe for synchronous generation.
+ */
+let _activeAliasMap: Map<string, string> = new Map();
+
+/**
+ * The camelCase alias of the Start node for the current code-generation run.
+ *
+ * When `expandVariablePath` sees this alias as the first segment of a variable
+ * reference (e.g. `${inicio.clientName}` or `${start.clientAddress.zipCode}`),
+ * it rewrites the expression to `event.payload.<trail>` because the Start
+ * node's case variables are injected by cases-svc directly into the workflow
+ * event payload — no runtime binding is declared for the Start node itself.
+ *
+ * Reset to `""` after each generation run.
+ */
+let _startNodeAlias: string = "";
+
+/**
+ * Set of node IDs (Form / API / Transform) that are inside a Decision or
+ * Challenge branch AND whose alias is referenced by a node outside that branch
+ * (i.e., post-merge). These need a hoisted `let` declaration at the start of
+ * `run()` so the reference is visible after the if/else block closes.
+ *
+ * Populated by `computeHoistedNodeIds` at the start of `generateWorkflowCode`.
+ * Challenge and Promotion nodes are NOT included here — they have their own
+ * dedicated hoisting block.
+ */
+let _hoistedNodeIds: Set<string> = new Set();
+
+/**
+ * Returns the camelCase alias for a node ID, falling back to the legacy
+ * hyphen→underscore transform when no alias is available.
+ *
+ * This replaces the old `nodeIdToVarName` helper and ensures that generated
+ * variable names match the aliases used in the variable picker tokens.
+ */
+function getVarName(nodeId: string): string {
+	return _activeAliasMap.get(nodeId) ?? nodeId.replace(/-/g, "_");
+}
+
+/**
+ * Expands a property access trail (everything after the first `.` in a
+ * variable path) into safe JS property access expressions.
+ *
+ * Each dot-separated segment:
+ *  - If it is a valid identifier (`/^[a-zA-Z_$][a-zA-Z0-9_$]*$/`): use dot
+ *    notation → `.name` (or just `name` for the first segment).
+ *  - Otherwise (e.g. contains hyphens): use bracket notation → `["name"]`.
+ *  Array accessors like `[0]` are preserved intact and appended to the
+ *  preceding segment.
+ *
+ * Examples:
+ *   "phone"                  → "phone"
+ *   "results[0].url"         → "results[0].url"
+ *   "my-field"               → `["my-field"]`
+ *   "data.my-key.value"      → `data["my-key"].value`
+ */
+function expandPropertyTrail(trail: string): string {
+	const parts: string[] = [];
+	let buf = "";
+	let depth = 0;
+	for (const ch of trail) {
+		if (ch === "[") {
+			depth++;
+			buf += ch;
+		} else if (ch === "]") {
+			depth--;
+			buf += ch;
+		} else if (ch === "." && depth === 0) {
+			parts.push(buf);
+			buf = "";
+		} else {
+			buf += ch;
+		}
+	}
+	if (buf || trail.length === 0) parts.push(buf);
+
+	return parts
+		.map((part, i) => {
+			const bracketIdx = part.indexOf("[");
+			const name = bracketIdx >= 0 ? part.slice(0, bracketIdx) : part;
+			const suffix = bracketIdx >= 0 ? part.slice(bracketIdx) : "";
+
+			if (!name) return suffix;
+
+			if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
+				return (i === 0 ? name : `.${name}`) + suffix;
+			}
+			const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+			return `["${escaped}"]${suffix}`;
+		})
+		.join("");
+}
+
+/**
+ * Expands a single variable-picker path into a runtime JavaScript expression.
+ *
+ *  - `secret.NAME`          → `this.env.NAME` (workflow-level variable/secret;
+ *                             preserves UPPER_SNAKE case).
+ *  - `<alias.prop…>`        → The first segment is kept as-is when it is
+ *                             already a valid camelCase alias (new format), or
+ *                             dehyphenated when it is a legacy `node-<id>`.
+ *                             The property trail uses dot notation for valid
+ *                             identifiers or bracket notation (`["key"]`) for
+ *                             segments that contain hyphens or other special
+ *                             characters.
+ *
+ * Centralizing this mapping keeps the `${secret.X}` → `this.env.X` contract in
+ * one place, regardless of whether the reference lives inside an auth field,
+ * a URL, a header value, a request body, a Decision condition, or a Transform
+ * code block.
+ */
+function expandVariablePath(path: string): string {
+	const trimmed = path.trim();
+	if (/^secret\./.test(trimmed)) {
+		return `this.env.${trimmed.slice("secret.".length)}`;
+	}
+
+	const dotIdx = trimmed.indexOf(".");
+	const firstSeg = dotIdx >= 0 ? trimmed.slice(0, dotIdx) : trimmed;
+	const propertyTrail = dotIdx >= 0 ? trimmed.slice(dotIdx + 1) : null;
+
+	// Start-node alias → rewrite to event.payload.<trail> because the Start
+	// node's case variables live in the workflow event payload at runtime; no
+	// JS binding is ever declared for the Start node in the generated code.
+	if (_startNodeAlias && firstSeg === _startNodeAlias) {
+		if (propertyTrail === null) {
+			return "event.payload";
+		}
+		return `event.payload.${expandPropertyTrail(propertyTrail)}`;
+	}
+
+	// For legacy node-IDs (`node-<timestamp>`), look up the camelCase alias
+	// from the active alias map (populated during code generation), or fall
+	// back to simple hyphen→underscore replacement.
+	let safeFirst: string;
+	if (isLegacyNodeId(firstSeg) && _activeAliasMap.size > 0) {
+		safeFirst = _activeAliasMap.get(firstSeg) ?? firstSeg.replace(/-/g, "_");
+	} else {
+		// Already a camelCase alias or any other form – dehyphenate as safety net.
+		safeFirst = firstSeg.replace(/-/g, "_");
+	}
+
+	if (propertyTrail === null) {
+		return safeFirst;
+	}
+
+	return `${safeFirst}.${expandPropertyTrail(propertyTrail)}`;
+}
+
+/**
+ * Expands variable-picker references of the form `${nodeId.property}` or
+ * `${secret.NAME}` into valid JavaScript expressions (bare, NOT wrapped in a
+ * template literal).
  *
  * The picker stores references using template-literal syntax which is NOT valid
  * in a plain JS expression (e.g. inside an `if` condition or a code block).
  * This helper converts them so that, for example,
- * `${node-123.count} > 0` becomes `node_123.count > 0`.
+ * `${node-123.count} > 0` becomes `node_123.count > 0` and
+ * `${secret.NLS_TOKEN}` becomes `this.env.NLS_TOKEN`.
  *
  * Use this for Decision conditions and Transform code bodies (bare expressions).
  * For quoted string values use `emitInterpolatedString` instead.
  */
 function expandVariableRefs(expr: string): string {
 	return expr.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
-		path.replace(/-/g, "_"),
+		expandVariablePath(path),
 	);
 }
 
@@ -141,24 +317,24 @@ function containsVariableRefs(str: string): boolean {
  *
  * - If the string has no variable references it is wrapped in double quotes
  *   (existing behaviour).
- * - If the string contains `${nodeId.property}` references it is wrapped in
+ * - If the string contains `${alias.property}` references it is wrapped in
  *   backticks so the references become valid template-literal interpolations.
- *   Node IDs are also dehyphenated (e.g. `node-123` → `node_123`) to produce
- *   valid JavaScript identifiers.
+ *   Each `${...}` token is expanded via `expandVariablePath` which handles
+ *   both new-format camelCase aliases and legacy node-ID paths.
  *
  * Examples:
- *   "https://api.example.com/items"         → `"https://api.example.com/items"`
- *   "${node-123.results[0].url}"            → `` `${node_123.results[0].url}` ``
- *   "https://api.example.com/${node-123.id}" → `` `https://api.example.com/${node_123.id}` ``
+ *   "https://api.example.com/items"             → `"https://api.example.com/items"`
+ *   "${coapplicantForm.results[0].url}"          → `` `${coapplicantForm.results[0].url}` ``
+ *   "https://api.example.com/${myNode.id}"       → `` `https://api.example.com/${myNode.id}` ``
  */
 function emitInterpolatedString(str: string): string {
 	if (!containsVariableRefs(str)) {
 		return `"${escapeString(str)}"`;
 	}
-	// Dehyphenate node IDs inside ${...} so they are valid JS identifiers,
-	// then wrap the whole thing in backticks.
+	// Rewrite each ${...} token to a valid JS expression (node-id dehyphen or
+	// `this.env.X` for `secret.X`), then wrap the whole thing in backticks.
 	const expanded = str.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
-		return `\${${path.replace(/-/g, "_")}}`;
+		return `\${${expandVariablePath(path)}}`;
 	});
 	// Escape any backticks inside the literal part (outside ${...}).
 	const escaped = expanded.replace(/`/g, "\\`");
@@ -167,22 +343,42 @@ function emitInterpolatedString(str: string): string {
 
 /**
  * Emits a value for use in generated TypeScript source code.
- * Supports three modes:
- *   - "env:VAR_NAME"         → this.env.VAR_NAME  (explicit env reference)
- *   - "TOKEN_TEST" (all-caps) → this.env.TOKEN_TEST (legacy / auto-detected env var)
- *   - any other text          → "literal string"    (used as-is)
  *
- * The auto-detection keeps backward compatibility with workflows saved before
- * the "env:" prefix convention was introduced.
+ * Supported inputs, in priority order:
+ *   - "env:VAR_NAME"          → this.env.VAR_NAME  (explicit env reference,
+ *                                                   original convention).
+ *   - "${secret.NAME}"        → this.env.NAME      (new variable-picker token,
+ *                                                   single pure secret reference).
+ *   - "TOKEN_TEST" (all-caps) → this.env.TOKEN_TEST (legacy auto-detected env
+ *                                                    var; kept for
+ *                                                    backwards compatibility
+ *                                                    with workflows saved
+ *                                                    before "env:" was added).
+ *   - any text containing other `${...}` tokens
+ *                             → backtick template string with each token
+ *                               expanded via `expandVariablePath`.
+ *   - any other text          → "literal string"   (used as-is).
+ *
+ * The three env/secret shortcuts each produce a bare `this.env.X` expression so
+ * the caller can embed the result either as a standalone value or inside a
+ * template literal like `` `Bearer ${…}` ``.
  */
 const ENV_VAR_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+const PURE_SECRET_RE = /^\s*\$\{\s*secret\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\s*$/;
 
 function emitAuthValue(raw: string): string {
 	if (raw.startsWith("env:")) {
 		return emitEnvRef(raw.slice(4).trim());
 	}
+	const pureSecret = raw.match(PURE_SECRET_RE);
+	if (pureSecret) {
+		return emitEnvRef(pureSecret[1]);
+	}
 	if (ENV_VAR_NAME_RE.test(raw)) {
 		return emitEnvRef(raw);
+	}
+	if (containsVariableRefs(raw)) {
+		return emitInterpolatedString(raw);
 	}
 	return JSON.stringify(raw);
 }
@@ -267,10 +463,10 @@ function buildAdjacencyMaps(edges: WorkflowEdge[]): {
 export interface RetryZone {
 	/** ID of the Checkpoint node that is the retry target */
 	checkpointNodeId: string;
-	/** ID of the Reject node that triggers the retry */
-	rejectNodeId: string;
+	/** IDs of all Reject nodes that trigger retry to this checkpoint */
+	rejectNodeIds: string[];
 	/**
-	 * Maximum number of retries (from Reject.config.maxRetries).
+	 * Maximum number of retries (consolidated across all Reject nodes).
 	 * Ignored when unlimited=true.
 	 */
 	maxRetries: number;
@@ -279,21 +475,32 @@ export interface RetryZone {
 	 * which means "unlimited" per the UI label "0 = ilimitados").
 	 */
 	unlimited: boolean;
-	/** JS variable name used as the loop counter, e.g. "retryCP1" */
+	/** JS variable name used as the loop counter, e.g. "retry_cp" */
 	retryVarName: string;
 }
 
 /**
  * Scans all Reject nodes with `config.allowRetry === true` and resolves the
  * associated Checkpoint target from their outgoing edge. Returns one RetryZone
- * per qualifying Reject node.
+ * per unique Checkpoint, consolidating all Reject nodes that target it.
+ *
+ * Consolidation rules:
+ * - If ANY reject targeting a checkpoint has unlimited retries, the zone is unlimited.
+ * - Otherwise, maxRetries = max of all individual reject maxRetries values.
  */
 export function detectRetryZones(
 	nodes: WorkflowNode[],
 	edges: WorkflowEdge[],
 ): RetryZone[] {
-	const zones: RetryZone[] = [];
-	const cpVarCounters = new Map<string, number>();
+	const zoneMap = new Map<
+		string,
+		{
+			checkpointNode: WorkflowNode;
+			rejectNodeIds: string[];
+			maxRetries: number;
+			unlimited: boolean;
+		}
+	>();
 
 	for (const node of nodes) {
 		if (node.type !== "Reject") continue;
@@ -306,23 +513,42 @@ export function detectRetryZones(
 		if (!targetNode || targetNode.type !== "Checkpoint") continue;
 
 		const rawMaxRetries = Number(node.config.maxRetries ?? 0);
-		// In the editor, maxRetries=0 means "unlimited" ("0 = ilimitados").
-		// maxRetries>0 is the explicit cap.
-		const unlimited = rawMaxRetries === 0 || Number.isNaN(rawMaxRetries);
-		const maxRetries = unlimited ? 0 : Math.max(1, rawMaxRetries);
+		const isUnlimited = rawMaxRetries === 0 || Number.isNaN(rawMaxRetries);
+		const resolvedMax = isUnlimited ? 0 : Math.max(1, rawMaxRetries);
 
-		// Derive a unique JS variable name from the checkpoint title
-		const cpSlug = createVariableName(targetNode.title || targetNode.id, "cp");
-		const count = cpVarCounters.get(cpSlug) ?? 0;
-		cpVarCounters.set(cpSlug, count + 1);
-		const retryVarName =
-			count === 0 ? `retry_${cpSlug}` : `retry_${cpSlug}_${count}`;
+		const existing = zoneMap.get(targetNode.id);
+		if (existing) {
+			existing.rejectNodeIds.push(node.id);
+			existing.unlimited = existing.unlimited || isUnlimited;
+			if (!existing.unlimited) {
+				existing.maxRetries = Math.max(existing.maxRetries, resolvedMax);
+			}
+		} else {
+			zoneMap.set(targetNode.id, {
+				checkpointNode: targetNode,
+				rejectNodeIds: [node.id],
+				maxRetries: resolvedMax,
+				unlimited: isUnlimited,
+			});
+		}
+	}
 
+	const zones: RetryZone[] = [];
+	const usedVarNames = new Set<string>();
+	for (const [cpId, data] of zoneMap) {
+		const cpSlug = createVariableName(data.checkpointNode.title || cpId, "cp");
+		let retryVarName = `retry_${cpSlug}`;
+		let counter = 1;
+		while (usedVarNames.has(retryVarName)) {
+			retryVarName = `retry_${cpSlug}_${counter}`;
+			counter++;
+		}
+		usedVarNames.add(retryVarName);
 		zones.push({
-			checkpointNodeId: targetNode.id,
-			rejectNodeId: node.id,
-			maxRetries,
-			unlimited,
+			checkpointNodeId: cpId,
+			rejectNodeIds: data.rejectNodeIds,
+			maxRetries: data.unlimited ? 0 : data.maxRetries,
+			unlimited: data.unlimited,
 			retryVarName,
 		});
 	}
@@ -342,6 +568,159 @@ export function detectRetryZones(
  */
 function retryStepNameExpr(baseName: string, retryVarName: string): string {
 	return `${retryVarName} > 0 ? \`${baseName}-r\${${retryVarName}}\` : "${baseName}"`;
+}
+
+// ---------------------------------------------------------------------------
+// Durable wait chunking (generation-time helpers)
+//
+// Cloudflare Workflows' `step.waitForEvent` throws when its timeout elapses
+// instead of resolving to `null`, so an unwrapped call crashes the whole
+// instance into the unrecoverable `errored` state the moment a human is
+// slow to respond — even on nodes that have a perfectly good timeout/
+// negative branch to take instead. The runtime helpers emitted by
+// `generateDurableWaitHelpers` (`waitForEventOrNull` / `waitForEventDurable`)
+// fix this at the source: every node that waits for a human (Form, AddCard,
+// Promotion, Challenge, ExternalLink) now calls `waitForEventDurable`
+// instead of `step.waitForEvent` directly.
+//
+// `resolveWaitChunking` computes, at code-generation time, how that call
+// should be chunked:
+//   - No `staleTimeout` configured: a single chunk using the node's own
+//     hard timeout (or "365 days" when the node has no hard deadline at
+//     all) — the exact same total wait as before this change, just crash-
+//     proof.
+//   - `staleTimeout` configured: repeated `staleTimeout`-sized chunks, each
+//     one (except the last) triggering a durable "stale step" notification
+//     to cases-svc before waiting again. When the node also has a hard
+//     deadline (challengeTimeout / linkTtl), the number of chunks is capped
+//     so the total approximates that deadline (rounded up to the nearest
+//     whole chunk).
+// ---------------------------------------------------------------------------
+
+const TIMEOUT_UNIT_MS: Record<TimeoutUnit, number> = {
+	seconds: 1000,
+	minutes: 60_000,
+	hours: 3_600_000,
+	days: 86_400_000,
+};
+
+function timeoutConfigToMs(config: {
+	value: number;
+	unit: TimeoutUnit;
+}): number {
+	return config.value * (TIMEOUT_UNIT_MS[config.unit] ?? TIMEOUT_UNIT_MS.hours);
+}
+
+function timeoutConfigToStr(config: {
+	value: number;
+	unit: TimeoutUnit;
+}): string {
+	return `${config.value} ${config.unit}`;
+}
+
+interface WaitChunking {
+	/** Duration string (e.g. "24 hours") used for every chunk of the wait. */
+	chunkTimeoutStr: string;
+	/** `undefined` means "wait forever" (no hard deadline for this node). */
+	maxAttempts: number | undefined;
+}
+
+/**
+ * @param staleTimeout Node-level reminder config (`node.staleTimeout`).
+ * @param hardTimeoutMs The node's own hard deadline in ms, or `undefined`
+ *   when the node has no timeout/negative branch and must never give up
+ *   (Form, AddCard, Promotion, ExternalLink form mode).
+ * @param hardTimeoutStr Duration string matching `hardTimeoutMs`, used as
+ *   the single chunk when no `staleTimeout` is configured. Required unless
+ *   `hardTimeoutMs` is also `undefined`.
+ */
+function resolveWaitChunking(
+	staleTimeout: StaleTimeoutConfig | null | undefined,
+	hardTimeoutMs: number | undefined,
+	hardTimeoutStr: string | undefined,
+): WaitChunking {
+	if (!staleTimeout) {
+		return {
+			chunkTimeoutStr: hardTimeoutStr ?? "365 days",
+			maxAttempts: hardTimeoutMs === undefined ? undefined : 1,
+		};
+	}
+	const chunkTimeoutStr = timeoutConfigToStr(staleTimeout);
+	if (hardTimeoutMs === undefined) {
+		return { chunkTimeoutStr, maxAttempts: undefined };
+	}
+	const staleMs = timeoutConfigToMs(staleTimeout);
+	return {
+		chunkTimeoutStr,
+		maxAttempts: Math.max(1, Math.ceil(hardTimeoutMs / staleMs)),
+	};
+}
+
+/**
+ * Emits the arguments (after `baseStepName` and `eventType`) shared by every
+ * `waitForEventDurable` call site: chunk timeout, max attempts, and the
+ * stale-notification wiring for the node.
+ */
+function emitDurableWaitTailArgs(
+	node: WorkflowNode,
+	indent: string,
+	chunking: WaitChunking,
+): string {
+	const maxAttemptsExpr =
+		chunking.maxAttempts === undefined
+			? "undefined"
+			: String(chunking.maxAttempts);
+	const notifyStale = !!node.staleTimeout;
+	let code = "";
+	code += `${indent}\t"${escapeString(chunking.chunkTimeoutStr)}",\n`;
+	code += `${indent}\t${maxAttemptsExpr},\n`;
+	code += `${indent}\t${notifyStale},\n`;
+	return code;
+}
+
+// ---------------------------------------------------------------------------
+// Error recording helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap a node's generated code in a try/catch that persists the error via
+ * `WORKFLOW_SVC.recordInstanceError` before re-throwing. The re-throw causes
+ * Cloudflare to transition the instance to the `errored` state.
+ *
+ * NOT applied to: Start, End, Reject, Decision (handled separately), and
+ * nodes that generate empty strings (e.g. the Decision case).
+ */
+function wrapWithErrorHandler(
+	node: WorkflowNode,
+	indent: string,
+	innerCode: string,
+): string {
+	if (!innerCode.trim()) return innerCode;
+	const nodeId = escapeString(node.id);
+	const nodeType = escapeString(node.type);
+	const stepName = escapeString(createStepName(node));
+	const i1 = indent + "\t";
+	const i2 = indent + "\t\t";
+	let code = `${indent}try {\n`;
+	code += innerCode
+		.split("\n")
+		.map((line) => (line.length > 0 ? `\t${line}` : line))
+		.join("\n");
+	code += `${indent}} catch (_err_${node.id.replace(/-/g, "_")}) {\n`;
+	code += `${i1}const _msg_${node.id.replace(/-/g, "_")} = _err_${node.id.replace(/-/g, "_")} instanceof Error ? _err_${node.id.replace(/-/g, "_")}.message : String(_err_${node.id.replace(/-/g, "_")});\n`;
+	code += `${i1}try {\n`;
+	code += `${i2}await this.env.WORKFLOW_SVC.recordInstanceError({\n`;
+	code += `${i2}\tworkflowId: this.env.WORKFLOW_ID,\n`;
+	code += `${i2}\tinstanceId: event.instanceId,\n`;
+	code += `${i2}\tnodeId: "${nodeId}",\n`;
+	code += `${i2}\tnodeType: "${nodeType}",\n`;
+	code += `${i2}\tstepName: "${stepName}",\n`;
+	code += `${i2}\terrorMessage: _msg_${node.id.replace(/-/g, "_")},\n`;
+	code += `${i2}});\n`;
+	code += `${i1}} catch { /* ignore RPC error, re-throw original */ }\n`;
+	code += `${i1}throw _err_${node.id.replace(/-/g, "_")};\n`;
+	code += `${indent}}\n`;
+	return code;
 }
 
 // ---------------------------------------------------------------------------
@@ -371,13 +750,19 @@ function generateProgressCall(
 	eventType?: string,
 	retryVarName?: string,
 	innerRetryVarName?: string,
+	/**
+	 * Optional suffix appended to the step.do cache key to disambiguate
+	 * multiple waiting_event calls for the same node (e.g. "-accept" vs "-sig"
+	 * in a signature challenge that has both an acceptance and a signing phase).
+	 */
+	stepNameSuffix?: string,
 ): string {
 	const stepName = createStepName(node);
 	const nodeType = node.type;
 	const nodeId = node.id;
 
-	// Build a unique step.do cache key: _prog-<nodeId>-<status>[retry suffix]
-	const baseProgName = `_prog-${nodeId}-${status}`;
+	// Build a unique step.do cache key: _prog-<nodeId>-<status>[suffix][retry suffix]
+	const baseProgName = `_prog-${nodeId}-${status}${stepNameSuffix ? `-${stepNameSuffix}` : ""}`;
 	let stepDoNameExpr: string;
 	if (retryVarName && innerRetryVarName) {
 		stepDoNameExpr =
@@ -463,6 +848,101 @@ function generateCaseObjectCall(
 	return code;
 }
 
+/**
+ * Emit a `step.do`-wrapped call that publishes the resolved (interpolated)
+ * UI labels of a Challenge node to the case realtime object **before**
+ * calling `waitForEvent`. This allows the cases UI to render dynamic labels
+ * (containing `${variable}` tokens) with real values instead of raw tokens.
+ *
+ * Returns an empty string when no labels are configured, so callers do not
+ * need to guard against undefined config.
+ *
+ * The result is stored under `_${stepName}-labels` in the case object.
+ */
+function emitChallengeLabelsCaseObjectCall(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const config = node.config as ChallengeNodeConfig | undefined;
+	const labels = config?.labels;
+	if (!labels) return "";
+	const hasAny =
+		labels.prompt ||
+		labels.promptEs ||
+		labels.approveLabel ||
+		labels.approveLabelEs ||
+		labels.rejectLabel ||
+		labels.rejectLabelEs;
+	if (!hasAny) return "";
+
+	const stepName = createStepName(node);
+	const baseName = `_label-${node.id}`;
+	const stepDoNameExpr = retryVarName
+		? `${retryVarName} > 0 ? \`${baseName}-r\${${retryVarName}}\` : "${baseName}"`
+		: `"${baseName}"`;
+
+	const i2 = indent + "\t";
+	const i3 = indent + "\t\t";
+
+	const emitLabelField = (key: string, value: string | undefined): string =>
+		value ? `${i3}${key}: ${emitInterpolatedString(value)},\n` : "";
+
+	let code = `${indent}await step.do(${stepDoNameExpr}, async () => {\n`;
+	code += `${i2}await this.env.CASES_SVC.updateCaseObject(\n`;
+	code += `${i2}\tevent.payload.caseId as string,\n`;
+	code += `${i2}\t{\n`;
+	code += `${i3}"_${escapeString(stepName)}-labels": {\n`;
+	code += emitLabelField("prompt", labels.prompt);
+	code += emitLabelField("promptEs", labels.promptEs);
+	code += emitLabelField("approveLabel", labels.approveLabel);
+	code += emitLabelField("approveLabelEs", labels.approveLabelEs);
+	code += emitLabelField("rejectLabel", labels.rejectLabel);
+	code += emitLabelField("rejectLabelEs", labels.rejectLabelEs);
+	code += `${i3}},\n`;
+	code += `${i2}\t},\n`;
+	code += `${i2});\n`;
+	code += `${indent}});\n`;
+	return code;
+}
+
+/**
+ * Emit a `step.do`-wrapped CASES_SVC.updateCaseLoanData call for NLS nodes
+ * that create or fetch loan/amortization data.
+ */
+function generateCaseLoanDataCall(
+	node: WorkflowNode,
+	indent: string,
+	varName: string,
+	functionId: NLSFunctionId,
+	retryVarName?: string,
+): string {
+	const baseName = `_loan-${node.id}`;
+	let stepDoNameExpr: string;
+	if (retryVarName) {
+		stepDoNameExpr = `${retryVarName} > 0 ? \`${baseName}-r\${${retryVarName}}\` : "${baseName}"`;
+	} else {
+		stepDoNameExpr = `"${baseName}"`;
+	}
+
+	const i2 = indent + "\t";
+	let code = `${indent}await step.do(${stepDoNameExpr}, async () => {\n`;
+
+	if (functionId === "cancelLoan") {
+		code += `${i2}await this.env.CASES_SVC.clearCaseLoanData(\n`;
+		code += `${i2}\tevent.payload.caseId as string,\n`;
+		code += `${i2});\n`;
+	} else {
+		code += `${i2}await this.env.CASES_SVC.updateCaseLoanData(\n`;
+		code += `${i2}\tevent.payload.caseId as string,\n`;
+		code += `${i2}\t${varName},\n`;
+		code += `${i2});\n`;
+	}
+
+	code += `${indent}});\n`;
+	return code;
+}
+
 // ---------------------------------------------------------------------------
 // Node code generators
 // ---------------------------------------------------------------------------
@@ -480,8 +960,13 @@ function generateFormStep(
 	const stepName = createStepName(node);
 	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
 	const captureResult = nodeHasOutputSchema(node);
-	const varName = nodeIdToVarName(node.id);
-	const varDecl = captureResult ? `const ${varName} = ` : "";
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = captureResult
+		? isHoisted
+			? `${varName} = `
+			: `const ${varName} = `
+		: "";
 	const eventType = `form-submission-${stepName}`;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
@@ -494,6 +979,11 @@ function generateFormStep(
 			? ` | form: ${formId}${formVersion !== undefined ? ` v${formVersion}` : ""}`
 			: "";
 
+	// Form has no timeout/negative branch, so it must never give up: waits
+	// forever (chunked by staleTimeout when configured) instead of crashing
+	// the instance the way a raw, unwrapped 72h `step.waitForEvent` used to.
+	const chunking = resolveWaitChunking(node.staleTimeout, undefined, undefined);
+
 	let code = `${indent}// Form: ${node.title} (roles: ${roles}${formMeta})\n`;
 	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload }) from cases-svc\n`;
 	code += generateProgressCall(
@@ -503,10 +993,17 @@ function generateFormStep(
 		eventType,
 		retryVarName,
 	);
-	code += `${indent}${varDecl}(await step.waitForEvent<Record<string, unknown>>(\n`;
+	code += `${indent}${varDecl}(await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
 	code += `${indent}\t${stepNameExpr},\n`;
-	code += `${indent}\t{ type: "${escapeString(eventType)}", timeout: "72 hours" },\n`;
-	code += `${indent})).payload as Record<string, unknown>;\n`;
+	code += `${indent}\t"${escapeString(eventType)}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
+	code += `${indent}))!.payload as Record<string, unknown>;\n`;
 	code += generateCaseObjectCall(
 		node,
 		indent,
@@ -520,6 +1017,53 @@ function generateFormStep(
 		retryVarName,
 	);
 
+	return code;
+}
+
+/**
+ * Emit the `catch` block for the API/NLS `failureHandling.onFailure ===
+ * "continue"` strategy: records the error (best-effort, non-fatal), marks
+ * the case object with a `_status: "failed"` marker so the UI can surface
+ * it, resets the node's output variable to `undefined`, and — crucially —
+ * does NOT re-throw. The workflow keeps running past this node instead of
+ * crashing into the unrecoverable `errored` state.
+ *
+ * Must be paired with a `try {` opened by the caller and a variable
+ * declared as `let ${varName}: Record<string, unknown> | undefined =
+ * undefined;` before the try (unless the node's output was already hoisted
+ * with that same shape).
+ */
+function emitContinueOnFailureCatch(
+	node: WorkflowNode,
+	indent: string,
+	varName: string,
+	catchVarName: string,
+): string {
+	const stepName = escapeString(createStepName(node));
+	const nodeId = escapeString(node.id);
+	const nodeType = escapeString(node.type);
+	const i1 = indent + "\t";
+	const i2 = indent + "\t\t";
+	let code = `${indent}} catch (${catchVarName}) {\n`;
+	code += `${i1}const _contMsg = ${catchVarName} instanceof Error ? ${catchVarName}.message : String(${catchVarName});\n`;
+	code += `${i1}try {\n`;
+	code += `${i2}await this.env.WORKFLOW_SVC.recordInstanceError({\n`;
+	code += `${i2}\tworkflowId: this.env.WORKFLOW_ID,\n`;
+	code += `${i2}\tinstanceId: event.instanceId,\n`;
+	code += `${i2}\tnodeId: "${nodeId}",\n`;
+	code += `${i2}\tnodeType: "${nodeType}",\n`;
+	code += `${i2}\tstepName: "${stepName}",\n`;
+	code += `${i2}\terrorMessage: _contMsg,\n`;
+	code += `${i2}});\n`;
+	code += `${i1}} catch { /* non-fatal: continue-on-failure must not crash the instance */ }\n`;
+	code += `${i1}try {\n`;
+	code += `${i2}await this.env.CASES_SVC.updateCaseObject(\n`;
+	code += `${i2}\tevent.payload.caseId as string,\n`;
+	code += `${i2}\t{"${stepName}": {_status: "failed", _type: "${nodeType}", _error: _contMsg}},\n`;
+	code += `${i2});\n`;
+	code += `${i1}} catch { /* non-fatal: continue-on-failure must not crash the instance */ }\n`;
+	code += `${i1}${varName} = undefined;\n`;
+	code += `${indent}}\n`;
 	return code;
 }
 
@@ -549,8 +1093,11 @@ function generateAPIStep(
 	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
 	// API nodes always capture the response so the cases UI can display it,
 	// regardless of whether an explicit outputSchema is configured.
-	const varName = nodeIdToVarName(node.id);
-	const varDecl = `const ${varName} = `;
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const isContinueOnFailure = failureHandling?.onFailure === "continue";
+	const varDecl =
+		isHoisted || isContinueOnFailure ? `${varName} = ` : `const ${varName} = `;
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
@@ -582,7 +1129,48 @@ function generateAPIStep(
 		indent += "\t";
 	}
 
-	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	// Wrap in try/catch for "continue" failure handling: swallow the error
+	// (recorded, not fatal) instead of letting the instance crash.
+	if (isContinueOnFailure) {
+		if (!isHoisted) {
+			code += `${indent}let ${varName}: Record<string, unknown> | undefined = undefined;\n`;
+		}
+		code += `${indent}try {\n`;
+		indent += "\t";
+	}
+
+	// Cloudflare Workflows requires: step.do(name, config, callback) — config MUST come before callback.
+	if (failureHandling && failureHandling.maxRetries > 0) {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, {\n`;
+		code += `${indent}\tretries: {\n`;
+		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
+		code += `${indent}\t\tdelay: "1 second",\n`;
+		code += `${indent}\t\tbackoff: "exponential",\n`;
+		code += `${indent}\t},\n`;
+		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
+		code += `${indent}}, async () => {\n`;
+	} else {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	}
+
+	// Validate body content at code-generation time (build-time check)
+	if (hasBody && bodyConfig) {
+		const bodyMode = bodyConfig.mode ?? "none";
+		if (bodyMode === "raw-json" && bodyConfig.rawJson) {
+			if (!isValidJson(bodyConfig.rawJson)) {
+				throw new Error(
+					`API node "${node.config.label ?? node.id}": invalid JSON in request body`,
+				);
+			}
+		}
+		if (bodyMode === "raw-xml" && bodyConfig.rawXml) {
+			if (!isWellFormedXml(bodyConfig.rawXml)) {
+				throw new Error(
+					`API node "${node.config.label ?? node.id}": malformed XML in request body`,
+				);
+			}
+		}
+	}
 
 	// Build headers
 	const hasCustomHeaders = customHeaders.length > 0;
@@ -591,7 +1179,10 @@ function generateAPIStep(
 	if (hasAuthHeader || hasCustomHeaders || hasBody) {
 		code += `${indent}\tconst headers: Record<string, string> = {};\n`;
 		if (hasBody) {
-			code += `${indent}\theaders["Content-Type"] = "application/json";\n`;
+			const bodyMode = bodyConfig?.mode ?? "none";
+			const contentType =
+				bodyMode === "raw-xml" ? "application/xml" : "application/json";
+			code += `${indent}\theaders["Content-Type"] = "${contentType}";\n`;
 		}
 		// Auth header
 		if (authConfig?.type === "bearer" && authConfig.bearerToken) {
@@ -603,13 +1194,23 @@ function generateAPIStep(
 		) {
 			code += `${indent}\theaders[${JSON.stringify(authConfig.apiKeyHeader)}] = ${emitAuthValue(authConfig.apiKeyValue)};\n`;
 		} else if (isOAuth2) {
-			code += `${indent}\theaders["Authorization"] = \`Bearer \${_oauth2Token_${nodeIdToVarName(node.id)}.access_token}\`;\n`;
+			code += `${indent}\theaders["Authorization"] = \`Bearer \${_oauth2Token_${getVarName(node.id)}.access_token}\`;\n`;
 		}
-		// Custom headers
+		// Custom headers. Supports, in order:
+		//   - "env:VAR"             → this.env.VAR        (legacy prefix)
+		//   - "${secret.VAR}"       → this.env.VAR        (new picker token)
+		//   - any text with `${…}`  → interpolated template literal
+		//   - plain literal         → "quoted string"
 		for (const h of customHeaders) {
-			const val = h.value.startsWith("env:")
-				? emitEnvRef(h.value.slice(4).trim())
-				: emitInterpolatedString(h.value);
+			let val: string;
+			if (h.value.startsWith("env:")) {
+				val = emitEnvRef(h.value.slice(4).trim());
+			} else {
+				const pureSecret = h.value.match(PURE_SECRET_RE);
+				val = pureSecret
+					? emitEnvRef(pureSecret[1])
+					: emitInterpolatedString(h.value);
+			}
 			code += `${indent}\theaders[${JSON.stringify(h.key)}] = ${val};\n`;
 		}
 	}
@@ -626,10 +1227,21 @@ function generateAPIStep(
 	if (hasBody) {
 		const mode = bodyConfig?.mode ?? "none";
 		if (mode === "raw-json" && bodyConfig?.rawJson) {
-			// Always use backticks: preserves inner JSON quotes and allows ${nodeId.prop} refs
+			// Always use backticks: preserves inner JSON quotes and allows
+			// ${nodeId.prop} and ${secret.VAR} refs (both mapped via
+			// expandVariablePath so secrets resolve to this.env.VAR).
 			const dehyphenated = bodyConfig.rawJson.replace(
 				/\$\{([^}]+)\}/g,
-				(_, path: string) => `\${${path.replace(/-/g, "_")}}`,
+				(_, path: string) => `\${${expandVariablePath(path)}}`,
+			);
+			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
+		} else if (mode === "raw-xml" && bodyConfig?.rawXml) {
+			// Same backtick strategy as raw-json: preserves XML angle brackets and
+			// allows ${nodeId.prop} / ${secret.VAR} interpolation.
+			const dehyphenated = bodyConfig.rawXml.replace(
+				/\$\{([^}]+)\}/g,
+				(_, path: string) => `\${${expandVariablePath(path)}}`,
 			);
 			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
 			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
@@ -666,29 +1278,17 @@ function generateAPIStep(
 		code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
 	}
 
-	code += `${indent}}`;
-
-	// Add retry configuration if specified
-	if (failureHandling && failureHandling.maxRetries > 0) {
-		code += `, {\n`;
-		code += `${indent}\tretries: {\n`;
-		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
-		code += `${indent}\t\tdelay: "1 second",\n`;
-		code += `${indent}\t\tbackoff: "exponential",\n`;
-		code += `${indent}\t},\n`;
-		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
-		code += `${indent}}`;
-	}
-
-	code += `);\n`;
+	code += `${indent}});\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
-	code += generateProgressCall(
-		node,
-		indent,
-		"completed",
-		undefined,
-		retryVarName,
-	);
+	if (!isContinueOnFailure) {
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
+	}
 
 	// Close try/catch for return-to-checkpoint
 	if (isReturnToCheckpoint && retryVarName) {
@@ -697,11 +1297,374 @@ function generateAPIStep(
 		const maxR = failureHandling?.maxRetries ?? 0;
 		code += `${indent}} catch (_apiErr) {\n`;
 		code += `${indent}\tif (${retryVarOrig} < ${maxR}) {\n`;
-		code += `${indent}\t\tcontinue; // Return to checkpoint and retry\n`;
+		code += `${indent}\t\tcontinue ${retryVarOrig};\n`;
 		code += `${indent}\t}\n`;
 		code += `${indent}\tthrow _apiErr; // Max retries exhausted — propagate error\n`;
 		code += `${indent}}\n`;
 	}
+
+	// Close try/catch for "continue" failure handling
+	if (isContinueOnFailure) {
+		indent = indent.slice(1);
+		code += emitContinueOnFailureCatch(node, indent, varName, "_apiContErr");
+		// Always mark the node as "completed" — the "continue" strategy means
+		// this step's attempt has concluded (successfully or not) and the
+		// workflow should move on, not keep showing it as in-progress.
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
+	}
+
+	return code;
+}
+
+const NLS_RPC_METHOD: Record<string, string> = {
+	createLoan: "nlsCreateLoan",
+	cancelLoan: "nlsCancelLoan",
+	getAmortization: "nlsGetAmortization",
+	// Loan Reads
+	getLoan: "nlsGetLoan",
+	getLoanDetail1: "nlsGetLoanDetail1",
+	getPaymentInfo: "nlsGetPaymentInfo",
+	getCollectionFields: "nlsGetCollectionFields",
+	getStatuses: "nlsGetStatuses",
+	getPaymentHistory: "nlsGetPaymentHistory",
+	getPaymentsDue: "nlsGetPaymentsDue",
+	getPayoffAmounts: "nlsGetPayoffAmounts",
+	getPayoffDetails: "nlsGetPayoffDetails",
+	// Collection Comments
+	addCollectionComment: "nlsAddCollectionComment",
+	updateCollectionComment: "nlsUpdateCollectionComment",
+	// Contacts & Search
+	getContact: "nlsGetContact",
+	searchContacts: "nlsSearchContacts",
+	searchLoans: "nlsSearchLoans",
+	// Calculations
+	calculateAmortizedPayment: "nlsCalculateAmortizedPayment",
+	// Nuevas funciones
+	getContactLoans: "nlsGetContactLoans",
+	getContactPortfolio: "nlsGetContactPortfolio",
+	getContactEmployments: "nlsGetContactEmployments",
+	getLoanTransactions: "nlsGetLoanTransactions",
+	getAmortizationSchedule: "nlsGetAmortizationSchedule",
+	advancePeriod: "nlsAdvancePeriod",
+	getLoanStatusCodes: "nlsGetLoanStatusCodes",
+};
+
+/**
+ * Generate code for the prequalification RPC call to CASES_SVC.
+ * Handles both applicant and coapplicant actor types.
+ */
+function generatePrequalificationCall(
+	node: WorkflowNode,
+	indent: string,
+	fields: Array<{ fieldId: string; value: string }>,
+): string {
+	const i2 = indent + "\t";
+
+	const fieldMap: Record<string, string> = {};
+	for (const field of fields) {
+		if (field.value) {
+			fieldMap[field.fieldId] = field.value;
+		}
+	}
+
+	let code = "";
+
+	const actorTypeValue = fieldMap["actorType"]
+		? emitInterpolatedString(fieldMap["actorType"])
+		: '"applicant"';
+
+	code += `${i2}const _actorType = ${actorTypeValue} as "applicant" | "coapplicant";\n`;
+
+	const coapplicantFields = [
+		"firstName",
+		"middleName",
+		"lastName",
+		"email",
+		"birthDate",
+		"phoneNumber",
+		"taxIdType",
+		"taxIdNumber",
+		"addressStreetNumber",
+		"addressStreetName",
+		"addressApt",
+		"addressCity",
+		"addressState",
+		"addressZipCode",
+	];
+
+	code += `${i2}const _data = _actorType === "coapplicant" ? {\n`;
+	for (const field of coapplicantFields) {
+		if (fieldMap[field]) {
+			code += `${i2}\t${field}: ${emitInterpolatedString(fieldMap[field])},\n`;
+		}
+	}
+	code += `${i2}} : null;\n`;
+
+	const pullTypeValue = fieldMap["pullType"]
+		? emitInterpolatedString(fieldMap["pullType"])
+		: "undefined";
+
+	const userIdValue = fieldMap["userId"]
+		? emitInterpolatedString(fieldMap["userId"])
+		: "event.payload.clientUserId as string";
+
+	code += `${i2}const _prequal = await this.env.CASES_SVC.runPrequalification({\n`;
+	code += `${i2}\tuserJwt: event.payload._jwt as string,\n`;
+	code += `${i2}\tactorType: _actorType,\n`;
+	code += `${i2}\tuserId: _actorType === "applicant" ? ${userIdValue} : undefined,\n`;
+	code += `${i2}\tdata: _data,\n`;
+	code += `${i2}\tcaseId: event.payload.caseId as string,\n`;
+	code += `${i2}\torgId: event.payload.orgId as string | undefined,\n`;
+	code += `${i2}\tpullType: ${pullTypeValue} as "soft" | "hard" | "new" | undefined,\n`;
+	code += `${i2}});\n`;
+	code += `${i2}return _prequal as Record<string, unknown>;\n`;
+
+	return code;
+}
+
+/**
+ * Generate code for the findPrequalificationMatches RPC call to CASES_SVC.
+ */
+function generateFindMatchesCall(
+	node: WorkflowNode,
+	indent: string,
+	fields: Array<{ fieldId: string; value: string }>,
+): string {
+	const i2 = indent + "\t";
+
+	const fieldMap: Record<string, string> = {};
+	for (const field of fields) {
+		if (field.value) {
+			fieldMap[field.fieldId] = field.value;
+		}
+	}
+
+	let code = "";
+
+	const matchFields = ["taxIdNumber", "phone", "email", "userId"];
+	code += `${i2}const _matchData: Record<string, string | undefined> = {};\n`;
+	for (const f of matchFields) {
+		if (fieldMap[f]) {
+			code += `${i2}_matchData[${JSON.stringify(f)}] = ${emitInterpolatedString(fieldMap[f])};\n`;
+		}
+	}
+
+	code += `${i2}const _matches = await this.env.CASES_SVC.findPrequalificationMatches(_matchData);\n`;
+	// Wrap in { matches } to match the output schema so downstream nodes
+	// can reference ${search-matches.matches.0.userId} etc.
+	code += `${i2}return { matches: _matches } as Record<string, unknown>;\n`;
+
+	return code;
+}
+
+function generateNLSStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const cfg = node.config as NLSNodeConfig | undefined;
+	const functionId = (cfg?.functionId ?? "createLoan") as NLSFunctionId;
+	const failureHandling = cfg?.failureHandling as
+		| APIFailureHandling
+		| undefined;
+	const fields = cfg?.fields ?? [];
+	const stepName = createStepName(node);
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const isContinueOnFailure = failureHandling?.onFailure === "continue";
+	const varDecl =
+		isHoisted || isContinueOnFailure ? `${varName} = ` : `const ${varName} = `;
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+	const isReturnToCheckpoint =
+		failureHandling?.onFailure === "return-to-checkpoint";
+
+	let code = `${indent}// NLS ${functionId}: ${node.title}\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"in_progress",
+		undefined,
+		retryVarName,
+	);
+
+	if (isReturnToCheckpoint && retryVarName) {
+		code += `${indent}try {\n`;
+		indent += "\t";
+	}
+
+	// Wrap in try/catch for "continue" failure handling: swallow the error
+	// (recorded, not fatal) instead of letting the instance crash.
+	if (isContinueOnFailure) {
+		if (!isHoisted) {
+			code += `${indent}let ${varName}: Record<string, unknown> | undefined = undefined;\n`;
+		}
+		code += `${indent}try {\n`;
+		indent += "\t";
+	}
+
+	// Cloudflare Workflows requires: step.do(name, config, callback) — config MUST come before callback.
+	if (failureHandling && failureHandling.maxRetries > 0) {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, {\n`;
+		code += `${indent}\tretries: {\n`;
+		code += `${indent}\t\tlimit: ${failureHandling.maxRetries},\n`;
+		code += `${indent}\t\tdelay: "1 second",\n`;
+		code += `${indent}\t\tbackoff: "exponential",\n`;
+		code += `${indent}\t},\n`;
+		code += `${indent}\ttimeout: "${Math.round(failureHandling.timeout / 1000)} seconds",\n`;
+		code += `${indent}}, async () => {\n`;
+	} else {
+		code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	}
+
+	// Special handling for prequalification — dispatches to CASES_SVC
+	if (functionId === "prequalification") {
+		code += generatePrequalificationCall(node, indent, fields);
+	} else if (functionId === "findPrequalificationMatches") {
+		code += generateFindMatchesCall(node, indent, fields);
+	} else {
+		const rpcMethod = NLS_RPC_METHOD[functionId] ?? `nls${functionId}`;
+		// Build body object from configured fields
+		code += `${indent}\tconst _nlsBody: Record<string, unknown> = {};\n`;
+		for (const field of fields) {
+			if (!field.value) continue;
+			const valueExpr = emitInterpolatedString(field.value);
+			code += `${indent}\t_nlsBody[${JSON.stringify(field.fieldId)}] = ${valueExpr};\n`;
+		}
+		// createLoan: fall back to the case number as loanNumber when the node
+		// doesn't map one explicitly (proxy-svc uses it only if loanNumber is
+		// absent — see createLoan.ts resolution order). Not a mappable field in
+		// the designer, so this only applies when absent from the config.
+		if (
+			functionId === "createLoan" &&
+			!fields.some((f) => f.fieldId === "caseNumber" && f.value)
+		) {
+			code += `${indent}\t_nlsBody["caseNumber"] = event.payload.caseNumber as string;\n`;
+		}
+
+		code += `${indent}\tconst _nlsResult = await this.env.PROXY_SVC.${rpcMethod}({\n`;
+		code += `${indent}\t\tbearerToken: event.payload._jwt as string,\n`;
+		code += `${indent}\t\tbody: _nlsBody,\n`;
+		code += `${indent}\t});\n`;
+		code += `${indent}\treturn _nlsResult as Record<string, unknown>;\n`;
+	}
+	code += `${indent}});\n`;
+	code += generateCaseObjectCall(node, indent, varName, retryVarName);
+	// findPrequalificationMatches returns match data, not loan data — skip loan step.
+	if (functionId !== "findPrequalificationMatches") {
+		code += generateCaseLoanDataCall(
+			node,
+			indent,
+			varName,
+			functionId,
+			retryVarName,
+		);
+	}
+	if (!isContinueOnFailure) {
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
+	}
+
+	if (isReturnToCheckpoint && retryVarName) {
+		indent = indent.slice(1);
+		const maxR = failureHandling?.maxRetries ?? 0;
+		code += `${indent}} catch (_nlsErr) {\n`;
+		code += `${indent}\tif (${retryVarName} < ${maxR}) {\n`;
+		code += `${indent}\t\tcontinue ${retryVarName};\n`;
+		code += `${indent}\t}\n`;
+		code += `${indent}\tthrow _nlsErr; // Max retries exhausted — propagate error\n`;
+		code += `${indent}}\n`;
+	}
+
+	// Close try/catch for "continue" failure handling
+	if (isContinueOnFailure) {
+		indent = indent.slice(1);
+		code += emitContinueOnFailureCatch(node, indent, varName, "_nlsContErr");
+		// Always mark the node as "completed" — the "continue" strategy means
+		// this step's attempt has concluded (successfully or not) and the
+		// workflow should move on, not keep showing it as in-progress.
+		code += generateProgressCall(
+			node,
+			indent,
+			"completed",
+			undefined,
+			retryVarName,
+		);
+	}
+
+	return code;
+}
+
+/**
+ * Generate code for a GeneratePDF node.
+ *
+ * Fills the AcroForm text fields of the selected PDF template with the
+ * configured (possibly interpolated) values, flattens the result, and
+ * uploads it to doc-svc via `CASES_SVC.generatePdfDocument`. The RPC returns
+ * `{ documentId, fileName }`, captured in the node's output variable so
+ * downstream nodes can reference `${<alias>.documentId}`.
+ */
+function generateGeneratePdfStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const cfg = node.config as GeneratePdfNodeConfig | undefined;
+	const pdfTemplateId = cfg?.pdfTemplateId ?? "";
+	const pdfTemplateVersionId = cfg?.pdfTemplateVersionId;
+	const fieldMappings = cfg?.fieldMappings ?? [];
+	const stepName = createStepName(node);
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = isHoisted ? `${varName} = ` : `const ${varName} = `;
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	let code = `${indent}// Generate PDF: ${node.title}\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"in_progress",
+		undefined,
+		retryVarName,
+	);
+	code += `${indent}${varDecl}await step.do(${stepNameExpr}, async () => {\n`;
+	code += `${indent}\tconst _pdfFieldValues: Record<string, string> = {};\n`;
+	for (const mapping of fieldMappings) {
+		if (!mapping.fieldName || !mapping.value) continue;
+		const valueExpr = emitInterpolatedString(mapping.value);
+		code += `${indent}\t_pdfFieldValues[${JSON.stringify(mapping.fieldName)}] = ${valueExpr};\n`;
+	}
+	code += `${indent}\treturn await this.env.CASES_SVC.generatePdfDocument({\n`;
+	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
+	code += `${indent}\t\tpdfTemplateId: ${emitInterpolatedString(pdfTemplateId)},\n`;
+	if (pdfTemplateVersionId) {
+		code += `${indent}\t\tpdfTemplateVersionId: ${JSON.stringify(pdfTemplateVersionId)},\n`;
+	}
+	code += `${indent}\t\tfieldValues: _pdfFieldValues,\n`;
+	code += `${indent}\t});\n`;
+	code += `${indent}});\n`;
+	code += generateCaseObjectCall(node, indent, varName, retryVarName);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
 
 	return code;
 }
@@ -761,8 +1724,13 @@ function generateTransformStep(
 	const stepName = createStepName(node);
 	const transformCode = (node.config.code as string) || "// Transform logic";
 	const captureResult = nodeHasOutputSchema(node);
-	const varName = nodeIdToVarName(node.id);
-	const varDecl = captureResult ? `const ${varName} = ` : "";
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = captureResult
+		? isHoisted
+			? `${varName} = `
+			: `const ${varName} = `
+		: "";
 	const resultCast = captureResult ? " as Record<string, unknown>" : "";
 	const stepNameExpr = retryVarName
 		? retryStepNameExpr(stepName, retryVarName)
@@ -897,18 +1865,26 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 			code += `${indent}\t\ttemplateName: "", // TODO: set Mandrill template name\n`;
 		}
 		if (subject) {
-			code += `${indent}\t\tsubject: "${escapeString(subject)}",\n`;
+			code += `${indent}\t\tsubject: ${emitInterpolatedString(subject)},\n`;
 		}
 		if (mergeVars.length > 0) {
 			code += `${indent}\t\tmergeVars: {\n`;
 			for (const mv of mergeVars) {
 				const key = escapeString(mv.key.toUpperCase());
 				const value = mv.value.trim();
-				// If value looks like a JS expression (contains ".", "[", "("), emit it raw; otherwise as string literal
-				const isExpression = /[.[\](]/.test(value);
-				const valueCode = isExpression
-					? `${value} as string`
-					: `"${escapeString(value)}"`;
+				let valueCode: string;
+				if (hasTemplateVars(value)) {
+					// Template string with variable interpolation → JS template literal
+					// with each ${alias.x} token expanded via expandVariablePath so that
+					// start-node vars resolve to event.payload.x at runtime.
+					valueCode = emitInterpolatedString(value);
+				} else if (/[.[\](]/.test(value)) {
+					// Plain JS expression (path access) → emit raw with type cast
+					valueCode = `${value} as string`;
+				} else {
+					// Plain string literal
+					valueCode = `"${escapeString(value)}"`;
+				}
 				code += `${indent}\t\t\t${key}: ${valueCode},\n`;
 			}
 			code += `${indent}\t\t},\n`;
@@ -928,7 +1904,7 @@ function generateMessageStep(node: WorkflowNode, indent: string): string {
 		code += `${indent}\tawait notifications.sendSms({\n`;
 		code += `${indent}\t\tto: toList.length === 1 ? toList[0] : toList,\n`;
 		if (body) {
-			code += `${indent}\t\tbody: "${escapeString(body)}",\n`;
+			code += `${indent}\t\tbody: ${emitInterpolatedString(body)},\n`;
 		} else {
 			code += `${indent}\t\tbody: "", // TODO: set SMS body\n`;
 		}
@@ -983,6 +1959,252 @@ function generateCheckpointStep(
 }
 
 /**
+ * Generate code for a Challenge node with challengeType === "signature".
+ *
+ * The generated workflow step:
+ * 1. Waits for operator acceptance (`signature_acceptance` event). If rejected
+ *    or timed-out the node resolves with `signed: false, rejected: true`.
+ * 2. Only if accepted: calls `CASES_SVC.createSignatureRequest(...)` — this
+ *    triggers the Dropbox Sign API call.
+ * 3. Waits for the "signature_signed" event forwarded by the webhook handler
+ *    (webhook → cases-svc → WORKFLOW_SVC.sendEvent).
+ *
+ * Template expressions in templateId, signers.email/name, and customField.value
+ * are resolved using `escapeStringTemplate` so they evaluate against runtime
+ * workflow variables (same pattern as Message node mergeVars).
+ */
+function generateSignatureChallengeStep(
+	node: WorkflowNode,
+	config: SignatureChallengeConfig | undefined,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	const outputVar = getVarName(node.id);
+	const rawVar = `_${outputVar}Evt`;
+	const acceptVar = `_${outputVar}AcceptEvt`;
+	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
+	const timeout = config?.challengeTimeout;
+	const timeoutStr = timeout ? timeoutConfigToStr(timeout) : "72 hours";
+	const timeoutMs = timeout
+		? timeoutConfigToMs(timeout)
+		: timeoutConfigToMs({ value: 72, unit: "hours" });
+	// staleTimeout reminders (if configured) fire during either wait phase,
+	// but both phases still resolve to timedOut:true — never crash the
+	// instance — once challengeTimeout elapses.
+	const chunking = resolveWaitChunking(
+		node.staleTimeout,
+		timeoutMs,
+		timeoutStr,
+	);
+
+	const acceptStepName = `${stepName}-accept`;
+	const acceptStepNameExpr = retryVarName
+		? retryStepNameExpr(acceptStepName, retryVarName)
+		: `"${acceptStepName}"`;
+
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	const i1 = indent + "\t";
+	const i2 = indent + "\t\t";
+
+	// Build signers JSON
+	const signersLines: string[] = [];
+	for (const signer of config?.signers ?? []) {
+		const emailExpr =
+			signer.source === "variable" && signer.email
+				? emitInterpolatedString(signer.email)
+				: `""`;
+		const nameExpr =
+			signer.source === "variable" && signer.name
+				? emitInterpolatedString(signer.name)
+				: `""`;
+		const phoneExpr = signer.smsPhoneNumber
+			? emitInterpolatedString(signer.smsPhoneNumber)
+			: "undefined";
+		signersLines.push(
+			`{ role: ${JSON.stringify(signer.role)}, source: ${JSON.stringify(signer.source)}` +
+				(signer.caseRole
+					? `, caseRole: ${JSON.stringify(signer.caseRole)}`
+					: "") +
+				(signer.source === "variable"
+					? `, email: ${emailExpr}, name: ${nameExpr}`
+					: "") +
+				(signer.smsPhoneNumber ? `, smsPhoneNumber: ${phoneExpr}` : "") +
+				" }",
+		);
+	}
+
+	// Build customFields JSON
+	const cfLines: string[] = [];
+	for (const cf of config?.customFields ?? []) {
+		const valueExpr = cf.value ? emitInterpolatedString(cf.value) : '""';
+		cfLines.push(
+			`{ apiId: ${JSON.stringify(cf.apiId)}, name: ${JSON.stringify(cf.name)}, value: ${valueExpr} }`,
+		);
+	}
+
+	const templateIdExpr = config?.templateId
+		? emitInterpolatedString(config.templateId)
+		: '""';
+
+	let code = `${indent}// Signature Challenge: ${node.title} (flow: ${config?.flow ?? "email_only"} | roles: ${roles})\n`;
+
+	// Phase 1: wait for operator acceptance before creating the contract.
+	// Uses suffix "accept" in the progress step.do name to avoid collision with
+	// the subsequent "waiting_event" for the signature itself (suffix "sig").
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		"signature_acceptance",
+		retryVarName,
+		undefined,
+		"accept",
+	);
+	code += `${indent}${acceptVar} = await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
+	code += `${indent}\t${acceptStepNameExpr},\n`;
+	code += `${indent}\t"signature_acceptance",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
+	code += `${indent});\n`;
+
+	// Determine if the operator accepted
+	code += `${indent}const _${outputVar}Accepted = ${acceptVar} !== null && !!(${acceptVar} as { payload: { accepted?: boolean } }).payload?.accepted;\n`;
+
+	// Phase 2 (only if accepted): create signature request and wait for signatures.
+	code += `${indent}if (_${outputVar}Accepted) {\n`;
+
+	// Step: create the signature request via cases-svc RPC
+	code += `${i1}await step.do(\`${stepName}-create\`, async () => {\n`;
+	code += `${i2}const _sigTemplateId = ${templateIdExpr};\n`;
+	code += `${i2}const _sigSigners = [\n`;
+	for (const line of signersLines) {
+		code += `${i2}\t${line},\n`;
+	}
+	code += `${i2}];\n`;
+	code += `${i2}const _sigCustomFields = [\n`;
+	for (const line of cfLines) {
+		code += `${i2}\t${line},\n`;
+	}
+	code += `${i2}];\n`;
+	code += `${i2}await this.env.CASES_SVC.createSignatureRequest({\n`;
+	code += `${i2}\tcaseId: event.payload.caseId as string,\n`;
+	code += `${i2}\tworkflowInstanceId: event.instanceId,\n`;
+	code += `${i2}\tworkflowNodeId: ${JSON.stringify(node.id)},\n`;
+	code += `${i2}\tnodeConfig: {\n`;
+	code += `${i2}\t\ttemplateId: _sigTemplateId,\n`;
+	code += `${i2}\t\tflow: ${JSON.stringify(config?.flow ?? "email_only")},\n`;
+	if (config?.title) {
+		code += `${i2}\t\ttitle: ${emitInterpolatedString(config.title)},\n`;
+	}
+	if (config?.subject) {
+		code += `${i2}\t\tsubject: ${emitInterpolatedString(config.subject)},\n`;
+	}
+	if (config?.message) {
+		code += `${i2}\t\tmessage: ${emitInterpolatedString(config.message)},\n`;
+	}
+	if (config?.testMode !== undefined) {
+		code += `${i2}\t\ttestMode: ${config.testMode},\n`;
+	}
+	if (config?.smsAuthentication) {
+		code += `${i2}\t\tsmsAuthentication: true,\n`;
+	}
+	if ((config?.ccEmailAddresses ?? []).length > 0) {
+		code += `${i2}\t\tccEmailAddresses: ${JSON.stringify(config!.ccEmailAddresses)},\n`;
+	}
+	code += `${i2}\t\tsigners: _sigSigners,\n`;
+	code += `${i2}\t\tcustomFields: _sigCustomFields,\n`;
+	code += `${i2}\t},\n`;
+	code += `${i2}});\n`;
+	code += `${i1}});\n`;
+
+	// Wait for "signature_signed" event sent by webhook handler.
+	// Uses suffix "sig" to give this progress step a unique step.do name,
+	// since the acceptance phase already claimed "_prog-{nodeId}-waiting_event-accept".
+	code += generateProgressCall(
+		node,
+		i1,
+		"waiting_event",
+		"signature_signed",
+		retryVarName,
+		undefined,
+		"sig",
+	);
+	code += `${i1}${rawVar} = await waitForEventDurable(\n`;
+	code += `${i1}\tstep,\n`;
+	code += `${i1}\tthis.env,\n`;
+	code += `${i1}\tevent.instanceId,\n`;
+	code += `${i1}\tevent.payload.caseId as string,\n`;
+	code += `${i1}\t"${escapeString(node.id)}",\n`;
+	code += `${i1}\t"${escapeString(node.type)}",\n`;
+	code += `${i1}\t${stepNameExpr},\n`;
+	code += `${i1}\t"signature_signed",\n`;
+	code += emitDurableWaitTailArgs(node, i1, chunking);
+	code += `${i1});\n`;
+	code += generateCaseObjectCall(node, i1, rawVar, retryVarName);
+
+	// Normalize output inside the accepted branch.
+	// rawVar === null  → timed out waiting for signatures.
+	// payload.signed === false → negative outcome (declined / canceled / errored).
+	// anything else   → positive outcome (all_signed).
+	code += `${i1}{\n`;
+	code += `${i1}\tconst _sigEvtPayload = (${rawVar} as { payload?: { signed?: boolean; reason?: string; signatureRequestId?: string; documentId?: string } } | null)?.payload;\n`;
+	code += `${i1}\tconst _sigFailed = _sigEvtPayload?.signed === false;\n`;
+	code += `${i1}\t${outputVar} = (${rawVar} === null)\n`;
+	code += `${i1}\t\t? { signed: false, timedOut: true, rejected: false, declined: false, canceled: false, errored: false, reason: "timedOut", signatureRequestId: null, documentId: null }\n`;
+	code += `${i1}\t\t: _sigFailed\n`;
+	code += `${i1}\t\t\t? {\n`;
+	code += `${i1}\t\t\t\tsigned: false,\n`;
+	code += `${i1}\t\t\t\ttimedOut: false,\n`;
+	code += `${i1}\t\t\t\trejected: false,\n`;
+	code += `${i1}\t\t\t\tdeclined: _sigEvtPayload?.reason === "declined",\n`;
+	code += `${i1}\t\t\t\tcanceled: _sigEvtPayload?.reason === "canceled",\n`;
+	code += `${i1}\t\t\t\terrored: _sigEvtPayload?.reason === "errored",\n`;
+	code += `${i1}\t\t\t\treason: _sigEvtPayload?.reason ?? null,\n`;
+	code += `${i1}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
+	code += `${i1}\t\t\t\tdocumentId: null,\n`;
+	code += `${i1}\t\t\t}\n`;
+	code += `${i1}\t\t\t: {\n`;
+	code += `${i1}\t\t\t\tsigned: true,\n`;
+	code += `${i1}\t\t\t\ttimedOut: false,\n`;
+	code += `${i1}\t\t\t\trejected: false,\n`;
+	code += `${i1}\t\t\t\tdeclined: false,\n`;
+	code += `${i1}\t\t\t\tcanceled: false,\n`;
+	code += `${i1}\t\t\t\terrored: false,\n`;
+	code += `${i1}\t\t\t\treason: null,\n`;
+	code += `${i1}\t\t\t\tsignatureRequestId: _sigEvtPayload?.signatureRequestId ?? null,\n`;
+	code += `${i1}\t\t\t\tdocumentId: _sigEvtPayload?.documentId ?? null,\n`;
+	code += `${i1}\t\t\t};\n`;
+	code += `${i1}}\n`;
+
+	// Else branch: operator rejected or timed-out at the acceptance phase.
+	code += `${indent}} else {\n`;
+	code += generateCaseObjectCall(node, i1, acceptVar, retryVarName);
+	code += `${i1}${outputVar} = (${acceptVar} === null)\n`;
+	code += `${i1}\t? { signed: false, timedOut: true, rejected: false, declined: false, canceled: false, errored: false, reason: "timedOut", signatureRequestId: null, documentId: null }\n`;
+	code += `${i1}\t: { signed: false, timedOut: false, rejected: true, declined: false, canceled: false, errored: false, reason: "rejected", signatureRequestId: null, documentId: null };\n`;
+	code += `${indent}}\n`;
+
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
  * Generate code for a Challenge node (waitForEvent)
  */
 function generateChallengeStep(
@@ -990,13 +2212,39 @@ function generateChallengeStep(
 	indent: string,
 	retryVarName?: string,
 ): string {
-	const stepName = createStepName(node);
-	const varName = createVariableName(node.title, "challengeResult");
 	const config = node.config as ChallengeNodeConfig | undefined;
 	const challengeType = config?.challengeType || "acceptance";
+
+	// Signature challenges have a completely different execution pattern:
+	// 1. Create the Dropbox Sign request via cases-svc RPC
+	// 2. Wait for the "signature_signed" event sent by the webhook handler
+	if (challengeType === "signature") {
+		return generateSignatureChallengeStep(
+			node,
+			config as SignatureChallengeConfig,
+			indent,
+			retryVarName,
+		);
+	}
+	const stepName = createStepName(node);
+	// `outputVar` is the public-facing alias used by downstream tokens (e.g. `approval.accepted`).
+	// `rawVar` is the internal waitForEvent result; suffixed to avoid collision with outputVar.
+	const outputVar = getVarName(node.id);
+	const rawVar = `_${outputVar}Evt`;
 	const timeout = config?.challengeTimeout;
-	const timeoutStr = timeout ? `${timeout.value} ${timeout.unit}` : "24 hours";
+	const timeoutStr = timeout ? timeoutConfigToStr(timeout) : "24 hours";
+	const timeoutMs = timeout
+		? timeoutConfigToMs(timeout)
+		: timeoutConfigToMs({ value: 24, unit: "hours" });
 	const eventType = challengeType;
+	// staleTimeout reminders (if configured) fire during the wait, but the
+	// challenge always resolves to timedOut:true — never crashes the
+	// instance — once its own challengeTimeout elapses.
+	const chunking = resolveWaitChunking(
+		node.staleTimeout,
+		timeoutMs,
+		timeoutStr,
+	);
 
 	const inlineRetries = config?.retries;
 	const hasInlineRetry = inlineRetries && (inlineRetries.maxRetries ?? 0) > 0;
@@ -1029,6 +2277,7 @@ function generateChallengeStep(
 			stepNameExpr = `${chVar} > 0 ? \`${stepName}-ch\${${chVar}}\` : "${stepName}"`;
 		}
 
+		code += emitChallengeLabelsCaseObjectCall(node, innerIndent, retryVarName);
 		code += generateProgressCall(
 			node,
 			innerIndent,
@@ -1037,20 +2286,25 @@ function generateChallengeStep(
 			retryVarName,
 			chVar,
 		);
-		code += `${innerIndent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${innerIndent}${rawVar} = await waitForEventDurable(\n`;
+		code += `${innerIndent}\tstep,\n`;
+		code += `${innerIndent}\tthis.env,\n`;
+		code += `${innerIndent}\tevent.instanceId,\n`;
+		code += `${innerIndent}\tevent.payload.caseId as string,\n`;
+		code += `${innerIndent}\t"${escapeString(node.id)}",\n`;
+		code += `${innerIndent}\t"${escapeString(node.type)}",\n`;
 		code += `${innerIndent}\t${stepNameExpr},\n`;
-		code += `${innerIndent}\t{\n`;
-		code += `${innerIndent}\t\ttype: "${challengeType}",\n`;
-		code += `${innerIndent}\t\ttimeout: "${timeoutStr}",\n`;
-		code += `${innerIndent}\t},\n`;
+		code += `${innerIndent}\t"${challengeType}",\n`;
+		code += emitDurableWaitTailArgs(node, innerIndent, chunking);
 		code += `${innerIndent});\n`;
 		code += generateCaseObjectCall(
 			node,
 			innerIndent,
-			varName,
+			rawVar,
 			retryVarName,
 			chVar,
 		);
+		code += emitChallengeOutputAssignment(innerIndent, rawVar, outputVar);
 		code += generateProgressCall(
 			node,
 			innerIndent,
@@ -1060,7 +2314,7 @@ function generateChallengeStep(
 			chVar,
 		);
 		// If the challenge was accepted, exit the inline retry loop
-		code += `${innerIndent}if ((${varName} as { payload: { accepted: boolean } }).payload.accepted) break;\n`;
+		code += `${innerIndent}if (${outputVar}.accepted) break;\n`;
 		code += `${indent}}\n`;
 	} else {
 		// No inline retry — single waitForEvent
@@ -1068,6 +2322,7 @@ function generateChallengeStep(
 			? retryStepNameExpr(stepName, retryVarName)
 			: `"${stepName}"`;
 
+		code += emitChallengeLabelsCaseObjectCall(node, indent, retryVarName);
 		code += generateProgressCall(
 			node,
 			indent,
@@ -1075,14 +2330,19 @@ function generateChallengeStep(
 			eventType,
 			retryVarName,
 		);
-		code += `${indent}${varName} = await step.waitForEvent<{ accepted: boolean }>(\n`;
+		code += `${indent}${rawVar} = await waitForEventDurable(\n`;
+		code += `${indent}\tstep,\n`;
+		code += `${indent}\tthis.env,\n`;
+		code += `${indent}\tevent.instanceId,\n`;
+		code += `${indent}\tevent.payload.caseId as string,\n`;
+		code += `${indent}\t"${escapeString(node.id)}",\n`;
+		code += `${indent}\t"${escapeString(node.type)}",\n`;
 		code += `${indent}\t${stepNameExpr},\n`;
-		code += `${indent}\t{\n`;
-		code += `${indent}\t\ttype: "${challengeType}",\n`;
-		code += `${indent}\t\ttimeout: "${timeoutStr}",\n`;
-		code += `${indent}\t},\n`;
+		code += `${indent}\t"${challengeType}",\n`;
+		code += emitDurableWaitTailArgs(node, indent, chunking);
 		code += `${indent});\n`;
-		code += generateCaseObjectCall(node, indent, varName, retryVarName);
+		code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
+		code += emitChallengeOutputAssignment(indent, rawVar, outputVar);
 		code += generateProgressCall(
 			node,
 			indent,
@@ -1091,6 +2351,191 @@ function generateChallengeStep(
 			retryVarName,
 		);
 	}
+
+	return code;
+}
+
+/**
+ * Emits the assignment that normalizes the raw `waitForEvent` result into the
+ * fixed Challenge output shape exposed via the VariablePicker
+ * (CHALLENGE_OUTPUT_SCHEMA):
+ *
+ *   { accepted, timedOut, respondedBy, respondedAt }
+ *
+ * `waitForEvent` returns `null` on timeout and an object `{ payload: ... }`
+ * otherwise, so we map the two cases explicitly here.
+ */
+function emitChallengeOutputAssignment(
+	indent: string,
+	rawVar: string,
+	outputVar: string,
+): string {
+	let code = "";
+	code += `${indent}${outputVar} = (${rawVar} === null)\n`;
+	code += `${indent}\t? { accepted: false, timedOut: true, respondedBy: null, respondedAt: null }\n`;
+	code += `${indent}\t: {\n`;
+	code += `${indent}\t\taccepted: !!(${rawVar} as { payload: { accepted?: boolean } }).payload?.accepted,\n`;
+	code += `${indent}\t\ttimedOut: false,\n`;
+	code += `${indent}\t\trespondedBy:\n`;
+	code += `${indent}\t\t\t(${rawVar} as { payload: { respondedBy?: string | null } }).payload\n`;
+	code += `${indent}\t\t\t\t?.respondedBy ?? null,\n`;
+	code += `${indent}\t\trespondedAt: new Date().toISOString(),\n`;
+	code += `${indent}\t};\n`;
+	return code;
+}
+
+/**
+ * Generate code for a Promotion node.
+ *
+ * Promotion nodes wait (without timeout) for a `promotion_selection` event
+ * emitted by `cases-svc` once the user confirms their selection in the UI.
+ * The event payload carries the full snapshot (promotionId, selectedTerm,
+ * monthlyPayment, etc.) which we normalize into the fixed output shape so
+ * downstream nodes can reference it via `${nodeId.monthlyPayment}` etc.
+ */
+function generatePromotionStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	// `outputVar` is the public alias; `rawVar` is the internal event result variable.
+	const outputVar = getVarName(node.id);
+	const rawVar = `_${outputVar}Evt`;
+	const eventType = "promotion_selection";
+
+	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
+
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	// Promotion has no timeout/negative branch: it waits indefinitely
+	// (chunked by staleTimeout when configured) until cases-svc forwards the
+	// user's selection. Wrap with a Checkpoint upstream if the business
+	// wants to guard against this.
+	const chunking = resolveWaitChunking(node.staleTimeout, undefined, undefined);
+
+	let code = `${indent}// Promotion: ${node.title} (roles: ${roles})\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		eventType,
+		retryVarName,
+	);
+	code += `${indent}${rawVar} = await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
+	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}\t"${eventType}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
+	code += `${indent});\n`;
+	code += generateCaseObjectCall(node, indent, rawVar, retryVarName);
+	code += emitPromotionOutputAssignment(indent, rawVar, outputVar);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
+ * Emits the assignment that normalizes the raw `waitForEvent` result into the
+ * fixed Promotion output shape exposed via the VariablePicker
+ * (PROMOTION_OUTPUT_SCHEMA).
+ *
+ * `waitForEvent` on Promotion is expected to resolve with a non-null object
+ * (we use a very long timeout); if by accident it returns `null` we fall back
+ * to safe zeros so downstream nodes do not crash.
+ */
+function emitPromotionOutputAssignment(
+	indent: string,
+	rawVar: string,
+	outputVar: string,
+): string {
+	let code = "";
+	code += `${indent}${outputVar} = (${rawVar} === null)\n`;
+	code += `${indent}\t? { promotionId: "", promotionName: "", selectedTerm: 0, finalAmount: 0, monthlyPayment: 0, interestRate: 0, downPayment: 0, contractorFee: 0, commission: 0, selectedBy: "", selectedAt: "" }\n`;
+	code += `${indent}\t: {\n`;
+	code += `${indent}\t\tpromotionId: String((${rawVar} as { payload: { promotionId?: string } }).payload?.promotionId ?? ""),\n`;
+	code += `${indent}\t\tpromotionName: String((${rawVar} as { payload: { promotionName?: string } }).payload?.promotionName ?? ""),\n`;
+	code += `${indent}\t\tselectedTerm: Number((${rawVar} as { payload: { selectedTerm?: number } }).payload?.selectedTerm ?? 0),\n`;
+	code += `${indent}\t\tfinalAmount: Number((${rawVar} as { payload: { finalAmount?: number } }).payload?.finalAmount ?? 0),\n`;
+	code += `${indent}\t\tmonthlyPayment: Number((${rawVar} as { payload: { monthlyPayment?: number } }).payload?.monthlyPayment ?? 0),\n`;
+	code += `${indent}\t\tinterestRate: Number((${rawVar} as { payload: { interestRate?: number } }).payload?.interestRate ?? 0),\n`;
+	code += `${indent}\t\tdownPayment: Number((${rawVar} as { payload: { downPayment?: number } }).payload?.downPayment ?? 0),\n`;
+	code += `${indent}\t\tcontractorFee: Number((${rawVar} as { payload: { contractorFee?: number } }).payload?.contractorFee ?? 0),\n`;
+	code += `${indent}\t\tcommission: Number((${rawVar} as { payload: { commission?: number } }).payload?.commission ?? 0),\n`;
+	code += `${indent}\t\tselectedBy: String((${rawVar} as { payload: { selectedBy?: string } }).payload?.selectedBy ?? ""),\n`;
+	code += `${indent}\t\tselectedAt: String((${rawVar} as { payload: { selectedAt?: string } }).payload?.selectedAt ?? new Date().toISOString()),\n`;
+	code += `${indent}\t};\n`;
+	return code;
+}
+
+/**
+ * Generate code for an AddCard node.
+ *
+ * Pauses the workflow until the responsible role submits card data
+ * via the cases-svc endpoint. The event `card-added-<stepName>` is
+ * sent by cases-svc after a successful proxy-svc card registration.
+ */
+function generateAddCardStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	const roles = node.roles.length > 0 ? node.roles.join(", ") : "any";
+	const varName = getVarName(node.id);
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = isHoisted ? `${varName} = ` : `const ${varName} = `;
+	const eventType = `card-added-${stepName}`;
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	// AddCard has no timeout/negative branch, so it must never give up: waits
+	// forever (chunked by staleTimeout when configured) instead of crashing
+	// the instance the way a raw, unwrapped 72h `step.waitForEvent` used to.
+	const chunking = resolveWaitChunking(node.staleTimeout, undefined, undefined);
+
+	let code = `${indent}// AddCard: ${node.title} (roles: ${roles})\n`;
+	code += `${indent}// Waits for sendEvent({ type: "${eventType}", payload: { last4, brand } }) from cases-svc\n`;
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		eventType,
+		retryVarName,
+	);
+	code += `${indent}${varDecl}(await waitForEventDurable(\n`;
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
+	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}\t"${escapeString(eventType)}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
+	code += `${indent}))!.payload as Record<string, unknown>;\n`;
+	code += generateCaseObjectCall(node, indent, varName);
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
 
 	return code;
 }
@@ -1202,7 +2647,9 @@ function findConvergenceNode(
 	// Build a set of back-edges to exclude: Reject → Checkpoint edges
 	const backEdges = new Set<string>();
 	for (const zone of retryZones) {
-		backEdges.add(`${zone.rejectNodeId}→${zone.checkpointNodeId}`);
+		for (const rejectId of zone.rejectNodeIds) {
+			backEdges.add(`${rejectId}→${zone.checkpointNodeId}`);
+		}
 	}
 
 	const forwardEdges = (id: string): string[] =>
@@ -1239,6 +2686,210 @@ function findConvergenceNode(
 }
 
 /**
+ * Generate code for an ExternalLink node.
+ * 1. step.do to dispatch the external link (calls CASES_SVC.dispatchExternalLink)
+ * 2. progress waiting_event
+ * 3. step.waitForEvent for the external user response
+ * 4. Persist output in case object
+ * 5. If challenge mode → branching with accepted/rejected
+ */
+function generateExternalLinkStep(
+	node: WorkflowNode,
+	indent: string,
+	retryVarName?: string,
+): string {
+	const stepName = createStepName(node);
+	const config = node.config as {
+		mode?: string;
+		linkTtl?: { value?: number; unit?: string };
+		recipient?: {
+			emailExpression?: string;
+			phoneExpression?: string;
+			nameExpression?: string;
+		};
+		channels?: string[];
+		formConfig?: { formId?: string; formVersion?: number };
+		challengeConfig?: {
+			timeout?: { value?: number; unit?: string };
+			pullType?: "soft" | "hard" | "new";
+		};
+		emailConfig?: {
+			templateName?: string;
+			subject?: string;
+			mergeVars?: { key: string; value: string }[];
+		};
+		smsConfig?: { body?: string };
+	};
+	const mode = config.mode ?? "form";
+	const ttlValue = config.linkTtl?.value ?? 72;
+	const ttlUnit = config.linkTtl?.unit ?? "hours";
+	const ttlHours = ttlUnit === "days" ? ttlValue * 24 : ttlValue;
+	const graceHours = 1;
+	const waitTimeout = `${ttlHours + graceHours} hours`;
+	const waitTimeoutMs = (ttlHours + graceHours) * TIMEOUT_UNIT_MS.hours;
+
+	const eventType =
+		mode === "challenge"
+			? `external-acceptance-${stepName}`
+			: `external-form-${stepName}`;
+
+	const stepNameExpr = retryVarName
+		? retryStepNameExpr(stepName, retryVarName)
+		: `"${stepName}"`;
+
+	const isChallenge = mode === "challenge";
+	// Challenge mode has a rejected/timed-out branch, so once the (ttl +
+	// grace) deadline elapses it resolves to timedOut:true instead of
+	// crashing. Form mode has no such branch — the link's own ttl already
+	// bounds how long it stays *valid*, but the workflow step itself must
+	// keep waiting (in case ops resend a fresh link) instead of dying.
+	const chunking = isChallenge
+		? resolveWaitChunking(node.staleTimeout, waitTimeoutMs, waitTimeout)
+		: resolveWaitChunking(node.staleTimeout, undefined, waitTimeout);
+	const outputVar = getVarName(node.id);
+	const rawVar = isChallenge ? `_${outputVar}Evt` : outputVar;
+	// Always capture: form mode stores the external user's payload; challenge mode
+	// stores accepted/rejected. Both are the primary output of this node.
+	const captureResult = true;
+	const isHoisted = _hoistedNodeIds.has(node.id);
+	const varDecl = captureResult
+		? isHoisted || isChallenge
+			? `${rawVar} = `
+			: `const ${rawVar} = `
+		: "";
+
+	let code = `${indent}// ExternalLink: ${node.title} (mode: ${mode})\n`;
+
+	// Step 1: dispatch the external link
+	code += `${indent}await step.do("dispatch-${stepName}", async () => {\n`;
+	const emailExpr = config.recipient?.emailExpression ?? "";
+	const phoneExpr = config.recipient?.phoneExpression ?? "";
+	const nameExpr = config.recipient?.nameExpression ?? "";
+	const channels = config.channels ?? ["email"];
+	const channelsLit = `[${channels.map((c) => `"${escapeString(c)}"`).join(", ")}]`;
+
+	code += `${indent}\tconst recipientEmail = ${emailExpr ? emitInterpolatedString(emailExpr) : "undefined"};\n`;
+	code += `${indent}\tconst recipientPhone = ${phoneExpr ? emitInterpolatedString(phoneExpr) : "undefined"};\n`;
+	code += `${indent}\tconst recipientName = ${nameExpr ? emitInterpolatedString(nameExpr) : "undefined"};\n`;
+	code += `${indent}\tawait this.env.CASES_SVC.dispatchExternalLink({\n`;
+	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
+	code += `${indent}\t\tinstanceId: event.instanceId,\n`;
+	code += `${indent}\t\tnodeId: "${escapeString(node.id)}",\n`;
+	code += `${indent}\t\tstepName: "${escapeString(stepName)}",\n`;
+	code += `${indent}\t\tmode: "${mode}",\n`;
+	code += `${indent}\t\teventType: "${escapeString(eventType)}",\n`;
+	code += `${indent}\t\trecipient: { email: recipientEmail, phone: recipientPhone, name: recipientName },\n`;
+	code += `${indent}\t\tchannels: ${channelsLit},\n`;
+	code += `${indent}\t\tttlSeconds: ${ttlHours * 3600},\n`;
+
+	if (mode === "form" && config.formConfig?.formId) {
+		code += `${indent}\t\tformId: "${escapeString(config.formConfig.formId)}",\n`;
+		if (config.formConfig.formVersion !== undefined) {
+			code += `${indent}\t\tformVersion: ${config.formConfig.formVersion},\n`;
+		}
+	}
+	if (mode === "challenge" && config.challengeConfig) {
+		const challengePayload: Record<string, unknown> = {
+			challengeType: "acceptance",
+			timeout: config.challengeConfig.timeout,
+		};
+		if (config.challengeConfig.pullType) {
+			challengePayload.pullType = config.challengeConfig.pullType;
+		}
+		code += `${indent}\t\tchallengeConfig: ${JSON.stringify(challengePayload)},\n`;
+	}
+	if (config.emailConfig?.templateName) {
+		code += `${indent}\t\temailConfig: {\n`;
+		code += `${indent}\t\t\ttemplateName: "${escapeString(config.emailConfig.templateName)}",\n`;
+		if (config.emailConfig.subject) {
+			code += `${indent}\t\t\tsubject: ${emitInterpolatedString(config.emailConfig.subject)},\n`;
+		}
+		const urlVarName = (config.emailConfig as { urlVarName?: string })
+			.urlVarName;
+		if (urlVarName !== undefined) {
+			code += `${indent}\t\t\turlVarName: "${escapeString(urlVarName)}",\n`;
+		}
+		const mergeVars = config.emailConfig.mergeVars ?? [];
+		if (mergeVars.length > 0) {
+			code += `${indent}\t\t\tmergeVars: {\n`;
+			for (const mv of mergeVars) {
+				if (!mv.key) continue;
+				const key = escapeString(mv.key.toUpperCase());
+				const value = mv.value.trim();
+				let valueCode: string;
+				if (!value) {
+					valueCode = '""';
+				} else if (value.includes("${")) {
+					valueCode = emitInterpolatedString(value);
+				} else {
+					valueCode = `"${escapeString(value)}"`;
+				}
+				code += `${indent}\t\t\t\t${key}: ${valueCode},\n`;
+			}
+			code += `${indent}\t\t\t},\n`;
+		}
+		code += `${indent}\t\t},\n`;
+	}
+	if (config.smsConfig?.body) {
+		code += `${indent}\t\tsmsBody: ${emitInterpolatedString(config.smsConfig.body)},\n`;
+	}
+	code += `${indent}\t});\n`;
+	code += `${indent}});\n`;
+
+	// Step 2: progress waiting_event
+	code += generateProgressCall(
+		node,
+		indent,
+		"waiting_event",
+		eventType,
+		retryVarName,
+	);
+
+	// Step 3: waitForEvent
+	if (isChallenge) {
+		code += `${indent}${varDecl}await waitForEventDurable(\n`;
+	} else {
+		code += `${indent}${varDecl}(await waitForEventDurable(\n`;
+	}
+	code += `${indent}\tstep,\n`;
+	code += `${indent}\tthis.env,\n`;
+	code += `${indent}\tevent.instanceId,\n`;
+	code += `${indent}\tevent.payload.caseId as string,\n`;
+	code += `${indent}\t"${escapeString(node.id)}",\n`;
+	code += `${indent}\t"${escapeString(node.type)}",\n`;
+	code += `${indent}\t${stepNameExpr},\n`;
+	code += `${indent}\t"${escapeString(eventType)}",\n`;
+	code += emitDurableWaitTailArgs(node, indent, chunking);
+	if (isChallenge) {
+		code += `${indent});\n`;
+	} else {
+		code += `${indent}))!.payload as Record<string, unknown>;\n`;
+	}
+
+	// Step 4: case object + progress
+	code += generateCaseObjectCall(
+		node,
+		indent,
+		captureResult ? rawVar : undefined,
+		retryVarName,
+	);
+
+	if (isChallenge) {
+		code += emitChallengeOutputAssignment(indent, rawVar, outputVar);
+	}
+
+	code += generateProgressCall(
+		node,
+		indent,
+		"completed",
+		undefined,
+		retryVarName,
+	);
+
+	return code;
+}
+
+/**
  * Internal traversal context to share state between recursive calls
  */
 interface TraversalContext {
@@ -1249,8 +2900,8 @@ interface TraversalContext {
 	warnings: string[];
 	/** All detected retry zones in this workflow */
 	retryZones: RetryZone[];
-	/** The retry zone currently active during code generation (null = no zone) */
-	activeRetryZone: RetryZone | null;
+	/** Stack of active retry zones (innermost zone is last). Supports nesting. */
+	activeRetryZoneStack: RetryZone[];
 }
 
 /**
@@ -1261,7 +2912,11 @@ function generateNodeCode(
 	indent: string,
 	ctx: TraversalContext,
 ): string {
-	const retryVar = ctx.activeRetryZone?.retryVarName;
+	const activeZone =
+		ctx.activeRetryZoneStack[ctx.activeRetryZoneStack.length - 1];
+	const retryVar = activeZone?.retryVarName;
+
+	const wrap = (code: string) => wrapWithErrorHandler(node, indent, code);
 
 	switch (node.type) {
 		case "Start":
@@ -1273,22 +2928,32 @@ function generateNodeCode(
 				`${indent});\n`
 			);
 		case "Form":
-			return generateFormStep(node, indent, retryVar);
+			return wrap(generateFormStep(node, indent, retryVar));
 		case "API":
-			return generateAPIStep(node, indent, retryVar);
+			return wrap(generateAPIStep(node, indent, retryVar));
 		case "Transform":
-			return generateTransformStep(node, indent, retryVar);
+			return wrap(generateTransformStep(node, indent, retryVar));
 		case "Message":
-			return generateMessageStep(node, indent);
+			return wrap(generateMessageStep(node, indent));
 		case "Checkpoint":
-			return generateCheckpointStep(node, indent, retryVar);
+			return wrap(generateCheckpointStep(node, indent, retryVar));
 		case "Challenge":
-			return generateChallengeStep(node, indent, retryVar);
+			return wrap(generateChallengeStep(node, indent, retryVar));
+		case "Promotion":
+			return wrap(generatePromotionStep(node, indent, retryVar));
 		case "Decision":
 			// Decision generates an if/else, code is handled in traversal
 			return "";
+		case "NLS":
+			return wrap(generateNLSStep(node, indent, retryVar));
+		case "ExternalLink":
+			return wrap(generateExternalLinkStep(node, indent, retryVar));
+		case "AddCard":
+			return wrap(generateAddCardStep(node, indent, retryVar));
+		case "GeneratePDF":
+			return wrap(generateGeneratePdfStep(node, indent, retryVar));
 		case "FlagChange":
-			return generateFlagChangeStep(node, indent, retryVar);
+			return wrap(generateFlagChangeStep(node, indent, retryVar));
 		case "Join":
 			return generateJoinStep(node, indent, ctx.incomingMap.get(node.id) || []);
 		case "End":
@@ -1299,7 +2964,9 @@ function generateNodeCode(
 				`${indent}return { success: true, payload: event.payload };\n`
 			);
 		case "Reject": {
-			const zone = ctx.retryZones.find((z) => z.rejectNodeId === node.id);
+			const zone = ctx.retryZones.find((z) =>
+				z.rejectNodeIds.includes(node.id),
+			);
 			if (zone) {
 				// Pattern 1: Reject with retry — generate continue/return logic.
 				// IMPORTANT: use "in_progress" while retrying so that the cases-svc
@@ -1308,15 +2975,13 @@ function generateNodeCode(
 				// checkpoint). Only emit "completed" on the final (exhausted) rejection.
 				const rv = zone.retryVarName;
 				if (zone.unlimited) {
-					// Unlimited retries: always in_progress (never completed)
 					return (
 						`${indent}// Workflow rejected — retrying (unlimited)\n` +
 						generateCaseObjectCall(node, indent, undefined, rv) +
 						generateProgressCall(node, indent, "in_progress", undefined, rv) +
-						`${indent}continue; // Unlimited retry from checkpoint\n`
+						`${indent}continue ${rv};\n`
 					);
 				}
-				// Limited retries: in_progress while retrying, completed on last attempt
 				return (
 					`${indent}// Workflow rejected (retry zone)\n` +
 					generateCaseObjectCall(node, indent, undefined, rv) +
@@ -1328,7 +2993,7 @@ function generateNodeCode(
 						undefined,
 						rv,
 					) +
-					`${indent}\tcontinue; // Retry from checkpoint\n` +
+					`${indent}\tcontinue ${rv};\n` +
 					`${indent}}\n` +
 					generateProgressCall(node, indent, "completed", undefined, rv) +
 					`${indent}return { success: false, reason: "${escapeString(node.title)}" };\n`
@@ -1383,46 +3048,43 @@ function traverseBranch(
 		}
 
 		// -------------------------------------------------------------------
-		// Pattern 1: Checkpoint that is the start of a retry zone.
-		// Wrap the whole zone (Checkpoint … Reject) in a for loop.
-		// All descendant nodes will see ctx.activeRetryZone during traversal.
+		// Checkpoint that is the start of a retry zone.
+		// Wrap the zone (Checkpoint … Reject) in a labeled for loop.
+		// Supports nesting: each checkpoint opens its own loop and Reject
+		// nodes use `continue <label>` to target the correct one.
 		// -------------------------------------------------------------------
 		const retryZone = ctx.retryZones.find(
 			(z) => z.checkpointNodeId === currentNodeId,
 		);
 
-		if (retryZone && !ctx.activeRetryZone) {
-			// Open the for loop
+		const alreadyActiveForThisZone =
+			retryZone &&
+			ctx.activeRetryZoneStack.some(
+				(z) => z.checkpointNodeId === retryZone.checkpointNodeId,
+			);
+
+		if (retryZone && !alreadyActiveForThisZone) {
 			const rv = retryZone.retryVarName;
 			if (retryZone.unlimited) {
-				// maxRetries=0 in editor means "unlimited" — loop forever until
-				// the accepted path returns { success: true }.
-				code += `${indent}for (let ${rv} = 0; ; ${rv}++) {\n`;
+				code += `${indent}${rv}: for (let ${rv} = 0; ; ${rv}++) {\n`;
 			} else {
-				code += `${indent}for (let ${rv} = 0; ${rv} <= ${retryZone.maxRetries}; ${rv}++) {\n`;
+				code += `${indent}${rv}: for (let ${rv} = 0; ${rv} <= ${retryZone.maxRetries}; ${rv}++) {\n`;
 			}
 
-			// Traverse inside the zone with increased indentation and active zone set
-			const prevZone = ctx.activeRetryZone;
-			ctx.activeRetryZone = retryZone;
+			ctx.activeRetryZoneStack.push(retryZone);
 
-			// We must NOT mark this node as visited yet so the inner traversal
-			// processes it with the retryVar active.
 			code += trimTrailingBlankLines(
 				traverseBranch(currentNodeId, indent + "\t", ctx, stopAtNodeId),
 			);
 
-			ctx.activeRetryZone = prevZone;
+			ctx.activeRetryZoneStack.pop();
 			code += `${indent}}\n\n`;
 
-			// The inner traversal has already processed the rest of the path
-			// (including the Reject node which emits `continue` / `return`).
-			// After the loop closes there is nothing more to process on this path.
 			break;
 		}
 
 		// Mark as visited *after* retry-zone check so the inner traversal can
-		// see the node and process it with the correct activeRetryZone.
+		// see the node and process it with the correct activeRetryZoneStack.
 		ctx.visited.add(currentNodeId);
 
 		// Get outgoing edges
@@ -1440,7 +3102,8 @@ function traverseBranch(
 
 		// Handle Decision nodes (branching)
 		if (node.type === "Decision") {
-			const condition = (node.config.condition as string) || "/* condition */";
+			const rawCondition = (node.config.condition as string) ?? "";
+			const condition = rawCondition.trim() || "/* condition */";
 			const topEdge = forwardOutgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "top",
 			);
@@ -1490,9 +3153,9 @@ function traverseBranch(
 				break;
 			}
 		}
-		// Handle Challenge nodes (branching based on acceptance)
+		// Handle Challenge nodes (branching based on acceptance/signature)
 		else if (node.type === "Challenge" && forwardOutgoing.length === 2) {
-			const varName = createVariableName(node.title, "challengeResult");
+			const outputVar = getVarName(node.id);
 			const topEdge = forwardOutgoing.find(
 				(e: WorkflowEdge) => e.fromPort === "top",
 			);
@@ -1517,7 +3180,70 @@ function traverseBranch(
 			code += generateNodeCode(node, indent, ctx);
 			code += "\n";
 
-			code += `${indent}if ((${varName} as { payload: { accepted: boolean } }).payload.accepted) {\n`;
+			// Signature challenges use `signed` as the positive-branch discriminator;
+			// acceptance challenges use `accepted`. Both share the same top/bottom
+			// edge convention: top = positive outcome, bottom = negative.
+			const isSignature =
+				(node.config as { challengeType?: string }).challengeType ===
+				"signature";
+			const branchCondition = isSignature
+				? `${outputVar}.signed`
+				: `${outputVar}.accepted`;
+
+			code += `${indent}if (${branchCondition}) {\n`;
+
+			if (topEdge && !ctx.visited.has(topEdge.to)) {
+				code += trimTrailingBlankLines(
+					traverseBranch(topEdge.to, indent + "\t", ctx, innerStop),
+				);
+			}
+
+			code += `${indent}} else {\n`;
+
+			if (bottomEdge && !ctx.visited.has(bottomEdge.to)) {
+				code += trimTrailingBlankLines(
+					traverseBranch(bottomEdge.to, indent + "\t", ctx, innerStop),
+				);
+			}
+
+			code += `${indent}}\n\n`;
+
+			if (convergenceNodeId) {
+				currentNodeId = convergenceNodeId;
+			} else {
+				break;
+			}
+		}
+		// Handle ExternalLink nodes in challenge mode (branching)
+		else if (
+			node.type === "ExternalLink" &&
+			(node.config as { mode?: string }).mode === "challenge" &&
+			forwardOutgoing.length === 2
+		) {
+			const outputVar = getVarName(node.id);
+			const topEdge = forwardOutgoing.find(
+				(e: WorkflowEdge) => e.fromPort === "top",
+			);
+			const bottomEdge = forwardOutgoing.find(
+				(e: WorkflowEdge) => e.fromPort === "bottom",
+			);
+
+			const convergenceNodeId =
+				topEdge && bottomEdge
+					? findConvergenceNode(
+							topEdge.to,
+							bottomEdge.to,
+							ctx.outgoingMap,
+							ctx.retryZones,
+						)
+					: null;
+
+			const innerStop = convergenceNodeId ?? stopAtNodeId;
+
+			code += generateNodeCode(node, indent, ctx);
+			code += "\n";
+
+			code += `${indent}if (${outputVar}.accepted) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(
@@ -1580,7 +3306,7 @@ function traverseAndGenerate(
 		visited: new Set<string>(),
 		warnings: [],
 		retryZones,
-		activeRetryZone: null,
+		activeRetryZoneStack: [],
 	};
 
 	// Start traversal from the start node
@@ -1597,6 +3323,179 @@ function traverseAndGenerate(
 	}
 
 	return { code, warnings: ctx.warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Branch-scope hoisting analysis
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the set of node IDs that live inside at least one Decision or
+ * Challenge branch (i.e., are only reachable after a Decision/Challenge
+ * fork and before the convergence/join node).
+ *
+ * These nodes emit `const alias = await step.do(...)` inside an if/else block,
+ * so their variable is lexically scoped to that block.  When a downstream
+ * consumer (post-merge) references `${alias.field}` the runtime throws
+ * `ReferenceError: alias is not defined`.
+ *
+ * Note: Challenge and Promotion nodes are excluded because they are handled
+ * by their own dedicated hoisting block in `generateWorkflowCode`.
+ */
+function computeBranchScopedNodeIds(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+): Set<string> {
+	const { outgoingMap } = buildAdjacencyMaps(edges);
+	const retryZones = detectRetryZones(nodes, edges);
+	const branchScoped = new Set<string>();
+
+	for (const node of nodes) {
+		const isBranchNode =
+			node.type === "Decision" ||
+			node.type === "Challenge" ||
+			(node.type === "ExternalLink" &&
+				(node.config as { mode?: string }).mode === "challenge");
+		if (!isBranchNode) continue;
+
+		const outgoing = outgoingMap.get(node.id) ?? [];
+		const topEdge = outgoing.find((e) => e.fromPort === "top");
+		const bottomEdge = outgoing.find((e) => e.fromPort === "bottom");
+		if (!topEdge || !bottomEdge) continue;
+
+		const convergenceNodeId = findConvergenceNode(
+			topEdge.to,
+			bottomEdge.to,
+			outgoingMap,
+			retryZones,
+		);
+
+		const collectBranch = (startId: string) => {
+			const queue: string[] = [startId];
+			const visited = new Set<string>();
+			while (queue.length > 0) {
+				const id = queue.shift()!;
+				if (visited.has(id)) continue;
+				if (convergenceNodeId && id === convergenceNodeId) continue;
+				visited.add(id);
+				branchScoped.add(id);
+				for (const e of outgoingMap.get(id) ?? []) {
+					if (!visited.has(e.to)) queue.push(e.to);
+				}
+			}
+		};
+
+		collectBranch(topEdge.to);
+		collectBranch(bottomEdge.to);
+	}
+
+	return branchScoped;
+}
+
+/**
+ * Returns the set of node IDs (Form / API / Transform only) that are
+ * branch-scoped AND whose camelCase alias is referenced by at least one
+ * node's code/condition/body string.
+ *
+ * These need a `let alias: Record<string, unknown> | undefined = undefined;`
+ * hoisted at the top of `run()`, and their own assignment must drop `const`
+ * so it writes to the hoisted binding instead of creating a new block-scoped one.
+ */
+function computeHoistedNodeIds(
+	nodes: WorkflowNode[],
+	edges: WorkflowEdge[],
+	aliasMap: Map<string, string>,
+): Set<string> {
+	const hoistableTypes = new Set<WorkflowNode["type"]>([
+		"Form",
+		"API",
+		"Transform",
+		"ExternalLink",
+	]);
+
+	const branchScopedIds = computeBranchScopedNodeIds(nodes, edges);
+
+	// Reverse map: camelCase alias → nodeId (for both new-format and legacy IDs)
+	const aliasToNodeId = new Map<string, string>();
+	for (const [nodeId, alias] of aliasMap) {
+		aliasToNodeId.set(alias, nodeId);
+		// Also register the legacy hyphen→underscore form as a fallback
+		aliasToNodeId.set(nodeId.replace(/-/g, "_"), nodeId);
+	}
+
+	const needsHoisting = new Set<string>();
+
+	/** Extract the alias first-segment from every ${...} token in a string. */
+	const extractAliases = (str: string): string[] => {
+		const aliases: string[] = [];
+		for (const match of str.matchAll(/\$\{([^}]+)\}/g)) {
+			const path = match[1].trim();
+			if (path.startsWith("secret.")) continue;
+			const firstSeg = path.split(".")[0].replace(/-/g, "_");
+			aliases.push(firstSeg);
+		}
+		return aliases;
+	};
+
+	for (const node of nodes) {
+		const stringsToScan: string[] = [];
+
+		if (node.type === "Transform" && node.config.code) {
+			stringsToScan.push(node.config.code as string);
+		}
+		if (node.type === "Decision" && node.config.condition) {
+			stringsToScan.push(node.config.condition as string);
+		}
+		if (node.type === "API") {
+			if (node.config.url) stringsToScan.push(node.config.url as string);
+			const bodyConfig = node.config.bodyConfig as APIBodyConfig | undefined;
+			if (bodyConfig?.rawJson) stringsToScan.push(bodyConfig.rawJson);
+			if (bodyConfig?.fieldMappings) {
+				for (const m of bodyConfig.fieldMappings as Array<{
+					sourceExpression: string;
+				}>) {
+					if (m.sourceExpression) stringsToScan.push(m.sourceExpression);
+				}
+			}
+			const customHeaders =
+				(node.config.customHeaders as APIHeaderEntry[]) ?? [];
+			for (const h of customHeaders) {
+				if (h.value) stringsToScan.push(h.value);
+			}
+		}
+		if (node.type === "Message") {
+			const msgConfig = node.config as MessageNodeConfig | undefined;
+			if (msgConfig?.subject) stringsToScan.push(msgConfig.subject);
+			if (Array.isArray(msgConfig?.mergeVars)) {
+				for (const mv of msgConfig.mergeVars) {
+					if (mv.value) stringsToScan.push(mv.value);
+				}
+			}
+		}
+
+		for (const str of stringsToScan) {
+			for (const alias of extractAliases(str)) {
+				const referencedNodeId = aliasToNodeId.get(alias);
+				if (
+					referencedNodeId &&
+					branchScopedIds.has(referencedNodeId) &&
+					// The consuming node itself must be OUTSIDE the branch (e.g. post-merge)
+					// so that hoisting is only done when there is a genuine cross-scope reference.
+					// If the consumer is also branch-scoped (inside the same or another branch),
+					// we still hoist to be safe — unless both are in the same branch context,
+					// which is approximated by checking if the consumer is NOT branch-scoped at all.
+					!branchScopedIds.has(node.id) &&
+					hoistableTypes.has(
+						nodes.find((n) => n.id === referencedNodeId)?.type ?? "Start",
+					)
+				) {
+					needsHoisting.add(referencedNodeId);
+				}
+			}
+		}
+	}
+
+	return needsHoisting;
 }
 
 /**
@@ -1618,14 +3517,27 @@ export function generateWorkflowCode(
 	const warnings: string[] = [];
 	let code = "";
 
+	// Build the alias map once for this generation run so all step generators
+	// can resolve `getVarName(node.id)` → camelCase alias.
+	_activeAliasMap = buildAliasMap(nodes);
+
+	// Determine which branch-scoped nodes need let-hoisting before traversal.
+	// Must run after _activeAliasMap is populated (getVarName depends on it).
+	_hoistedNodeIds = computeHoistedNodeIds(nodes, edges, _activeAliasMap);
+
 	// Find start node
 	const startNode = nodes.find((n) => n.type === "Start");
 	if (!startNode) {
+		_activeAliasMap = new Map();
 		return {
 			code: "// Error: No Start node found in workflow",
 			warnings: ["No Start node found in workflow"],
 		};
 	}
+
+	// Capture the Start node alias so expandVariablePath can rewrite
+	// ${<startAlias>.X} → event.payload.X throughout the generated code.
+	_startNodeAlias = _activeAliasMap.get(startNode.id) ?? "";
 
 	// Generate imports
 	if (includeImports) {
@@ -1636,6 +3548,26 @@ export function generateWorkflowCode(
 	// Use WorkflowEnv (not Env) to avoid clashing with the global Env type
 	// generated by `wrangler types` (worker-configuration.d.ts).
 	const hasMessageNodes = nodes.some((n) => n.type === "Message");
+	const hasNlsNodes = nodes.some((n) => n.type === "NLS");
+	const hasSignatureChallengeNodes = nodes.some(
+		(n) =>
+			n.type === "Challenge" &&
+			(n.config as ChallengeNodeConfig | undefined)?.challengeType ===
+				"signature",
+	);
+	const hasGeneratePdfNodes = nodes.some((n) => n.type === "GeneratePDF");
+	// Nodes that wait for a human via `waitForEventDurable` (see the
+	// "Durable wait chunking" section above `resolveWaitChunking`).
+	const DURABLE_WAIT_NODE_TYPES = new Set([
+		"Form",
+		"AddCard",
+		"Promotion",
+		"Challenge",
+		"ExternalLink",
+	]);
+	const hasDurableWaitNodes = nodes.some((n) =>
+		DURABLE_WAIT_NODE_TYPES.has(n.type),
+	);
 	code += `interface WorkflowEnv {\n`;
 	code += `\tWORKFLOW_SVC: {\n`;
 	code += `\t\tbatchUpdateFlagState: (input: {\n`;
@@ -1668,7 +3600,49 @@ export function generateWorkflowCode(
 	code += `\t\t\troleContacts: Record<string, { email: string; name: string | null; phone?: string | null }>;\n`;
 	code += `\t\t}>;\n`;
 	code += `\t\tupdateCaseObject: (caseId: string, data: Record<string, unknown>) => Promise<void>;\n`;
+	if (hasSignatureChallengeNodes) {
+		code += `\t\tcreateSignatureRequest: (input: {\n`;
+		code += `\t\t\tcaseId: string;\n`;
+		code += `\t\t\tworkflowInstanceId: string;\n`;
+		code += `\t\t\tworkflowNodeId: string;\n`;
+		code += `\t\t\tnodeConfig: Record<string, unknown>;\n`;
+		code += `\t\t}) => Promise<void>;\n`;
+	}
+	if (hasGeneratePdfNodes) {
+		code += `\t\tgeneratePdfDocument: (input: {\n`;
+		code += `\t\t\tcaseId: string;\n`;
+		code += `\t\t\tpdfTemplateId: string;\n`;
+		code += `\t\t\tpdfTemplateVersionId?: string;\n`;
+		code += `\t\t\tfieldValues: Record<string, string>;\n`;
+		code += `\t\t}) => Promise<{ documentId: string; fileName: string }>;\n`;
+	}
+	// Always declared alongside the durable-wait helpers below (which
+	// reference CASES_SVC.notifyStaleStep unconditionally, even for
+	// workflows where no individual node has staleTimeout configured).
+	if (hasDurableWaitNodes) {
+		code += `\t\tnotifyStaleStep: (input: {\n`;
+		code += `\t\t\tworkflowId: string;\n`;
+		code += `\t\t\tinstanceId: string;\n`;
+		code += `\t\t\tcaseId: string;\n`;
+		code += `\t\t\tnodeId: string;\n`;
+		code += `\t\t\tnodeType: string;\n`;
+		code += `\t\t\tstepName: string;\n`;
+		code += `\t\t\tattempt: number;\n`;
+		code += `\t\t}) => Promise<void>;\n`;
+	}
 	code += `\t};\n`;
+	if (hasNlsNodes) {
+		code += `\tPROXY_SVC: {\n`;
+		code += `\t\tnlsCreateLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
+		code += `\t\tnlsCancelLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
+		code += `\t\tnlsGetAmortization: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{\n`;
+		code += `\t\t\tLoanAmount: number; CashFlow: string; totalOfPayments: number;\n`;
+		code += `\t\t\tregularPaymentAmount: number; firstPaymentApr: string;\n`;
+		code += `\t\t\tlastPaymentAmount: number; lastPaymentDate: string | null;\n`;
+		code += `\t\t\tOriginationDate: string; apr: number | null;\n`;
+		code += `\t\t}>;\n`;
+		code += `\t};\n`;
+	}
 	// User-defined variables and secrets from the variables panel (all are strings at runtime)
 	for (const v of userVariables) {
 		code += `\t${v.name}: string;\n`;
@@ -1679,6 +3653,116 @@ export function generateWorkflowCode(
 	code += `interface WorkflowParams {\n`;
 	code += `\t[key: string]: unknown;\n`;
 	code += `}\n\n`;
+
+	// Promotion nodes share a well-defined event payload forwarded by
+	// `cases-svc` after validating the user's selection; declare its type
+	// once so the generated code is fully type-checked.
+	const hasPromotionNodes = nodes.some((n) => n.type === "Promotion");
+	if (hasPromotionNodes) {
+		code += `interface PromotionSelectionPayload {\n`;
+		code += `\tpromotionId: string;\n`;
+		code += `\tpromotionName: string;\n`;
+		code += `\tselectedTerm: number;\n`;
+		code += `\tfinalAmount: number;\n`;
+		code += `\tmonthlyPayment: number;\n`;
+		code += `\tinterestRate: number;\n`;
+		code += `\tdownPayment: number;\n`;
+		code += `\tcontractorFee: number;\n`;
+		code += `\tcommission: number;\n`;
+		code += `\tselectedBy: string;\n`;
+		code += `\tselectedAt: string;\n`;
+		code += `}\n\n`;
+	}
+
+	// Runtime helpers backing every Form/AddCard/Promotion/Challenge/
+	// ExternalLink wait (see the "Durable wait chunking" comment above
+	// `resolveWaitChunking` for the full rationale).
+	if (hasDurableWaitNodes) {
+		code += `/**\n`;
+		code += ` * Cloudflare Workflows throws a \`WorkflowTimeoutError\` when a\n`;
+		code += ` * \`step.waitForEvent\` call's timeout elapses, instead of resolving to\n`;
+		code += ` * \`null\`. Left uncaught, that crashes the whole instance into the\n`;
+		code += ` * unrecoverable "errored" state even when the node has a perfectly\n`;
+		code += ` * good timeout/negative branch to take instead. This normalizes the\n`;
+		code += ` * timeout into a \`null\` result so callers can treat "no event arrived\n`;
+		code += ` * in time" as data, not a crash. Any other error is re-thrown.\n`;
+		code += ` */\n`;
+		code += `async function waitForEventOrNull<T>(\n`;
+		code += `\tfn: () => Promise<T>,\n`;
+		code += `): Promise<T | null> {\n`;
+		code += `\ttry {\n`;
+		code += `\t\treturn await fn();\n`;
+		code += `\t} catch (err) {\n`;
+		code += `\t\tif (err instanceof Error && err.name === "WorkflowTimeoutError") {\n`;
+		code += `\t\t\treturn null;\n`;
+		code += `\t\t}\n`;
+		code += `\t\tthrow err;\n`;
+		code += `\t}\n`;
+		code += `}\n\n`;
+
+		code += `/**\n`;
+		code += ` * Waits for an event in one or more \`chunkTimeout\`-sized attempts.\n`;
+		code += ` *\n`;
+		code += ` * - \`maxAttempts === undefined\`: waits indefinitely. Used by nodes with\n`;
+		code += ` *   no timeout/negative branch (Form, AddCard, Promotion, ExternalLink\n`;
+		code += ` *   form mode) so a slow user can never crash the instance.\n`;
+		code += ` * - \`maxAttempts\` set: gives up (returns \`null\`) after that many\n`;
+		code += ` *   attempts. Used by nodes with a timeout/negative branch (Challenge,\n`;
+		code += ` *   ExternalLink challenge mode), where \`chunkTimeout\` x \`maxAttempts\`\n`;
+		code += ` *   approximates the node's configured timeout.\n`;
+		code += ` *\n`;
+		code += ` * When \`notifyStale\` is true and more than one attempt runs, cases-svc\n`;
+		code += ` * is notified (durably, using its own step.do) after every attempt that\n`;
+		code += ` * elapsed without the event except the final one — this is how\n`;
+		code += ` * \`staleTimeout\` reminders are emitted without ending the wait.\n`;
+		code += ` */\n`;
+		code += `async function waitForEventDurable(\n`;
+		code += `\tstep: WorkflowStep,\n`;
+		code += `\tenv: WorkflowEnv,\n`;
+		code += `\tinstanceId: string,\n`;
+		code += `\tcaseId: string,\n`;
+		code += `\tnodeId: string,\n`;
+		code += `\tnodeType: string,\n`;
+		code += `\tbaseStepName: string,\n`;
+		code += `\teventType: string,\n`;
+		code += `\tchunkTimeout: string,\n`;
+		code += `\tmaxAttempts: number | undefined,\n`;
+		code += `\tnotifyStale: boolean,\n`;
+		code += `) {\n`;
+		code += `\tfor (\n`;
+		code += `\t\tlet attempt = 0;\n`;
+		code += `\t\tmaxAttempts === undefined || attempt < maxAttempts;\n`;
+		code += `\t\tattempt++\n`;
+		code += `\t) {\n`;
+		code += `\t\tconst stepName =\n`;
+		code += `\t\t\tattempt === 0 ? baseStepName : \`\${baseStepName}-wait\${attempt}\`;\n`;
+		code += `\t\tconst result = await waitForEventOrNull(() =>\n`;
+		code += `\t\t\tstep.waitForEvent<Record<string, unknown>>(stepName, {\n`;
+		code += `\t\t\t\ttype: eventType,\n`;
+		code += `\t\t\t\ttimeout: chunkTimeout,\n`;
+		code += `\t\t\t}),\n`;
+		code += `\t\t);\n`;
+		code += `\t\tif (result !== null) return result;\n`;
+		code += `\t\tif (maxAttempts !== undefined && attempt === maxAttempts - 1) {\n`;
+		code += `\t\t\treturn null;\n`;
+		code += `\t\t}\n`;
+		code += `\t\tif (notifyStale) {\n`;
+		code += `\t\t\tawait step.do(\`_stale-\${stepName}\`, async () => {\n`;
+		code += `\t\t\t\tawait env.CASES_SVC.notifyStaleStep({\n`;
+		code += `\t\t\t\t\tworkflowId: env.WORKFLOW_ID,\n`;
+		code += `\t\t\t\t\tinstanceId,\n`;
+		code += `\t\t\t\t\tcaseId,\n`;
+		code += `\t\t\t\t\tnodeId,\n`;
+		code += `\t\t\t\t\tnodeType,\n`;
+		code += `\t\t\t\t\tstepName: baseStepName,\n`;
+		code += `\t\t\t\t\tattempt: attempt + 1,\n`;
+		code += `\t\t\t\t});\n`;
+		code += `\t\t\t});\n`;
+		code += `\t\t}\n`;
+		code += `\t}\n`;
+		code += `\treturn null;\n`;
+		code += `}\n\n`;
+	}
 
 	// Add metadata as comments
 	if (includeComments && metadata) {
@@ -1715,11 +3799,72 @@ export function generateWorkflowCode(
 	// generated if/else branch (varName.payload.accepted).
 	// Other output nodes (API, Form, Transform, Checkpoint) use inline const
 	// assignment inside their step.do() callback, so no hoisted let is needed.
+	const externalLinkChallengeNodes = nodes.filter(
+		(n) =>
+			n.type === "ExternalLink" &&
+			(n.config as { mode?: string }).mode === "challenge",
+	);
+	if (externalLinkChallengeNodes.length > 0) {
+		for (const node of externalLinkChallengeNodes) {
+			const outputVar = getVarName(node.id);
+			const rawVar = `_${outputVar}Evt`;
+			code += `\t\tlet ${rawVar}: unknown = null;\n`;
+			code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
+		}
+		code += `\n`;
+	}
+
 	const challengeNodes = nodes.filter((n) => n.type === "Challenge");
 	if (challengeNodes.length > 0) {
 		for (const node of challengeNodes) {
-			const varName = createVariableName(node.title, "challengeResult");
-			code += `\t\tlet ${varName}: unknown = null;\n`;
+			const outputVar = getVarName(node.id);
+			const rawVar = `_${outputVar}Evt`;
+			const isSignature =
+				(node.config as { challengeType?: string } | undefined)
+					?.challengeType === "signature";
+			if (isSignature) {
+				// Signature challenges have two waitForEvent calls: one for operator
+				// acceptance and one for the actual signature event. Both variables
+				// must be hoisted so they are visible across if/else branches.
+				const acceptVar = `_${outputVar}AcceptEvt`;
+				code += `\t\tlet ${acceptVar}: unknown = null;\n`;
+				code += `\t\tlet ${rawVar}: unknown = null;\n`;
+				// The signature challenge output has different fields from a plain
+				// acceptance challenge (signed, rejected, declined, etc.).
+				code += `\t\tlet ${outputVar}: { signed: boolean; timedOut: boolean; rejected: boolean; declined: boolean; canceled: boolean; errored: boolean; reason: string | null; signatureRequestId: string | null; documentId: string | null } = { signed: false, timedOut: false, rejected: false, declined: false, canceled: false, errored: false, reason: null, signatureRequestId: null, documentId: null };\n`;
+			} else {
+				code += `\t\tlet ${rawVar}: unknown = null;\n`;
+				// Exposed output object referenced from downstream nodes via
+				// `${alias.accepted}`, `${alias.timedOut}`, etc. Hoisted so branches
+				// and the convergence path can reference it safely.
+				code += `\t\tlet ${outputVar}: { accepted: boolean; timedOut: boolean; respondedBy: string | null; respondedAt: string | null } = { accepted: false, timedOut: false, respondedBy: null, respondedAt: null };\n`;
+			}
+		}
+		code += `\n`;
+	}
+
+	// Same pattern for Promotion nodes — hoist the normalized output object
+	// so downstream steps can dereference `${alias.promotionId}` safely even
+	// across retry/checkpoint loops.
+	const promotionNodes = nodes.filter((n) => n.type === "Promotion");
+	if (promotionNodes.length > 0) {
+		for (const node of promotionNodes) {
+			const outputVar = getVarName(node.id);
+			const rawVar = `_${outputVar}Evt`;
+			code += `\t\tlet ${rawVar}: unknown = null;\n`;
+			code += `\t\tlet ${outputVar}: { promotionId: string; promotionName: string; selectedTerm: number; finalAmount: number; monthlyPayment: number; interestRate: number; downPayment: number; contractorFee: number; commission: number; selectedBy: string; selectedAt: string } = { promotionId: "", promotionName: "", selectedTerm: 0, finalAmount: 0, monthlyPayment: 0, interestRate: 0, downPayment: 0, contractorFee: 0, commission: 0, selectedBy: "", selectedAt: "" };\n`;
+		}
+		code += `\n`;
+	}
+
+	// Hoist Form/API/Transform nodes that live inside Decision/Challenge branches
+	// but whose alias is referenced post-merge (outside that branch's if/else block).
+	// Without this, the runtime throws ReferenceError because `const alias` only
+	// exists inside the block where it was declared.
+	if (_hoistedNodeIds.size > 0) {
+		for (const nodeId of _hoistedNodeIds) {
+			const varName = getVarName(nodeId);
+			code += `\t\tlet ${varName}: Record<string, unknown> | undefined = undefined;\n`;
 		}
 		code += `\n`;
 	}
@@ -1738,6 +3883,11 @@ export function generateWorkflowCode(
 	// Close class
 	code += `\t}\n`;
 	code += `}\n`;
+
+	// Clear the module-level alias map after generation
+	_activeAliasMap = new Map();
+	_hoistedNodeIds = new Set();
+	_startNodeAlias = "";
 
 	return { code, warnings };
 }
@@ -1802,7 +3952,7 @@ export async function validateNodeCodeSyntax(
 		.filter(
 			(n) =>
 				(n.type === "Transform" && (n.config.code as string)?.trim()) ||
-				(n.type === "Decision" && (n.config.condition as string)?.trim()),
+				n.type === "Decision",
 		)
 		.map(async (node) => {
 			if (node.type === "Transform") {
@@ -1813,9 +3963,12 @@ export async function validateNodeCodeSyntax(
 					);
 				}
 			} else if (node.type === "Decision") {
-				const result = await validateConditionExpression(
-					node.config.condition as string,
-				);
+				const conditionText = (node.config.condition as string)?.trim();
+				if (!conditionText) {
+					errors.push(`"${node.title}": debe tener una condición definida`);
+					return;
+				}
+				const result = await validateConditionExpression(conditionText);
 				if (!result.valid) {
 					errors.push(`"${node.title}": condición inválida — ${result.error}`);
 				}

@@ -80,7 +80,7 @@ describe("JSONModal", () => {
 			expect(value).toContain("edges");
 		});
 
-		it("includes flags in exported JSON", () => {
+		it("includes flags in exported JSON (canonical v2 format)", () => {
 			render(
 				<JSONModal
 					mode="export"
@@ -92,9 +92,12 @@ describe("JSONModal", () => {
 			const textarea = screen.getByRole("textbox");
 			const value = (textarea as HTMLTextAreaElement).value;
 			const parsed = JSON.parse(value);
-			expect(parsed).toHaveProperty("flags");
-			expect(parsed.flags).toHaveLength(1);
-			expect(parsed.flags[0].name).toBe("Estado");
+			expect(parsed).toHaveProperty("metadata");
+			expect(parsed.metadata.kind).toBe("workflow");
+			expect(parsed.metadata.version).toBe("2.0");
+			expect(parsed).toHaveProperty("definition");
+			expect(parsed.definition.flags).toHaveLength(1);
+			expect(parsed.definition.flags[0].name).toBe("Estado");
 		});
 
 		it("shows Download button in export mode", () => {
@@ -210,7 +213,7 @@ describe("JSONModal", () => {
 			expect(importedData.flags[0].name).toBe("Estado");
 		});
 
-		it("defaults flags to [] when importing legacy JSON without flags", async () => {
+		it("passes legacy JSON without flags through to onImport (caller handles defaults)", async () => {
 			const onImport = vi.fn();
 			render(
 				<JSONModal
@@ -223,12 +226,13 @@ describe("JSONModal", () => {
 			const textarea = screen.getByPlaceholderText(
 				/Pega el JSON del flujo aquí/i,
 			);
-			// Old export format without flags
 			const legacyJson = JSON.stringify({ nodes: mockNodes, edges: mockEdges });
 			fireEvent.change(textarea, { target: { value: legacyJson } });
 			fireEvent.click(screen.getByRole("button", { name: "Importar" }));
 			expect(onImport).toHaveBeenCalledTimes(1);
-			expect(onImport.mock.calls[0][0].flags).toEqual([]);
+			const data = onImport.mock.calls[0][0];
+			expect(data).toHaveProperty("nodes");
+			expect(data).toHaveProperty("edges");
 		});
 
 		it("shows error when JSON is invalid", async () => {

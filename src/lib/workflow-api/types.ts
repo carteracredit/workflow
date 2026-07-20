@@ -122,6 +122,26 @@ export interface ApiResponse<T> {
 }
 
 /**
+ * Pagination metadata returned by chanfana D1ListEndpoint in `result_info`.
+ */
+export interface ResultInfo {
+	page: number;
+	per_page: number;
+	count: number;
+	total_count: number;
+}
+
+/**
+ * API response envelope for paginated list endpoints (chanfana D1ListEndpoint).
+ * The `result_info` field contains pagination metadata.
+ */
+export interface ListApiResponse<T> {
+	success: boolean;
+	result: T[];
+	result_info: ResultInfo;
+}
+
+/**
  * Options for API calls that require authentication
  */
 export interface ApiCallOptions {
