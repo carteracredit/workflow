@@ -5,7 +5,7 @@
 
 * add GeneratePDF node support and visibility roles handling ([0706649](https://github.com/carteracredit/workflow/commit/070664984cc287256dabebf8d54d1c122554f6c4))
 
-# [1.4.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.3.0...v1.4.0-rc.1) (2026-07-20)
+# [1.4.0](https://github.com/carteracredit/workflow/compare/v1.3.0...v1.4.0) (2026-07-20)
 
 
 ### Bug Fixes
