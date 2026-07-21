@@ -316,6 +316,7 @@ const NODES_WITH_VISIBILITY_ROLES = [
 	"NLS",
 	"ExternalLink",
 	"AddCard",
+	"GeneratePDF",
 ];
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 560;
