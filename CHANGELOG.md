@@ -5,7 +5,7 @@
 
 * enhance PDF field handling and null safety in code generation ([f7d0a04](https://github.com/carteracredit/workflow/commit/f7d0a0419e7255c79468a5505a94dd5a871fe2dc))
 
-# [1.5.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.4.0...v1.5.0-rc.1) (2026-07-21)
+# [1.5.0](https://github.com/carteracredit/workflow/compare/v1.4.0...v1.5.0) (2026-07-21)
 
 
 ### Features
