@@ -855,6 +855,8 @@ export const translations = {
 			generatePdfCheckboxHint:
 				"Valid values: true/false (also accepts yes/no, on, 1, x, si/sí, checked).",
 			generatePdfOptionsHint: "Valid options: {options}",
+			generatePdfSingleRadioHint:
+				"Valid option: {options} (also accepts true/false, same as a checkbox).",
 			nlsOutputsTitle: "Outputs exposed by this node",
 			nlsOutputsDesc:
 				"The NLS function result is automatically exposed to downstream nodes through the variable picker.",
@@ -2000,6 +2002,8 @@ export const translations = {
 			generatePdfCheckboxHint:
 				"Valores válidos: true/false (también acepta yes/no, on, 1, x, si/sí, checked).",
 			generatePdfOptionsHint: "Opciones válidas: {options}",
+			generatePdfSingleRadioHint:
+				"Opción válida: {options} (también acepta true/false, igual que un checkbox).",
 			nlsOutputsTitle: "Salidas expuestas por este nodo",
 			nlsOutputsDesc:
 				"El resultado de la función NLS queda disponible automáticamente para los nodos siguientes a través del selector de variables.",

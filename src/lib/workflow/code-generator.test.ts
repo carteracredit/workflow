@@ -4832,7 +4832,7 @@ describe("generateWorkflowCode – cross-node variable hoisting", () => {
 		);
 		const formTryIdx = result.code.indexOf("// Form: Test Form");
 		const pdfFieldIdx = result.code.indexOf(
-			'_pdfFieldValues["1bS"] = `${testForm.name.firstName}`;',
+			'_pdfFieldValues["1bS"] = `${(testForm.name.firstName) ?? ""}`;',
 		);
 		expect(hoistIdx).toBeGreaterThanOrEqual(0);
 		expect(hoistIdx).toBeLessThan(formTryIdx);
@@ -4893,7 +4893,7 @@ describe("generateWorkflowCode – cross-node variable hoisting", () => {
 			/const altForm\s*=\s*\(await waitForEventDurable/,
 		);
 		expect(result.code).toContain(
-			'_pdfFieldValues["F1"] = `${altForm.value}`;',
+			'_pdfFieldValues["F1"] = `${(altForm.value) ?? ""}`;',
 		);
 		expect(result.warnings).toHaveLength(0);
 	});
@@ -6630,6 +6630,37 @@ describe("GeneratePDF node code generation", () => {
 		expect(result.code).toContain("_pdfFieldValues");
 		expect(result.code).toContain('_pdfFieldValues["debtor_name"]');
 		expect(result.code).toContain('_pdfFieldValues["amount"] = "1000"');
+	});
+
+	it("should render null/undefined interpolated values as an empty string instead of the literal 'null' (regression)", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [
+				{
+					fieldName: "middle_name",
+					value: "${start.roleContacts.org_manager.middleName}",
+				},
+			],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain(
+			'_pdfFieldValues["middle_name"] = `${(start.roleContacts.org_manager.middleName) ?? ""}`;',
+		);
+		expect(result.code).not.toContain(
+			'_pdfFieldValues["middle_name"] = `${start.roleContacts.org_manager.middleName}`;',
+		);
+	});
+
+	it("should NOT apply null-coalescing to field mapping values without variable references", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [{ fieldName: "static_field", value: "hello" }],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('_pdfFieldValues["static_field"] = "hello"');
+		expect(result.code).not.toContain('?? ""');
 	});
 
 	it("should skip field mappings with an empty fieldName or value", () => {
