@@ -342,6 +342,29 @@ function emitInterpolatedString(str: string): string {
 }
 
 /**
+ * Same contract as `emitInterpolatedString`, but each `${...}` token is
+ * wrapped with `?? ""` so a `null`/`undefined` runtime value renders as an
+ * empty string instead of the literal text "null"/"undefined".
+ *
+ * Used for GeneratePDF field mappings: an AcroForm text field showing the
+ * word "null" looks like a bug to the end user, so a missing value should
+ * simply leave the field blank.
+ *
+ * Examples:
+ *   "${start.roleContacts.org_manager.middleName}" → `` `${(event.payload.roleContacts.org_manager.middleName) ?? ""}` ``
+ */
+function emitNullSafeInterpolatedString(str: string): string {
+	if (!containsVariableRefs(str)) {
+		return `"${escapeString(str)}"`;
+	}
+	const expanded = str.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
+		return `\${(${expandVariablePath(path)}) ?? ""}`;
+	});
+	const escaped = expanded.replace(/`/g, "\\`");
+	return `\`${escaped}\``;
+}
+
+/**
  * Emits a value for use in generated TypeScript source code.
  *
  * Supported inputs, in priority order:
@@ -1651,7 +1674,7 @@ function generateGeneratePdfStep(
 	code += `${indent}\tconst _pdfFieldValues: Record<string, string> = {};\n`;
 	for (const mapping of fieldMappings) {
 		if (!mapping.fieldName || !mapping.value) continue;
-		const valueExpr = emitInterpolatedString(mapping.value);
+		const valueExpr = emitNullSafeInterpolatedString(mapping.value);
 		code += `${indent}\t_pdfFieldValues[${JSON.stringify(mapping.fieldName)}] = ${valueExpr};\n`;
 	}
 	code += `${indent}\treturn await this.env.CASES_SVC.generatePdfDocument({\n`;

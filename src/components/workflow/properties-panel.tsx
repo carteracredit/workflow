@@ -179,6 +179,15 @@ function getPdfFieldHint(
 	if (field.type === "checkbox") {
 		return t("propertiesPanel.generatePdfCheckboxHint");
 	}
+	if (field.type === "radio" && field.options && field.options.length === 1) {
+		// A radio group with a single option behaves like a checkbox at fill
+		// time (see `filler.ts` in cases-svc): true/false selects/leaves the
+		// single option unselected, in addition to matching the exact text.
+		return t("propertiesPanel.generatePdfSingleRadioHint").replace(
+			"{options}",
+			field.options.join(", "),
+		);
+	}
 	if (
 		(field.type === "radio" ||
 			field.type === "dropdown" ||
