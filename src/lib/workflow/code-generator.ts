@@ -1615,6 +1615,12 @@ function generateNLSStep(
  * uploads it to doc-svc via `CASES_SVC.generatePdfDocument`. The RPC returns
  * `{ documentId, fileName }`, captured in the node's output variable so
  * downstream nodes can reference `${<alias>.documentId}`.
+ *
+ * Also forwards `workflowNodeId` (for traceability) and, when configured,
+ * the node's `visibilityRoles` snapshot so cases-svc can register the
+ * generated PDF in `case_documents` with the same role-based visibility as
+ * the node itself. Omitted when `visibilityRoles` is `undefined` (legacy
+ * back-compat: visible to everyone with case access).
  */
 function generateGeneratePdfStep(
 	node: WorkflowNode,
@@ -1650,11 +1656,15 @@ function generateGeneratePdfStep(
 	}
 	code += `${indent}\treturn await this.env.CASES_SVC.generatePdfDocument({\n`;
 	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
+	code += `${indent}\t\tworkflowNodeId: ${JSON.stringify(node.id)},\n`;
 	code += `${indent}\t\tpdfTemplateId: ${emitInterpolatedString(pdfTemplateId)},\n`;
 	if (pdfTemplateVersionId) {
 		code += `${indent}\t\tpdfTemplateVersionId: ${JSON.stringify(pdfTemplateVersionId)},\n`;
 	}
 	code += `${indent}\t\tfieldValues: _pdfFieldValues,\n`;
+	if (node.visibilityRoles !== undefined) {
+		code += `${indent}\t\tvisibilityRoles: ${JSON.stringify(node.visibilityRoles)},\n`;
+	}
 	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
@@ -3326,84 +3336,158 @@ function traverseAndGenerate(
 }
 
 // ---------------------------------------------------------------------------
-// Branch-scope hoisting analysis
+// Cross-node variable hoisting analysis
 // ---------------------------------------------------------------------------
 
 /**
- * Returns the set of node IDs that live inside at least one Decision or
- * Challenge branch (i.e., are only reachable after a Decision/Challenge
- * fork and before the convergence/join node).
+ * Collects every string in a node's config that may contain `${alias.prop}`
+ * variable-picker references, mirroring every call site of
+ * `emitInterpolatedString` / `expandVariableRefs` / `emitAuthValue` in the
+ * step generators above.
  *
- * These nodes emit `const alias = await step.do(...)` inside an if/else block,
- * so their variable is lexically scoped to that block.  When a downstream
- * consumer (post-merge) references `${alias.field}` the runtime throws
- * `ReferenceError: alias is not defined`.
- *
- * Note: Challenge and Promotion nodes are excluded because they are handled
- * by their own dedicated hoisting block in `generateWorkflowCode`.
+ * Used by `computeHoistedNodeIds` to detect cross-node references so the
+ * *referenced* node's output variable can be hoisted. Keep this in sync when
+ * adding variable-picker interpolation to a new node type or config field —
+ * an omission here silently reintroduces `ReferenceError` bugs like the one
+ * that motivated this function (GeneratePDF's `fieldMappings` was missing).
  */
-function computeBranchScopedNodeIds(
-	nodes: WorkflowNode[],
-	edges: WorkflowEdge[],
-): Set<string> {
-	const { outgoingMap } = buildAdjacencyMaps(edges);
-	const retryZones = detectRetryZones(nodes, edges);
-	const branchScoped = new Set<string>();
+function collectInterpolatedStrings(node: WorkflowNode): string[] {
+	const strings: string[] = [];
+	const push = (v: unknown) => {
+		if (typeof v === "string" && v) strings.push(v);
+	};
 
-	for (const node of nodes) {
-		const isBranchNode =
-			node.type === "Decision" ||
-			node.type === "Challenge" ||
-			(node.type === "ExternalLink" &&
-				(node.config as { mode?: string }).mode === "challenge");
-		if (!isBranchNode) continue;
-
-		const outgoing = outgoingMap.get(node.id) ?? [];
-		const topEdge = outgoing.find((e) => e.fromPort === "top");
-		const bottomEdge = outgoing.find((e) => e.fromPort === "bottom");
-		if (!topEdge || !bottomEdge) continue;
-
-		const convergenceNodeId = findConvergenceNode(
-			topEdge.to,
-			bottomEdge.to,
-			outgoingMap,
-			retryZones,
-		);
-
-		const collectBranch = (startId: string) => {
-			const queue: string[] = [startId];
-			const visited = new Set<string>();
-			while (queue.length > 0) {
-				const id = queue.shift()!;
-				if (visited.has(id)) continue;
-				if (convergenceNodeId && id === convergenceNodeId) continue;
-				visited.add(id);
-				branchScoped.add(id);
-				for (const e of outgoingMap.get(id) ?? []) {
-					if (!visited.has(e.to)) queue.push(e.to);
+	switch (node.type) {
+		case "Transform":
+			push(node.config.code);
+			break;
+		case "Decision":
+			push(node.config.condition);
+			break;
+		case "API": {
+			push(node.config.url);
+			const bodyConfig = node.config.bodyConfig as APIBodyConfig | undefined;
+			push(bodyConfig?.rawJson);
+			push(bodyConfig?.rawXml);
+			if (Array.isArray(bodyConfig?.fieldMappings)) {
+				for (const m of bodyConfig.fieldMappings) push(m.sourceExpression);
+			}
+			if (Array.isArray(node.config.customHeaders)) {
+				for (const h of node.config.customHeaders as APIHeaderEntry[]) {
+					push(h.value);
 				}
 			}
-		};
-
-		collectBranch(topEdge.to);
-		collectBranch(bottomEdge.to);
+			const authConfig = node.config.authConfig as APIAuthConfig | undefined;
+			push(authConfig?.bearerToken);
+			push(authConfig?.apiKeyValue);
+			push(authConfig?.oauth2TokenUrl);
+			push(authConfig?.oauth2ClientId);
+			push(authConfig?.oauth2ClientSecret);
+			push(authConfig?.oauth2Scope);
+			push(authConfig?.oauth2Username);
+			push(authConfig?.oauth2Password);
+			break;
+		}
+		case "Message": {
+			const msgConfig = node.config as MessageNodeConfig | undefined;
+			push(msgConfig?.subject);
+			push(msgConfig?.body);
+			if (Array.isArray(msgConfig?.mergeVars)) {
+				for (const mv of msgConfig.mergeVars) push(mv.value);
+			}
+			break;
+		}
+		case "GeneratePDF": {
+			const cfg = node.config as GeneratePdfNodeConfig | undefined;
+			push(cfg?.pdfTemplateId);
+			if (Array.isArray(cfg?.fieldMappings)) {
+				for (const m of cfg.fieldMappings) push(m.value);
+			}
+			break;
+		}
+		case "NLS": {
+			const cfg = node.config as NLSNodeConfig | undefined;
+			if (Array.isArray(cfg?.fields)) {
+				for (const f of cfg.fields) push(f.value);
+			}
+			break;
+		}
+		case "ExternalLink": {
+			const cfg = node.config as {
+				recipient?: {
+					emailExpression?: string;
+					phoneExpression?: string;
+					nameExpression?: string;
+				};
+				emailConfig?: {
+					subject?: string;
+					mergeVars?: Array<{ key: string; value: string }>;
+				};
+				smsConfig?: { body?: string };
+			};
+			push(cfg.recipient?.emailExpression);
+			push(cfg.recipient?.phoneExpression);
+			push(cfg.recipient?.nameExpression);
+			push(cfg.emailConfig?.subject);
+			if (Array.isArray(cfg.emailConfig?.mergeVars)) {
+				for (const mv of cfg.emailConfig.mergeVars) push(mv.value);
+			}
+			push(cfg.smsConfig?.body);
+			break;
+		}
+		case "Challenge": {
+			// Only the signature challenge sub-config carries interpolated
+			// strings (templateId/title/subject/message/signers/customFields).
+			const cfg = node.config as SignatureChallengeConfig | undefined;
+			if (cfg?.challengeType === "signature") {
+				push(cfg.templateId);
+				push(cfg.title);
+				push(cfg.subject);
+				push(cfg.message);
+				if (Array.isArray(cfg.signers)) {
+					for (const signer of cfg.signers) {
+						push(signer.email);
+						push(signer.name);
+						push(signer.smsPhoneNumber);
+					}
+				}
+				if (Array.isArray(cfg.customFields)) {
+					for (const cf of cfg.customFields) push(cf.value);
+				}
+			}
+			break;
+		}
+		default:
+			break;
 	}
 
-	return branchScoped;
+	return strings;
 }
 
 /**
- * Returns the set of node IDs (Form / API / Transform only) that are
- * branch-scoped AND whose camelCase alias is referenced by at least one
- * node's code/condition/body string.
+ * Returns the set of node IDs (Form / API / Transform / ExternalLink /
+ * AddCard / GeneratePDF / NLS) whose camelCase alias is referenced by at
+ * least one *other* node's interpolated config string.
  *
- * These need a `let alias: Record<string, unknown> | undefined = undefined;`
- * hoisted at the top of `run()`, and their own assignment must drop `const`
- * so it writes to the hoisted binding instead of creating a new block-scoped one.
+ * Every node type handled by `generateNodeCode` (other than Start, Decision,
+ * Join, End and Reject) is individually wrapped in its own
+ * `try { ... } catch { ... }` block by `wrapWithErrorHandler`. That means a
+ * `const alias = await step.do(...)` declared while generating one node is
+ * lexically scoped to that node's own try block and is NOT visible from any
+ * other node's generated code — regardless of whether the two nodes sit in
+ * the same linear sequence, in the same Decision/Challenge branch, or in
+ * different branches. Any cross-node reference therefore needs a
+ * `let alias: Record<string, unknown> | undefined = undefined;` hoisted at
+ * the top of `run()`, with the declaring node's own assignment dropping
+ * `const` so it writes to the hoisted binding instead of creating a new
+ * block-scoped one (see the `isHoisted` checks in each step generator).
+ *
+ * Challenge and Promotion nodes are excluded from `hoistableTypes` because
+ * they are unconditionally hoisted by their own dedicated block in
+ * `generateWorkflowCode`, regardless of whether they are referenced.
  */
 function computeHoistedNodeIds(
 	nodes: WorkflowNode[],
-	edges: WorkflowEdge[],
 	aliasMap: Map<string, string>,
 ): Set<string> {
 	const hoistableTypes = new Set<WorkflowNode["type"]>([
@@ -3411,9 +3495,10 @@ function computeHoistedNodeIds(
 		"API",
 		"Transform",
 		"ExternalLink",
+		"AddCard",
+		"GeneratePDF",
+		"NLS",
 	]);
-
-	const branchScopedIds = computeBranchScopedNodeIds(nodes, edges);
 
 	// Reverse map: camelCase alias → nodeId (for both new-format and legacy IDs)
 	const aliasToNodeId = new Map<string, string>();
@@ -3438,53 +3523,15 @@ function computeHoistedNodeIds(
 	};
 
 	for (const node of nodes) {
-		const stringsToScan: string[] = [];
-
-		if (node.type === "Transform" && node.config.code) {
-			stringsToScan.push(node.config.code as string);
-		}
-		if (node.type === "Decision" && node.config.condition) {
-			stringsToScan.push(node.config.condition as string);
-		}
-		if (node.type === "API") {
-			if (node.config.url) stringsToScan.push(node.config.url as string);
-			const bodyConfig = node.config.bodyConfig as APIBodyConfig | undefined;
-			if (bodyConfig?.rawJson) stringsToScan.push(bodyConfig.rawJson);
-			if (bodyConfig?.fieldMappings) {
-				for (const m of bodyConfig.fieldMappings as Array<{
-					sourceExpression: string;
-				}>) {
-					if (m.sourceExpression) stringsToScan.push(m.sourceExpression);
-				}
-			}
-			const customHeaders =
-				(node.config.customHeaders as APIHeaderEntry[]) ?? [];
-			for (const h of customHeaders) {
-				if (h.value) stringsToScan.push(h.value);
-			}
-		}
-		if (node.type === "Message") {
-			const msgConfig = node.config as MessageNodeConfig | undefined;
-			if (msgConfig?.subject) stringsToScan.push(msgConfig.subject);
-			if (Array.isArray(msgConfig?.mergeVars)) {
-				for (const mv of msgConfig.mergeVars) {
-					if (mv.value) stringsToScan.push(mv.value);
-				}
-			}
-		}
-
-		for (const str of stringsToScan) {
+		for (const str of collectInterpolatedStrings(node)) {
 			for (const alias of extractAliases(str)) {
 				const referencedNodeId = aliasToNodeId.get(alias);
 				if (
 					referencedNodeId &&
-					branchScopedIds.has(referencedNodeId) &&
-					// The consuming node itself must be OUTSIDE the branch (e.g. post-merge)
-					// so that hoisting is only done when there is a genuine cross-scope reference.
-					// If the consumer is also branch-scoped (inside the same or another branch),
-					// we still hoist to be safe — unless both are in the same branch context,
-					// which is approximated by checking if the consumer is NOT branch-scoped at all.
-					!branchScopedIds.has(node.id) &&
+					// A node referencing its own alias (not expected in practice)
+					// never needs hoisting: the declaration and the reference are
+					// generated within the same try block.
+					referencedNodeId !== node.id &&
 					hoistableTypes.has(
 						nodes.find((n) => n.id === referencedNodeId)?.type ?? "Start",
 					)
@@ -3523,7 +3570,7 @@ export function generateWorkflowCode(
 
 	// Determine which branch-scoped nodes need let-hoisting before traversal.
 	// Must run after _activeAliasMap is populated (getVarName depends on it).
-	_hoistedNodeIds = computeHoistedNodeIds(nodes, edges, _activeAliasMap);
+	_hoistedNodeIds = computeHoistedNodeIds(nodes, _activeAliasMap);
 
 	// Find start node
 	const startNode = nodes.find((n) => n.type === "Start");
@@ -3611,9 +3658,11 @@ export function generateWorkflowCode(
 	if (hasGeneratePdfNodes) {
 		code += `\t\tgeneratePdfDocument: (input: {\n`;
 		code += `\t\t\tcaseId: string;\n`;
+		code += `\t\t\tworkflowNodeId: string;\n`;
 		code += `\t\t\tpdfTemplateId: string;\n`;
 		code += `\t\t\tpdfTemplateVersionId?: string;\n`;
 		code += `\t\t\tfieldValues: Record<string, string>;\n`;
+		code += `\t\t\tvisibilityRoles?: string[];\n`;
 		code += `\t\t}) => Promise<{ documentId: string; fileName: string }>;\n`;
 	}
 	// Always declared alongside the durable-wait helpers below (which

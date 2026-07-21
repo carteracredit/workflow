@@ -487,8 +487,18 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain("if (pokemonAvailable.count > 0)");
 		// The original template syntax must NOT appear in generated code
 		expect(result.code).not.toContain("${node-1773093521695.count}");
-		// The API step result should be captured in the alias variable
-		expect(result.code).toContain("const pokemonAvailable =");
+		// The API node is referenced from a Decision condition that lives
+		// outside the API node's own try/catch block (wrapWithErrorHandler
+		// wraps every API/Form/Transform/etc. node individually), so its
+		// output variable must be hoisted — otherwise this Decision would
+		// throw "ReferenceError: pokemonAvailable is not defined" at runtime.
+		expect(result.code).toContain(
+			"let pokemonAvailable: Record<string, unknown> | undefined = undefined;",
+		);
+		expect(result.code).toContain("pokemonAvailable = await step.do(");
+		expect(result.code).not.toMatch(
+			/const pokemonAvailable\s*=\s*await step\.do/,
+		);
 	});
 
 	it("should always capture step result for API nodes (response is always visible in cases UI)", () => {
@@ -4514,10 +4524,12 @@ describe("Message node: template string interpolation in subject and mergeVars",
 });
 
 // ---------------------------------------------------------------------------
-// Branch-scope hoisting: Form / API / Transform referenced post-merge
+// Cross-node variable hoisting: Form / API / Transform / GeneratePDF / etc.
+// referenced from another node's own try/catch scope (linear flow, same
+// branch, or post-merge).
 // ---------------------------------------------------------------------------
 
-describe("generateWorkflowCode – branch-scoped node hoisting", () => {
+describe("generateWorkflowCode – cross-node variable hoisting", () => {
 	it("hoists a Form node that is in a Decision branch and referenced by a post-merge Transform", () => {
 		// Graph: Start → Decision → (top: Form "alternateAddress") / (bottom: ∅) → Join → Transform that uses ${alternateAddress.address.street}
 		const nodes: WorkflowNode[] = [
@@ -4593,8 +4605,14 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 		expect(result.warnings).toHaveLength(0);
 	});
 
-	it("does NOT hoist a Form node that is in a branch but only referenced within that same branch", () => {
+	it("hoists a Form node even when referenced only within the same branch (each node has its own try/catch scope)", () => {
 		// Graph: Start → Decision → (top: Form → Transform using ${form.field}) / (bottom: End) → End
+		//
+		// wrapWithErrorHandler wraps EVERY node (Form, Transform, ...) in its
+		// own try/catch, so `const myForm = ...` declared while generating the
+		// Form is scoped to the Form's own try block — even though the
+		// Transform sits in the very same Decision branch, right after it, it
+		// is a SEPARATE try block and cannot see `myForm` unless hoisted.
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -4636,12 +4654,13 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Form is only used inside its own branch — should NOT be hoisted
-		expect(result.code).not.toContain(
-			"let myForm: Record<string, unknown> | undefined",
+		expect(result.code).toContain(
+			"let myForm: Record<string, unknown> | undefined = undefined;",
 		);
-		// Normal const assignment inside the branch
-		expect(result.code).toContain("const myForm = (await waitForEventDurable(");
+		expect(result.code).toContain("myForm = (await waitForEventDurable(");
+		expect(result.code).not.toMatch(
+			/const myForm\s*=\s*\(await waitForEventDurable/,
+		);
 	});
 
 	it("hoists an API node that is in a Decision branch and referenced post-merge", () => {
@@ -4689,7 +4708,7 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 		expect(result.code).not.toMatch(/const fetchData\s*=\s*await step\.do/);
 	});
 
-	it("does NOT hoist Form/API/Transform nodes in linear flow (regression guard)", () => {
+	it("hoists a linear Form node referenced by a later Transform, but leaves an unreferenced API node as const (regression guard)", () => {
 		const nodes: WorkflowNode[] = [
 			createNode({ id: "start", type: "Start", title: "Inicio" }),
 			createNode({
@@ -4729,18 +4748,154 @@ describe("generateWorkflowCode – branch-scoped node hoisting", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Linear nodes → no let hoisting
-		expect(result.code).not.toContain(
-			"let linearForm: Record<string, unknown> | undefined",
+		// linearForm IS referenced (by the Transform, in a later, separate
+		// try/catch block) → must be hoisted, or the Transform's `step.do`
+		// callback would throw "ReferenceError: linearForm is not defined".
+		expect(result.code).toContain(
+			"let linearForm: Record<string, unknown> | undefined = undefined;",
 		);
+		expect(result.code).toContain("linearForm = (await waitForEventDurable(");
+		expect(result.code).not.toMatch(
+			/const linearForm\s*=\s*\(await waitForEventDurable/,
+		);
+
+		// linearApi is never referenced by any other node → no need to hoist.
 		expect(result.code).not.toContain(
 			"let linearApi: Record<string, unknown> | undefined",
 		);
-		// Normal const assignments
-		expect(result.code).toContain(
-			"const linearForm = (await waitForEventDurable(",
-		);
 		expect(result.code).toContain("const linearApi = await step.do");
+	});
+
+	it("hoists a linear Form node referenced by a later GeneratePDF node's fieldMappings (regression: original bug report)", () => {
+		// Graph: Start → Form ("Test Form") → GeneratePDF using ${testForm.name.firstName}
+		// This mirrors the real-world workflow that surfaced the bug: the
+		// GeneratePDF node's own try/catch block cannot see `testForm`,
+		// declared inside the Form node's separate try/catch block, unless it
+		// is hoisted to a `let` at the top of `run()`.
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "node-form",
+				type: "Form",
+				title: "Test Form",
+				roles: ["client"],
+				config: {
+					outputSchema: {
+						properties: [
+							{
+								id: "f1",
+								name: "name",
+								type: "object",
+								properties: [
+									{ id: "f1_firstName", name: "firstName", type: "string" },
+								],
+							},
+							{ id: "f2", name: "phone", type: "string" },
+						],
+					},
+				},
+			}),
+			createNode({
+				id: "node-pdf",
+				type: "GeneratePDF",
+				title: "Generate UCC",
+				config: {
+					pdfTemplateId: "tpl-1",
+					fieldMappings: [
+						{ fieldName: "1bS", value: "${testForm.name.firstName}" },
+						{ fieldName: "1bSfx", value: "${testForm.phone}" },
+					],
+				} satisfies Partial<GeneratePdfNodeConfig>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "node-form"),
+			createEdge("node-form", "node-pdf"),
+			createEdge("node-pdf", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain(
+			"let testForm: Record<string, unknown> | undefined = undefined;",
+		);
+		expect(result.code).toContain("testForm = (await waitForEventDurable(");
+		expect(result.code).not.toMatch(
+			/const testForm\s*=\s*\(await waitForEventDurable/,
+		);
+		// The hoisted let must be declared before the Form's own try block
+		// (so it is in scope when GeneratePDF's separate try block reads it).
+		const hoistIdx = result.code.indexOf(
+			"let testForm: Record<string, unknown> | undefined",
+		);
+		const formTryIdx = result.code.indexOf("// Form: Test Form");
+		const pdfFieldIdx = result.code.indexOf(
+			'_pdfFieldValues["1bS"] = `${testForm.name.firstName}`;',
+		);
+		expect(hoistIdx).toBeGreaterThanOrEqual(0);
+		expect(hoistIdx).toBeLessThan(formTryIdx);
+		expect(pdfFieldIdx).toBeGreaterThan(formTryIdx);
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	it("hoists a Form node in a Decision branch and referenced post-merge by a GeneratePDF node's fieldMappings", () => {
+		// Graph: Start → Decision → (top: Form "altForm") / (bottom: ∅) → Join → GeneratePDF using ${altForm.value}
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Need Extra Info",
+				config: { condition: "${start.accepted}" },
+			}),
+			createNode({
+				id: "altForm",
+				type: "Form",
+				title: "Alt Form",
+				roles: ["client"],
+				config: {
+					outputSchema: {
+						properties: [{ id: "p1", name: "value", type: "string" }],
+					},
+				},
+			}),
+			createNode({ id: "join", type: "Join", title: "Join Info" }),
+			createNode({
+				id: "pdf",
+				type: "GeneratePDF",
+				title: "Generate Doc",
+				config: {
+					pdfTemplateId: "tpl-2",
+					fieldMappings: [{ fieldName: "F1", value: "${altForm.value}" }],
+				} satisfies Partial<GeneratePdfNodeConfig>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "decision"),
+			createEdge("decision", "altForm", { fromPort: "bottom" }),
+			createEdge("decision", "join", { fromPort: "top" }),
+			createEdge("altForm", "join"),
+			createEdge("join", "pdf"),
+			createEdge("pdf", "end"),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		expect(result.code).toContain(
+			"let altForm: Record<string, unknown> | undefined = undefined;",
+		);
+		expect(result.code).toContain("altForm = (await waitForEventDurable(");
+		expect(result.code).not.toMatch(
+			/const altForm\s*=\s*\(await waitForEventDurable/,
+		);
+		expect(result.code).toContain(
+			'_pdfFieldValues["F1"] = `${altForm.value}`;',
+		);
+		expect(result.warnings).toHaveLength(0);
 	});
 });
 
@@ -6524,5 +6679,51 @@ describe("GeneratePDF node code generation", () => {
 		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
 		const result = generateWorkflowCode(nodes, edges);
 		expect(result.code).not.toContain("pdfTemplateVersionId:");
+	});
+
+	it("should always pass workflowNodeId to the RPC", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('workflowNodeId: "generate-pdf-1"');
+		expect(result.code).toContain("workflowNodeId: string;");
+	});
+
+	it("should pass visibilityRoles to the RPC when the node has them configured", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "generate-pdf-1",
+				type: "GeneratePDF",
+				title: "Generar Contrato",
+				visibilityRoles: ["credit_agent"],
+				config: cfg as unknown as Record<string, unknown>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "generate-pdf-1"),
+			createEdge("generate-pdf-1", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('visibilityRoles: ["credit_agent"]');
+		expect(result.code).toContain("visibilityRoles?: string[];");
+	});
+
+	it("should NOT pass visibilityRoles to the RPC when the node has no visibilityRoles configured (back-compat)", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain("visibilityRoles:");
 	});
 });
