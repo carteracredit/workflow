@@ -6680,4 +6680,50 @@ describe("GeneratePDF node code generation", () => {
 		const result = generateWorkflowCode(nodes, edges);
 		expect(result.code).not.toContain("pdfTemplateVersionId:");
 	});
+
+	it("should always pass workflowNodeId to the RPC", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('workflowNodeId: "generate-pdf-1"');
+		expect(result.code).toContain("workflowNodeId: string;");
+	});
+
+	it("should pass visibilityRoles to the RPC when the node has them configured", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "generate-pdf-1",
+				type: "GeneratePDF",
+				title: "Generar Contrato",
+				visibilityRoles: ["credit_agent"],
+				config: cfg as unknown as Record<string, unknown>,
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "generate-pdf-1"),
+			createEdge("generate-pdf-1", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain('visibilityRoles: ["credit_agent"]');
+		expect(result.code).toContain("visibilityRoles?: string[];");
+	});
+
+	it("should NOT pass visibilityRoles to the RPC when the node has no visibilityRoles configured (back-compat)", () => {
+		const cfg: GeneratePdfNodeConfig = {
+			pdfTemplateId: "tpl-1",
+			fieldMappings: [],
+		};
+		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).not.toContain("visibilityRoles:");
+	});
 });

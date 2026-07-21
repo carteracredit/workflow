@@ -1615,6 +1615,12 @@ function generateNLSStep(
  * uploads it to doc-svc via `CASES_SVC.generatePdfDocument`. The RPC returns
  * `{ documentId, fileName }`, captured in the node's output variable so
  * downstream nodes can reference `${<alias>.documentId}`.
+ *
+ * Also forwards `workflowNodeId` (for traceability) and, when configured,
+ * the node's `visibilityRoles` snapshot so cases-svc can register the
+ * generated PDF in `case_documents` with the same role-based visibility as
+ * the node itself. Omitted when `visibilityRoles` is `undefined` (legacy
+ * back-compat: visible to everyone with case access).
  */
 function generateGeneratePdfStep(
 	node: WorkflowNode,
@@ -1650,11 +1656,15 @@ function generateGeneratePdfStep(
 	}
 	code += `${indent}\treturn await this.env.CASES_SVC.generatePdfDocument({\n`;
 	code += `${indent}\t\tcaseId: event.payload.caseId as string,\n`;
+	code += `${indent}\t\tworkflowNodeId: ${JSON.stringify(node.id)},\n`;
 	code += `${indent}\t\tpdfTemplateId: ${emitInterpolatedString(pdfTemplateId)},\n`;
 	if (pdfTemplateVersionId) {
 		code += `${indent}\t\tpdfTemplateVersionId: ${JSON.stringify(pdfTemplateVersionId)},\n`;
 	}
 	code += `${indent}\t\tfieldValues: _pdfFieldValues,\n`;
+	if (node.visibilityRoles !== undefined) {
+		code += `${indent}\t\tvisibilityRoles: ${JSON.stringify(node.visibilityRoles)},\n`;
+	}
 	code += `${indent}\t});\n`;
 	code += `${indent}});\n`;
 	code += generateCaseObjectCall(node, indent, varName, retryVarName);
@@ -3648,9 +3658,11 @@ export function generateWorkflowCode(
 	if (hasGeneratePdfNodes) {
 		code += `\t\tgeneratePdfDocument: (input: {\n`;
 		code += `\t\t\tcaseId: string;\n`;
+		code += `\t\t\tworkflowNodeId: string;\n`;
 		code += `\t\t\tpdfTemplateId: string;\n`;
 		code += `\t\t\tpdfTemplateVersionId?: string;\n`;
 		code += `\t\t\tfieldValues: Record<string, string>;\n`;
+		code += `\t\t\tvisibilityRoles?: string[];\n`;
 		code += `\t\t}) => Promise<{ documentId: string; fileName: string }>;\n`;
 	}
 	// Always declared alongside the durable-wait helpers below (which
