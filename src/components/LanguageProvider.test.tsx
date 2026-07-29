@@ -6,11 +6,14 @@ import { LanguageProvider, useLanguage } from "./LanguageProvider";
 const mockGetCookie = vi.fn();
 const mockSetCookie = vi.fn();
 
-vi.mock("@/lib/cookies", () => ({
-	getCookie: () => mockGetCookie(),
-	setCookie: (...args: unknown[]) => mockSetCookie(...args),
-	COOKIE_NAMES: { LANGUAGE: "cartera-lang" },
-}));
+vi.mock("@/lib/cookies", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/cookies")>();
+	return {
+		getCookie: () => mockGetCookie(),
+		setCookie: (...args: unknown[]) => mockSetCookie(...args),
+		COOKIE_NAMES: actual.COOKIE_NAMES,
+	};
+});
 
 // Mock settings API so tests don't hit the network
 vi.mock("@/lib/settings", () => ({
