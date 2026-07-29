@@ -65,11 +65,14 @@ vi.mock("@/lib/auth/actions", () => ({
 }));
 
 // Mock cookies module
-vi.mock("@/lib/cookies", () => ({
-	getCookie: vi.fn(() => "en"),
-	setCookie: vi.fn(),
-	COOKIE_NAMES: { LANGUAGE: "cartera-lang" },
-}));
+vi.mock("@/lib/cookies", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/cookies")>();
+	return {
+		getCookie: vi.fn(() => "en"),
+		setCookie: vi.fn(),
+		COOKIE_NAMES: actual.COOKIE_NAMES,
+	};
+});
 
 // Mock translations
 vi.mock("@/components/ui/dialog", () => ({

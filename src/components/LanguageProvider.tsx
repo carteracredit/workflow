@@ -20,6 +20,17 @@ import {
 	translations,
 } from "@/lib/translations";
 
+function parseLanguage(value: string | undefined): Language | null {
+	if (value === "en" || value === "es") return value;
+	return null;
+}
+
+function resolveInitialLanguage(cookieValue: string | undefined): Language {
+	const stored = parseLanguage(cookieValue);
+	if (stored) return stored;
+	return detectBrowserLanguage();
+}
+
 interface LanguageContextType {
 	language: Language;
 	setLanguage: (lang: Language) => void;
@@ -57,28 +68,35 @@ export function LanguageProvider({
 			return;
 		}
 
-		// Step 1: cookie first so there is no flash of wrong language.
-		const stored = getCookie(COOKIE_NAMES.LANGUAGE) as Language | undefined;
-		if (stored && ["es", "en"].includes(stored)) {
-			setLanguageState(stored);
-		} else {
-			const detected = detectBrowserLanguage();
-			setLanguageState(detected);
-			setCookie(COOKIE_NAMES.LANGUAGE, detected);
-		}
+		setLanguageState(resolveInitialLanguage(getCookie(COOKIE_NAMES.LANGUAGE)));
 
-		// Step 2: verify against auth-svc so cross-app value wins.
 		getResolvedSettings()
 			.then((settings) => {
 				const apiLanguage = settings.language as Language;
-				if (apiLanguage === "en" || apiLanguage === "es") {
+				if (apiLanguage !== "en" && apiLanguage !== "es") {
+					return;
+				}
+
+				const cookieLanguage = parseLanguage(getCookie(COOKIE_NAMES.LANGUAGE));
+
+				if (settings.sources?.language === "user") {
 					setLanguageState(apiLanguage);
 					setCookie(COOKIE_NAMES.LANGUAGE, apiLanguage);
+				} else if (cookieLanguage) {
+					setLanguageState(cookieLanguage);
+					updateUserSettings({
+						language: cookieLanguage as LanguageCode,
+					}).catch((error) => {
+						console.debug("Failed to promote language to API:", error);
+					});
+				} else {
+					setLanguageState(apiLanguage);
 				}
-				setSettingsSynced(true);
 			})
 			.catch((error) => {
 				console.debug("Settings API unavailable:", error);
+			})
+			.finally(() => {
 				setSettingsSynced(true);
 			});
 	}, [defaultLanguage]);
