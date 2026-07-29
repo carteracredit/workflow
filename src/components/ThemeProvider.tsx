@@ -12,6 +12,8 @@ import {
 	updateUserSettings,
 } from "@/lib/settings";
 
+type AppTheme = "light" | "dark" | "system";
+
 /**
  * Syncs theme across the shared cross-subdomain cookie and the
  * auth-svc user settings API so theme is consistent across all
@@ -38,15 +40,33 @@ function ThemeSettingsSyncer({ children }: { children: React.ReactNode }) {
 		getResolvedSettings()
 			.then((settings) => {
 				const apiTheme = settings.theme;
-				if (apiTheme && ["light", "dark", "system"].includes(apiTheme)) {
+				if (!apiTheme || !["light", "dark", "system"].includes(apiTheme)) {
+					return;
+				}
+
+				const cookieTheme = getCookie(COOKIE_NAMES.THEME);
+				const hasExplicitCookie =
+					cookieTheme && ["light", "dark", "system"].includes(cookieTheme);
+
+				if (settings.sources?.theme === "user") {
 					setTheme(apiTheme);
 					setCookie(COOKIE_NAMES.THEME, apiTheme);
 					previousTheme.current = apiTheme;
+				} else if (hasExplicitCookie) {
+					setTheme(cookieTheme as AppTheme);
+					previousTheme.current = cookieTheme;
+					updateUserSettings({ theme: cookieTheme as Theme }).catch((error) => {
+						console.debug("Failed to promote theme to API:", error);
+					});
+				} else {
+					setTheme(apiTheme);
+					previousTheme.current = apiTheme;
 				}
-				setSettingsSynced(true);
 			})
 			.catch((error) => {
 				console.debug("Settings API unavailable:", error);
+			})
+			.finally(() => {
 				setSettingsSynced(true);
 			});
 	}, [initialized, theme, setTheme]);

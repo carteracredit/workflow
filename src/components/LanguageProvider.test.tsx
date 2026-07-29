@@ -1,21 +1,21 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { LanguageProvider, useLanguage } from "./LanguageProvider";
+import * as settings from "@/lib/settings";
+import * as cookieUtils from "@/lib/cookies";
 
-// Mock cookies module - reset each test
 const mockGetCookie = vi.fn();
 const mockSetCookie = vi.fn();
 
 vi.mock("@/lib/cookies", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/cookies")>();
 	return {
-		getCookie: () => mockGetCookie(),
+		getCookie: (...args: unknown[]) => mockGetCookie(...args),
 		setCookie: (...args: unknown[]) => mockSetCookie(...args),
 		COOKIE_NAMES: actual.COOKIE_NAMES,
 	};
 });
 
-// Mock settings API so tests don't hit the network
 vi.mock("@/lib/settings", () => ({
 	getResolvedSettings: vi.fn(() =>
 		Promise.reject(new Error("no api in tests")),
@@ -23,7 +23,6 @@ vi.mock("@/lib/settings", () => ({
 	updateUserSettings: vi.fn(() => Promise.resolve({})),
 }));
 
-// Mock translations
 vi.mock("@/lib/translations", () => ({
 	translations: {
 		en: {
@@ -40,31 +39,28 @@ vi.mock("@/lib/translations", () => ({
 
 describe("LanguageProvider", () => {
 	beforeEach(() => {
-		mockGetCookie.mockReset();
-		mockSetCookie.mockReset();
-		mockGetCookie.mockReturnValue(undefined); // Default to no cookie
+		vi.clearAllMocks();
+		mockGetCookie.mockReturnValue(undefined);
+		vi.spyOn(console, "debug").mockImplementation(() => {});
 	});
 
 	afterEach(() => {
 		cleanup();
+		vi.restoreAllMocks();
 	});
 
 	it("should provide translations and language switching", async () => {
 		function TestComponent() {
-			const { language, t, setLanguage, getFieldLabel, getFieldPlaceholder } =
-				useLanguage();
+			const { t, setLanguage } = useLanguage();
 
 			return (
 				<div>
-					<span data-testid="language">{language}</span>
 					<span data-testid="translated">{t("common.save")}</span>
-					<span data-testid="field-label">
-						{getFieldLabel("English Label", "Spanish Label")}
-					</span>
-					<span data-testid="field-placeholder">
-						{getFieldPlaceholder("English Placeholder", "Spanish Placeholder")}
-					</span>
-					<button onClick={() => setLanguage("en")} data-testid="switch-en">
+					<button
+						type="button"
+						onClick={() => setLanguage("en")}
+						data-testid="switch-en"
+					>
 						Switch to English
 					</button>
 				</div>
@@ -77,22 +73,39 @@ describe("LanguageProvider", () => {
 			</LanguageProvider>,
 		);
 
-		// Check initial state (Spanish from detectBrowserLanguage)
 		expect(
 			container.querySelector('[data-testid="translated"]'),
 		).toHaveTextContent("Guardar");
 
-		// Switch to English
-		const switchButton = container.querySelector(
-			'[data-testid="switch-en"]',
-		) as HTMLElement;
-		fireEvent.click(switchButton);
+		fireEvent.click(
+			container.querySelector('[data-testid="switch-en"]') as HTMLElement,
+		);
 
 		await waitFor(() => {
 			expect(
 				container.querySelector('[data-testid="translated"]'),
 			).toHaveTextContent("Save");
 		});
+	});
+
+	it("detects browser language without writing a cookie", async () => {
+		function TestComponent() {
+			const { language } = useLanguage();
+			return <span data-testid="language">{language}</span>;
+		}
+
+		render(
+			<LanguageProvider>
+				<TestComponent />
+			</LanguageProvider>,
+		);
+
+		await waitFor(() => {
+			expect(
+				document.querySelector('[data-testid="language"]'),
+			).toHaveTextContent("es");
+		});
+		expect(mockSetCookie).not.toHaveBeenCalled();
 	});
 
 	it("should fall back to English label when Spanish not provided", () => {
@@ -135,11 +148,59 @@ describe("LanguageProvider", () => {
 		).toHaveTextContent("Save");
 	});
 
+	it("promotes cookie choice when API resolves from browser", async () => {
+		mockGetCookie.mockReturnValue("en");
+		vi.mocked(settings.getResolvedSettings).mockResolvedValueOnce({
+			theme: "system",
+			timezone: "UTC",
+			language: "es",
+			dateFormat: "DD/MM/YYYY",
+			clockFormat: "12h",
+			avatarUrl: null,
+			paymentMethods: [],
+			sources: {
+				theme: "default",
+				timezone: "default",
+				language: "browser",
+				dateFormat: "default",
+				clockFormat: "default",
+			},
+		});
+
+		function TestComponent() {
+			const { language } = useLanguage();
+			return <span data-testid="language">{language}</span>;
+		}
+
+		render(
+			<LanguageProvider>
+				<TestComponent />
+			</LanguageProvider>,
+		);
+
+		await waitFor(() => {
+			expect(
+				document.querySelector('[data-testid="language"]'),
+			).toHaveTextContent("en");
+		});
+		expect(settings.updateUserSettings).toHaveBeenCalledWith({
+			language: "en",
+		});
+		expect(mockSetCookie).not.toHaveBeenCalledWith(
+			cookieUtils.COOKIE_NAMES.LANGUAGE,
+			"es",
+		);
+	});
+
 	it("should save language to cookie when changed", async () => {
 		function TestComponent() {
 			const { setLanguage } = useLanguage();
 			return (
-				<button onClick={() => setLanguage("en")} data-testid="switch">
+				<button
+					type="button"
+					onClick={() => setLanguage("en")}
+					data-testid="switch"
+				>
 					Switch
 				</button>
 			);
@@ -154,7 +215,10 @@ describe("LanguageProvider", () => {
 		fireEvent.click(container.querySelector('[data-testid="switch"]')!);
 
 		await waitFor(() => {
-			expect(mockSetCookie).toHaveBeenCalled();
+			expect(mockSetCookie).toHaveBeenCalledWith(
+				cookieUtils.COOKIE_NAMES.LANGUAGE,
+				"en",
+			);
 		});
 	});
 
