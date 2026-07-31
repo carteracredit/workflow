@@ -98,6 +98,31 @@ export interface APIResponseConfig {
 	extractPath?: string; // dot-notation, e.g. "payload.data"
 }
 
+// ─── AI Name Match (internal RPC call type for the API node) ──────────────
+// Compares candidate names against reference names via OpenAI over the
+// `PROXY_SVC` service binding (no external URL/auth/headers/body needed —
+// see ProxySvcEntrypoint.aiNameMatch in proxy-svc).
+export type APICallType = "http" | "ai-name-match";
+
+export interface AINameMatchEntryConfig {
+	id: string;
+	/** Literal text and/or `${nodeId.prop}` variable refs producing the name. */
+	expression: string;
+	/** Optional traceability label (e.g. "buyer", "owner"), echoed back by the match result. */
+	label?: string;
+}
+
+export interface AINameMatchConfig {
+	namesToVerify: AINameMatchEntryConfig[];
+	referenceNames: AINameMatchEntryConfig[];
+	/** Minimum model confidence (0-100) required for a match. Server default: 70. */
+	minConfidence?: number;
+}
+
+export function createDefaultAINameMatchConfig(): AINameMatchConfig {
+	return { namesToVerify: [], referenceNames: [] };
+}
+
 export type TimeoutUnit = "seconds" | "minutes" | "hours" | "days";
 
 export type ChallengeType = "acceptance" | "signature";

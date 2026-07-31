@@ -3,6 +3,8 @@ import type {
 	WorkflowEdge,
 	ValidationError,
 	APIFailureHandling,
+	APICallType,
+	AINameMatchConfig,
 	ChallengeNodeConfig,
 	Flag,
 	MessageNodeConfig,
@@ -346,8 +348,59 @@ export function validateWorkflow(
 		}
 
 		if (node.type === "API") {
-			// Validar URL
-			if (!node.config.url) {
+			const callType: APICallType =
+				(node.config.callType as APICallType | undefined) ?? "http";
+
+			if (callType === "ai-name-match") {
+				const aiNameMatch = node.config.aiNameMatchConfig as
+					| AINameMatchConfig
+					| undefined;
+				const namesToVerify = aiNameMatch?.namesToVerify ?? [];
+				const referenceNames = aiNameMatch?.referenceNames ?? [];
+				const hasEmptyExpression = (entries: typeof namesToVerify): boolean =>
+					entries.some((e) => !e.expression?.trim());
+
+				if (namesToVerify.length === 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener al menos un nombre a verificar configurado`,
+						severity: "error",
+					});
+				} else if (hasEmptyExpression(namesToVerify)) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": todos los nombres a verificar deben tener una expresión configurada`,
+						severity: "error",
+					});
+				}
+
+				if (referenceNames.length === 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener al menos un nombre de referencia configurado`,
+						severity: "error",
+					});
+				} else if (hasEmptyExpression(referenceNames)) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": todos los nombres de referencia deben tener una expresión configurada`,
+						severity: "error",
+					});
+				}
+
+				const minConfidence = aiNameMatch?.minConfidence;
+				if (
+					minConfidence !== undefined &&
+					(minConfidence < 0 || minConfidence > 100)
+				) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": la confianza mínima debe estar entre 0 y 100`,
+						severity: "error",
+					});
+				}
+			} else if (!node.config.url) {
+				// Validar URL (solo aplica al modo HTTP externo)
 				errors.push({
 					nodeId: node.id,
 					message: `"${node.title}" debe tener una URL configurada`,
