@@ -1,3 +1,10 @@
+# [1.6.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.6.0-rc.1...v1.6.0-rc.2) (2026-07-31)
+
+
+### Features
+
+* **api:** introduce AI Name Match call type for API nodes ([ae08a65](https://github.com/carteracredit/workflow/commit/ae08a65d2c1dbdd1775a271ca3e84ef7b8daebec))
+
 # [1.6.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.5.0...v1.6.0-rc.1) (2026-07-21)
 
 
