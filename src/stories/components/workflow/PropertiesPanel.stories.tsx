@@ -302,6 +302,36 @@ export const ApiNodeJsonTemplateInvalid: Story = {
 	},
 };
 
+export const ApiNodeAiNameMatch: Story = {
+	name: "API — AI Name Match (interno)",
+	args: {
+		selectedNodes: [
+			{
+				...apiNodeBase,
+				id: "api-name-match",
+				title: "Verificar Propietario",
+				config: {
+					callType: "ai-name-match",
+					aiNameMatchConfig: {
+						namesToVerify: [
+							{ id: "n1", expression: "${formCliente.fullName}" },
+						],
+						referenceNames: [
+							{
+								id: "r1",
+								expression: "${consultaPropiedad.ownerName}",
+								label: "owner",
+							},
+						],
+						minConfidence: 80,
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
 // ─── NLS Node Stories ──────────────────────────────────────────────────────────
 
 const nlsNodeBase: WorkflowNode = {

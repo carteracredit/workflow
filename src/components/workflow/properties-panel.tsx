@@ -15,6 +15,9 @@ import type {
 	APIBodyConfig,
 	APIBodyMode,
 	APIResponseConfig,
+	APICallType,
+	AINameMatchConfig,
+	AINameMatchEntryConfig,
 	StaleTimeoutConfig,
 	ChallengeNodeConfig,
 	ChallengeType,
@@ -2697,730 +2700,956 @@ export function PropertiesPanel({
 											allCheckpoints[0] ||
 											null;
 
-										return (
-											<div className="space-y-4">
+										const callType: APICallType =
+											(selectedNode.config.callType as
+												| APICallType
+												| undefined) ?? "http";
+										const isAiNameMatch = callType === "ai-name-match";
+										const aiNameMatch: AINameMatchConfig = (selectedNode.config
+											.aiNameMatchConfig as AINameMatchConfig | undefined) ?? {
+											namesToVerify: [],
+											referenceNames: [],
+										};
+										const updateAiNameMatch = (
+											patch: Partial<AINameMatchConfig>,
+										) =>
+											onUpdateNode(selectedNode.id, {
+												config: {
+													...selectedNode.config,
+													aiNameMatchConfig: { ...aiNameMatch, ...patch },
+												},
+											});
+										const renderNameEntryList = (
+											field: "namesToVerify" | "referenceNames",
+											label: string,
+											description: string,
+										) => {
+											const entries = aiNameMatch[field] ?? [];
+											const updateEntries = (next: AINameMatchEntryConfig[]) =>
+												updateAiNameMatch({ [field]: next });
+											return (
 												<div className="space-y-2">
-													<Label htmlFor="api-method">
-														{t("propertiesPanel.apiMethodLabel")}
-													</Label>
-													<Select
-														value={
-															(selectedNode.config.method as string) || "GET"
-														}
-														onValueChange={(value) =>
-															onUpdateNode(selectedNode.id, {
-																config: {
-																	...selectedNode.config,
-																	method: value,
-																},
-															})
-														}
-													>
-														<SelectTrigger id="api-method">
-															<SelectValue />
-														</SelectTrigger>
-														<SelectContent>
-															<SelectItem value="GET">GET</SelectItem>
-															<SelectItem value="POST">POST</SelectItem>
-															<SelectItem value="PUT">PUT</SelectItem>
-															<SelectItem value="PATCH">PATCH</SelectItem>
-															<SelectItem value="DELETE">DELETE</SelectItem>
-														</SelectContent>
-													</Select>
-												</div>
-
-												<div className="space-y-2">
-													<Label htmlFor="api-url">
-														{t("propertiesPanel.apiUrlLabel")}
-													</Label>
-													<VariableTemplateInput
-														nodes={upstreamVariableNodes}
-														value={
-															(selectedNode.config.urlSegments as
-																| TemplateSegment[]
-																| undefined) ?? undefined
-														}
-														onChange={handleUrlSegmentsChange}
-														placeholder="https://api.example.com/endpoint"
-													/>
-												</div>
-
-												{/* ── Authentication ───────────────────────── */}
-												<CollapsibleSection
-													title={t("propertiesPanel.sectionAuth")}
-													defaultOpen={false}
-												>
-													<div className="space-y-2">
-														<Label>
-															{t("propertiesPanel.apiAuthTypeLabel")}
-														</Label>
-														<Select
-															value={
-																(
-																	selectedNode.config.authConfig as
-																		| APIAuthConfig
-																		| undefined
-																)?.type ?? "none"
-															}
-															onValueChange={(value) =>
-																onUpdateNode(selectedNode.id, {
-																	config: {
-																		...selectedNode.config,
-																		authConfig: {
-																			...((selectedNode.config.authConfig as
-																				| APIAuthConfig
-																				| undefined) ?? {}),
-																			type: value as APIAuthType,
-																		},
-																	},
-																})
-															}
-														>
-															<SelectTrigger>
-																<SelectValue />
-															</SelectTrigger>
-															<SelectContent>
-																<SelectItem value="none">
-																	{t("propertiesPanel.apiAuthNone")}
-																</SelectItem>
-																<SelectItem value="bearer">
-																	{t("propertiesPanel.apiAuthBearer")}
-																</SelectItem>
-																<SelectItem value="api-key">
-																	{t("propertiesPanel.apiAuthApiKey")}
-																</SelectItem>
-																<SelectItem value="oauth2-client-credentials">
-																	{t("propertiesPanel.apiAuthOauth2")}
-																</SelectItem>
-															</SelectContent>
-														</Select>
-													</div>
-
-													{(() => {
-														const auth = (selectedNode.config.authConfig as
-															| APIAuthConfig
-															| undefined) ?? { type: "none" };
-														const updateAuth = (
-															patch: Partial<APIAuthConfig>,
-														) =>
-															onUpdateNode(selectedNode.id, {
-																config: {
-																	...selectedNode.config,
-																	authConfig: { ...auth, ...patch },
-																},
-															});
-
-														if (auth.type === "bearer") {
-															return (
-																<div className="space-y-2">
-																	<Label>
-																		{t(
-																			"propertiesPanel.apiAuthBearerTokenLabel",
-																		)}
-																	</Label>
-																	<Input
-																		value={auth.bearerToken ?? ""}
-																		onChange={(e) =>
-																			updateAuth({
-																				bearerToken: e.target.value,
-																			})
-																		}
-																		placeholder={t(
-																			"propertiesPanel.apiAuthBearerTokenPlaceholder",
-																		)}
-																		className="font-mono text-sm"
-																	/>
-																	<p className="text-xs text-muted-foreground">
-																		{t(
-																			"propertiesPanel.apiAuthBearerTokenDesc",
-																		)}
-																	</p>
-																</div>
-															);
-														}
-														if (auth.type === "api-key") {
-															return (
-																<div className="space-y-2">
-																	<div className="space-y-1">
-																		<Label>
-																			{t(
-																				"propertiesPanel.apiAuthApiKeyHeaderLabel",
-																			)}
-																		</Label>
-																		<Input
-																			value={auth.apiKeyHeader ?? ""}
-																			onChange={(e) =>
-																				updateAuth({
-																					apiKeyHeader: e.target.value,
-																				})
-																			}
-																			placeholder={t(
-																				"propertiesPanel.apiAuthApiKeyHeaderPlaceholder",
-																			)}
-																			className="font-mono text-sm"
-																		/>
-																	</div>
-																	<div className="space-y-1">
-																		<Label>
-																			{t(
-																				"propertiesPanel.apiAuthApiKeyValueLabel",
-																			)}
-																		</Label>
-																		<Input
-																			value={auth.apiKeyValue ?? ""}
-																			onChange={(e) =>
-																				updateAuth({
-																					apiKeyValue: e.target.value,
-																				})
-																			}
-																			placeholder={t(
-																				"propertiesPanel.apiAuthApiKeyValuePlaceholder",
-																			)}
-																			className="font-mono text-sm"
-																		/>
-																		<p className="text-xs text-muted-foreground">
-																			{t(
-																				"propertiesPanel.apiAuthApiKeyValueDesc",
-																			)}
-																		</p>
-																	</div>
-																</div>
-															);
-														}
-														if (auth.type === "oauth2-client-credentials") {
-															return (
-																<div className="space-y-2">
-																	{(
-																		[
-																			[
-																				"oauth2TokenUrl",
-																				"apiAuthOauth2TokenUrlLabel",
-																				"apiAuthOauth2TokenUrlPlaceholder",
-																			],
-																			[
-																				"oauth2ClientId",
-																				"apiAuthOauth2ClientIdLabel",
-																				"apiAuthOauth2ClientIdPlaceholder",
-																			],
-																			[
-																				"oauth2ClientSecret",
-																				"apiAuthOauth2ClientSecretLabel",
-																				"apiAuthOauth2ClientSecretPlaceholder",
-																			],
-																			[
-																				"oauth2Scope",
-																				"apiAuthOauth2ScopeLabel",
-																				"apiAuthOauth2ScopePlaceholder",
-																			],
-																			[
-																				"oauth2Username",
-																				"apiAuthOauth2UsernameLabel",
-																				"apiAuthOauth2UsernamePlaceholder",
-																			],
-																			[
-																				"oauth2Password",
-																				"apiAuthOauth2PasswordLabel",
-																				"apiAuthOauth2PasswordPlaceholder",
-																			],
-																		] as const
-																	).map(([field, labelKey, phKey]) => (
-																		<div key={field} className="space-y-1">
-																			<Label>
-																				{t(`propertiesPanel.${labelKey}`)}
-																			</Label>
-																			<Input
-																				value={
-																					(auth[field] as string | undefined) ??
-																					""
-																				}
-																				onChange={(e) =>
-																					updateAuth({
-																						[field]: e.target.value,
-																					})
-																				}
-																				placeholder={t(
-																					`propertiesPanel.${phKey}`,
-																				)}
-																				className="font-mono text-sm"
-																			/>
-																		</div>
-																	))}
-																	<p className="text-xs text-muted-foreground">
-																		{t("propertiesPanel.apiAuthOauth2Note")}
-																	</p>
-																</div>
-															);
-														}
-														return null;
-													})()}
-
-													{onManageVariables && (
-														<button
-															type="button"
-															onClick={onManageVariables}
-															className="text-xs text-primary hover:underline"
-														>
-															{t("propertiesPanel.apiAuthManageVarsLink")}
-														</button>
-													)}
-												</CollapsibleSection>
-
-												{/* ── Custom Headers ───────────────────────── */}
-												<div className="border-t border-border pt-4 space-y-3">
 													<div className="flex items-center justify-between">
-														<h3 className="font-semibold text-sm">
-															{t("propertiesPanel.apiHeadersTitle")}
-														</h3>
+														<Label>{label}</Label>
 														<Button
 															size="sm"
 															variant="outline"
 															className="h-7 text-xs"
-															disabled={
-																(
-																	(selectedNode.config.customHeaders as
-																		| APIHeaderEntry[]
-																		| undefined) ?? []
-																).length >= 10
-															}
-															onClick={() => {
-																const headers: APIHeaderEntry[] = [
-																	...((selectedNode.config.customHeaders as
-																		| APIHeaderEntry[]
-																		| undefined) ?? []),
-																	{ key: "", value: "" },
-																];
-																onUpdateNode(selectedNode.id, {
-																	config: {
-																		...selectedNode.config,
-																		customHeaders: headers,
+															onClick={() =>
+																updateEntries([
+																	...entries,
+																	{
+																		id: `name_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+																		expression: "",
 																	},
-																});
-															}}
+																])
+															}
 														>
-															{t("propertiesPanel.apiHeadersAddBtn")}
+															{t("propertiesPanel.aiNameMatchAddNameBtn")}
 														</Button>
 													</div>
-													{(
-														(selectedNode.config.customHeaders as
-															| APIHeaderEntry[]
-															| undefined) ?? []
-													).length >= 10 && (
-														<p className="text-xs text-destructive">
-															{t("propertiesPanel.apiHeadersMaxWarning")}
+													<p className="text-xs text-muted-foreground">
+														{description}
+													</p>
+													{entries.length === 0 ? (
+														<p className="text-xs text-muted-foreground italic">
+															{t("propertiesPanel.aiNameMatchEmptyState")}
 														</p>
-													)}
-													{(
-														(selectedNode.config.customHeaders as
-															| APIHeaderEntry[]
-															| undefined) ?? []
-													).map((header, idx) => (
-														<div key={idx} className="flex gap-1 items-start">
-															<Input
-																value={header.key}
-																onChange={(e) => {
-																	const headers = [
-																		...((selectedNode.config
-																			.customHeaders as APIHeaderEntry[]) ??
-																			[]),
-																	];
-																	headers[idx] = {
-																		...headers[idx],
-																		key: e.target.value,
-																	};
-																	onUpdateNode(selectedNode.id, {
-																		config: {
-																			...selectedNode.config,
-																			customHeaders: headers,
-																		},
-																	});
-																}}
-																placeholder={t(
-																	"propertiesPanel.apiHeadersKeyPlaceholder",
-																)}
-																className="font-mono text-xs h-8"
-															/>
-															<Input
-																value={header.value}
-																onChange={(e) => {
-																	const headers = [
-																		...((selectedNode.config
-																			.customHeaders as APIHeaderEntry[]) ??
-																			[]),
-																	];
-																	headers[idx] = {
-																		...headers[idx],
-																		value: e.target.value,
-																	};
-																	onUpdateNode(selectedNode.id, {
-																		config: {
-																			...selectedNode.config,
-																			customHeaders: headers,
-																		},
-																	});
-																}}
-																placeholder={t(
-																	"propertiesPanel.apiHeadersValuePlaceholder",
-																)}
-																className="font-mono text-xs h-8"
-															/>
-															<Button
-																size="sm"
-																variant="ghost"
-																className="h-8 w-8 shrink-0 px-0"
-																onClick={() => {
-																	const headers = (
-																		(selectedNode.config
-																			.customHeaders as APIHeaderEntry[]) ?? []
-																	).filter((_, i) => i !== idx);
-																	onUpdateNode(selectedNode.id, {
-																		config: {
-																			...selectedNode.config,
-																			customHeaders: headers,
-																		},
-																	});
-																}}
+													) : (
+														entries.map((entry, idx) => (
+															<div
+																key={entry.id}
+																className="flex gap-1 items-start"
 															>
-																×
-															</Button>
-														</div>
-													))}
-													{(
-														(selectedNode.config.customHeaders as
-															| APIHeaderEntry[]
-															| undefined) ?? []
-													).length > 0 && (
+																<div className="flex-1 min-w-0">
+																	<VariableTemplateInput
+																		nodes={upstreamVariableNodes}
+																		value={parseTemplateStringToSegments(
+																			entry.expression,
+																		)}
+																		onChange={(segs) => {
+																			const next = [...entries];
+																			next[idx] = {
+																				...next[idx],
+																				expression:
+																					segmentsToTemplateString(segs),
+																			};
+																			updateEntries(next);
+																		}}
+																		placeholder={t(
+																			"propertiesPanel.aiNameMatchExpressionPlaceholder",
+																		)}
+																	/>
+																</div>
+																<Input
+																	value={entry.label ?? ""}
+																	onChange={(e) => {
+																		const next = [...entries];
+																		next[idx] = {
+																			...next[idx],
+																			label: e.target.value || undefined,
+																		};
+																		updateEntries(next);
+																	}}
+																	placeholder={t(
+																		"propertiesPanel.aiNameMatchLabelPlaceholder",
+																	)}
+																	className="text-xs h-8 w-36 shrink-0"
+																/>
+																<Button
+																	size="sm"
+																	variant="ghost"
+																	className="h-8 w-8 shrink-0 px-0"
+																	onClick={() =>
+																		updateEntries(
+																			entries.filter((_, i) => i !== idx),
+																		)
+																	}
+																>
+																	×
+																</Button>
+															</div>
+														))
+													)}
+												</div>
+											);
+										};
+
+										return (
+											<div className="space-y-4">
+												<div className="space-y-2">
+													<Label htmlFor="api-call-type">
+														{t("propertiesPanel.apiCallTypeLabel")}
+													</Label>
+													<Select
+														value={callType}
+														onValueChange={(value) =>
+															onUpdateNode(selectedNode.id, {
+																config: {
+																	...selectedNode.config,
+																	callType: value as APICallType,
+																},
+															})
+														}
+													>
+														<SelectTrigger id="api-call-type">
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															<SelectItem value="http">
+																{t("propertiesPanel.apiCallTypeHttp")}
+															</SelectItem>
+															<SelectItem value="ai-name-match">
+																{t("propertiesPanel.apiCallTypeAiNameMatch")}
+															</SelectItem>
+														</SelectContent>
+													</Select>
+													{isAiNameMatch && (
 														<p className="text-xs text-muted-foreground">
-															{t("propertiesPanel.apiHeadersValueDesc")}
+															{t("propertiesPanel.apiCallTypeAiNameMatchDesc")}
 														</p>
 													)}
 												</div>
 
-												{/* ── Body (POST/PUT/PATCH only) ───────────── */}
-												{["POST", "PUT", "PATCH"].includes(
-													(selectedNode.config.method as string) || "GET",
-												) && (
-													<div className="border-t border-border pt-4 space-y-3">
-														<h3 className="font-semibold text-sm">
-															{t("propertiesPanel.apiBodyTitle")}
-														</h3>
-														<div className="flex gap-1">
-															{(
-																[
-																	["none", "apiBodyModeNone"],
-																	["field-mapping", "apiBodyModeFieldMapping"],
-																	["raw-json", "apiBodyModeRawJson"],
-																	["raw-xml", "apiBodyModeRawXml"],
-																] as const
-															).map(([mode, labelKey]) => (
-																<Button
-																	key={mode}
-																	size="sm"
-																	variant={
-																		((
-																			selectedNode.config.bodyConfig as
-																				| APIBodyConfig
+												{isAiNameMatch && (
+													<div className="space-y-4">
+														{renderNameEntryList(
+															"namesToVerify",
+															t(
+																"propertiesPanel.aiNameMatchNamesToVerifyLabel",
+															),
+															t("propertiesPanel.aiNameMatchNamesToVerifyDesc"),
+														)}
+														{renderNameEntryList(
+															"referenceNames",
+															t(
+																"propertiesPanel.aiNameMatchReferenceNamesLabel",
+															),
+															t(
+																"propertiesPanel.aiNameMatchReferenceNamesDesc",
+															),
+														)}
+														<div className="space-y-1">
+															<Label htmlFor="ai-name-match-min-confidence">
+																{t(
+																	"propertiesPanel.aiNameMatchMinConfidenceLabel",
+																)}
+															</Label>
+															<Input
+																id="ai-name-match-min-confidence"
+																type="number"
+																min={0}
+																max={100}
+																value={aiNameMatch.minConfidence ?? ""}
+																onChange={(e) => {
+																	const raw = e.target.value;
+																	updateAiNameMatch({
+																		minConfidence:
+																			raw === "" ? undefined : Number(raw),
+																	});
+																}}
+																placeholder="70"
+																className="w-24"
+															/>
+															<p className="text-xs text-muted-foreground">
+																{t(
+																	"propertiesPanel.aiNameMatchMinConfidenceDesc",
+																)}
+															</p>
+														</div>
+													</div>
+												)}
+
+												{!isAiNameMatch && (
+													<>
+														<div className="space-y-2">
+															<Label htmlFor="api-method">
+																{t("propertiesPanel.apiMethodLabel")}
+															</Label>
+															<Select
+																value={
+																	(selectedNode.config.method as string) ||
+																	"GET"
+																}
+																onValueChange={(value) =>
+																	onUpdateNode(selectedNode.id, {
+																		config: {
+																			...selectedNode.config,
+																			method: value,
+																		},
+																	})
+																}
+															>
+																<SelectTrigger id="api-method">
+																	<SelectValue />
+																</SelectTrigger>
+																<SelectContent>
+																	<SelectItem value="GET">GET</SelectItem>
+																	<SelectItem value="POST">POST</SelectItem>
+																	<SelectItem value="PUT">PUT</SelectItem>
+																	<SelectItem value="PATCH">PATCH</SelectItem>
+																	<SelectItem value="DELETE">DELETE</SelectItem>
+																</SelectContent>
+															</Select>
+														</div>
+
+														<div className="space-y-2">
+															<Label htmlFor="api-url">
+																{t("propertiesPanel.apiUrlLabel")}
+															</Label>
+															<VariableTemplateInput
+																nodes={upstreamVariableNodes}
+																value={
+																	(selectedNode.config.urlSegments as
+																		| TemplateSegment[]
+																		| undefined) ?? undefined
+																}
+																onChange={handleUrlSegmentsChange}
+																placeholder="https://api.example.com/endpoint"
+															/>
+														</div>
+
+														{/* ── Authentication ───────────────────────── */}
+														<CollapsibleSection
+															title={t("propertiesPanel.sectionAuth")}
+															defaultOpen={false}
+														>
+															<div className="space-y-2">
+																<Label>
+																	{t("propertiesPanel.apiAuthTypeLabel")}
+																</Label>
+																<Select
+																	value={
+																		(
+																			selectedNode.config.authConfig as
+																				| APIAuthConfig
 																				| undefined
-																		)?.mode ?? "none") === mode
-																			? "default"
-																			: "outline"
+																		)?.type ?? "none"
 																	}
-																	className="flex-1 text-xs h-7"
-																	onClick={() =>
+																	onValueChange={(value) =>
 																		onUpdateNode(selectedNode.id, {
 																			config: {
 																				...selectedNode.config,
-																				bodyConfig: {
+																				authConfig: {
 																					...((selectedNode.config
-																						.bodyConfig as
-																						| APIBodyConfig
+																						.authConfig as
+																						| APIAuthConfig
 																						| undefined) ?? {}),
-																					mode: mode as APIBodyMode,
+																					type: value as APIAuthType,
 																				},
 																			},
 																		})
 																	}
 																>
-																	{t(`propertiesPanel.${labelKey}`)}
-																</Button>
-															))}
-														</div>
+																	<SelectTrigger>
+																		<SelectValue />
+																	</SelectTrigger>
+																	<SelectContent>
+																		<SelectItem value="none">
+																			{t("propertiesPanel.apiAuthNone")}
+																		</SelectItem>
+																		<SelectItem value="bearer">
+																			{t("propertiesPanel.apiAuthBearer")}
+																		</SelectItem>
+																		<SelectItem value="api-key">
+																			{t("propertiesPanel.apiAuthApiKey")}
+																		</SelectItem>
+																		<SelectItem value="oauth2-client-credentials">
+																			{t("propertiesPanel.apiAuthOauth2")}
+																		</SelectItem>
+																	</SelectContent>
+																</Select>
+															</div>
 
-														{(() => {
-															const bc = (selectedNode.config.bodyConfig as
-																| APIBodyConfig
-																| undefined) ?? { mode: "none" };
-															const updateBody = (
-																patch: Partial<APIBodyConfig>,
-															) =>
-																onUpdateNode(selectedNode.id, {
-																	config: {
-																		...selectedNode.config,
-																		bodyConfig: { ...bc, ...patch },
-																	},
-																});
+															{(() => {
+																const auth = (selectedNode.config.authConfig as
+																	| APIAuthConfig
+																	| undefined) ?? { type: "none" };
+																const updateAuth = (
+																	patch: Partial<APIAuthConfig>,
+																) =>
+																	onUpdateNode(selectedNode.id, {
+																		config: {
+																			...selectedNode.config,
+																			authConfig: { ...auth, ...patch },
+																		},
+																	});
 
-															if (bc.mode === "raw-json") {
-																const jsonValue = bc.rawJson ?? "";
-																const jsonInvalid =
-																	jsonValue.trim() !== "" &&
-																	!isValidJson(jsonValue);
-																return (
-																	<div className="space-y-1">
-																		<Label>
-																			{t("propertiesPanel.apiBodyRawJsonLabel")}
-																		</Label>
-																		<Textarea
-																			ref={rawJsonTextareaRef}
-																			value={jsonValue}
-																			onChange={(e) =>
-																				updateBody({ rawJson: e.target.value })
-																			}
-																			placeholder={t(
-																				"propertiesPanel.apiBodyRawJsonPlaceholder",
-																			)}
-																			rows={4}
-																			aria-invalid={jsonInvalid}
-																			className={cn(
-																				"font-mono text-xs resize-none",
-																				jsonInvalid &&
-																					"border-destructive focus-visible:ring-destructive",
-																			)}
-																		/>
-																		{jsonInvalid ? (
-																			<p className="text-xs text-destructive">
-																				{t(
-																					"propertiesPanel.apiBodyRawJsonError",
-																				)}
-																			</p>
-																		) : (
-																			<p className="text-xs text-muted-foreground">
-																				{t(
-																					"propertiesPanel.apiBodyRawJsonDesc",
-																				)}
-																			</p>
-																		)}
-																		<div className="rounded-md border border-border/60 overflow-hidden">
-																			<button
-																				type="button"
-																				onClick={() =>
-																					setShowRawJsonVarPicker(
-																						!showRawJsonVarPicker,
-																					)
-																				}
-																				className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
-																			>
-																				<span className="font-medium">
-																					{t(
-																						"propertiesPanel.availableVarsLabel",
-																					)}
-																				</span>
-																				<span>
-																					{showRawJsonVarPicker ? "▲" : "▼"}
-																				</span>
-																			</button>
-																			{showRawJsonVarPicker &&
-																				(upstreamVariableNodes.length > 0 ? (
-																					<VariablePicker
-																						nodes={upstreamVariableNodes}
-																						onSelect={(variable) =>
-																							insertVariableIntoBodyConfig(
-																								rawJsonTextareaRef,
-																								variable.path,
-																								"rawJson",
-																							)
-																						}
-																						className="rounded-none border-0 shadow-none"
-																					/>
-																				) : (
-																					<div className="px-3 py-2 text-xs text-muted-foreground">
-																						{t(
-																							"propertiesPanel.noVarsAvailable",
-																						)}
-																					</div>
-																				))}
-																		</div>
-																	</div>
-																);
-															}
-															if (bc.mode === "raw-xml") {
-																const xmlValue = bc.rawXml ?? "";
-																const xmlInvalid =
-																	xmlValue.trim() !== "" &&
-																	!isWellFormedXml(xmlValue);
-																return (
-																	<div className="space-y-1">
-																		<Label>
-																			{t("propertiesPanel.apiBodyRawXmlLabel")}
-																		</Label>
-																		<Textarea
-																			ref={rawXmlTextareaRef}
-																			value={xmlValue}
-																			onChange={(e) =>
-																				updateBody({ rawXml: e.target.value })
-																			}
-																			placeholder={t(
-																				"propertiesPanel.apiBodyRawXmlPlaceholder",
-																			)}
-																			rows={4}
-																			aria-invalid={xmlInvalid}
-																			className={cn(
-																				"font-mono text-xs resize-none",
-																				xmlInvalid &&
-																					"border-destructive focus-visible:ring-destructive",
-																			)}
-																		/>
-																		{xmlInvalid ? (
-																			<p className="text-xs text-destructive">
-																				{t(
-																					"propertiesPanel.apiBodyRawXmlError",
-																				)}
-																			</p>
-																		) : (
-																			<p className="text-xs text-muted-foreground">
-																				{t("propertiesPanel.apiBodyRawXmlDesc")}
-																			</p>
-																		)}
-																		<div className="rounded-md border border-border/60 overflow-hidden">
-																			<button
-																				type="button"
-																				onClick={() =>
-																					setShowRawXmlVarPicker(
-																						!showRawXmlVarPicker,
-																					)
-																				}
-																				className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
-																			>
-																				<span className="font-medium">
-																					{t(
-																						"propertiesPanel.availableVarsLabel",
-																					)}
-																				</span>
-																				<span>
-																					{showRawXmlVarPicker ? "▲" : "▼"}
-																				</span>
-																			</button>
-																			{showRawXmlVarPicker &&
-																				(upstreamVariableNodes.length > 0 ? (
-																					<VariablePicker
-																						nodes={upstreamVariableNodes}
-																						onSelect={(variable) =>
-																							insertVariableIntoBodyConfig(
-																								rawXmlTextareaRef,
-																								variable.path,
-																								"rawXml",
-																							)
-																						}
-																						className="rounded-none border-0 shadow-none"
-																					/>
-																				) : (
-																					<div className="px-3 py-2 text-xs text-muted-foreground">
-																						{t(
-																							"propertiesPanel.noVarsAvailable",
-																						)}
-																					</div>
-																				))}
-																		</div>
-																	</div>
-																);
-															}
-															if (bc.mode === "field-mapping") {
-																return (
-																	<div className="space-y-2">
-																		<div className="flex items-center justify-between">
+																if (auth.type === "bearer") {
+																	return (
+																		<div className="space-y-2">
 																			<Label>
 																				{t(
-																					"propertiesPanel.apiBodyFieldMappingLabel",
+																					"propertiesPanel.apiAuthBearerTokenLabel",
 																				)}
 																			</Label>
-																			<Button
-																				size="sm"
-																				variant="outline"
-																				className="h-7 text-xs"
-																				onClick={() =>
-																					updateBody({
-																						fieldMappings: [
-																							...(bc.fieldMappings ?? []),
-																							{
-																								sourceExpression: "",
-																								targetKey: "",
-																							},
-																						],
+																			<Input
+																				value={auth.bearerToken ?? ""}
+																				onChange={(e) =>
+																					updateAuth({
+																						bearerToken: e.target.value,
 																					})
 																				}
-																			>
-																				{t(
-																					"propertiesPanel.apiBodyAddMappingBtn",
+																				placeholder={t(
+																					"propertiesPanel.apiAuthBearerTokenPlaceholder",
 																				)}
-																			</Button>
+																				className="font-mono text-sm"
+																			/>
+																			<p className="text-xs text-muted-foreground">
+																				{t(
+																					"propertiesPanel.apiAuthBearerTokenDesc",
+																				)}
+																			</p>
 																		</div>
-																		{(bc.fieldMappings ?? []).map(
-																			(mapping, idx) => (
-																				<div
-																					key={idx}
-																					className="flex gap-1 items-start"
-																				>
+																	);
+																}
+																if (auth.type === "api-key") {
+																	return (
+																		<div className="space-y-2">
+																			<div className="space-y-1">
+																				<Label>
+																					{t(
+																						"propertiesPanel.apiAuthApiKeyHeaderLabel",
+																					)}
+																				</Label>
+																				<Input
+																					value={auth.apiKeyHeader ?? ""}
+																					onChange={(e) =>
+																						updateAuth({
+																							apiKeyHeader: e.target.value,
+																						})
+																					}
+																					placeholder={t(
+																						"propertiesPanel.apiAuthApiKeyHeaderPlaceholder",
+																					)}
+																					className="font-mono text-sm"
+																				/>
+																			</div>
+																			<div className="space-y-1">
+																				<Label>
+																					{t(
+																						"propertiesPanel.apiAuthApiKeyValueLabel",
+																					)}
+																				</Label>
+																				<Input
+																					value={auth.apiKeyValue ?? ""}
+																					onChange={(e) =>
+																						updateAuth({
+																							apiKeyValue: e.target.value,
+																						})
+																					}
+																					placeholder={t(
+																						"propertiesPanel.apiAuthApiKeyValuePlaceholder",
+																					)}
+																					className="font-mono text-sm"
+																				/>
+																				<p className="text-xs text-muted-foreground">
+																					{t(
+																						"propertiesPanel.apiAuthApiKeyValueDesc",
+																					)}
+																				</p>
+																			</div>
+																		</div>
+																	);
+																}
+																if (auth.type === "oauth2-client-credentials") {
+																	return (
+																		<div className="space-y-2">
+																			{(
+																				[
+																					[
+																						"oauth2TokenUrl",
+																						"apiAuthOauth2TokenUrlLabel",
+																						"apiAuthOauth2TokenUrlPlaceholder",
+																					],
+																					[
+																						"oauth2ClientId",
+																						"apiAuthOauth2ClientIdLabel",
+																						"apiAuthOauth2ClientIdPlaceholder",
+																					],
+																					[
+																						"oauth2ClientSecret",
+																						"apiAuthOauth2ClientSecretLabel",
+																						"apiAuthOauth2ClientSecretPlaceholder",
+																					],
+																					[
+																						"oauth2Scope",
+																						"apiAuthOauth2ScopeLabel",
+																						"apiAuthOauth2ScopePlaceholder",
+																					],
+																					[
+																						"oauth2Username",
+																						"apiAuthOauth2UsernameLabel",
+																						"apiAuthOauth2UsernamePlaceholder",
+																					],
+																					[
+																						"oauth2Password",
+																						"apiAuthOauth2PasswordLabel",
+																						"apiAuthOauth2PasswordPlaceholder",
+																					],
+																				] as const
+																			).map(([field, labelKey, phKey]) => (
+																				<div key={field} className="space-y-1">
+																					<Label>
+																						{t(`propertiesPanel.${labelKey}`)}
+																					</Label>
 																					<Input
-																						value={mapping.sourceExpression}
-																						onChange={(e) => {
-																							const mappings = [
-																								...(bc.fieldMappings ?? []),
-																							];
-																							mappings[idx] = {
-																								...mappings[idx],
-																								sourceExpression:
-																									e.target.value,
-																							};
-																							updateBody({
-																								fieldMappings: mappings,
-																							});
-																						}}
+																						value={
+																							(auth[field] as
+																								| string
+																								| undefined) ?? ""
+																						}
+																						onChange={(e) =>
+																							updateAuth({
+																								[field]: e.target.value,
+																							})
+																						}
 																						placeholder={t(
-																							"propertiesPanel.apiBodySourceLabel",
+																							`propertiesPanel.${phKey}`,
 																						)}
-																						className="font-mono text-xs h-8 flex-1"
+																						className="font-mono text-sm"
 																					/>
-																					<Input
-																						value={mapping.targetKey}
-																						onChange={(e) => {
-																							const mappings = [
-																								...(bc.fieldMappings ?? []),
-																							];
-																							mappings[idx] = {
-																								...mappings[idx],
-																								targetKey: e.target.value,
-																							};
-																							updateBody({
-																								fieldMappings: mappings,
-																							});
-																						}}
-																						placeholder={t(
-																							"propertiesPanel.apiBodyTargetPlaceholder",
+																				</div>
+																			))}
+																			<p className="text-xs text-muted-foreground">
+																				{t("propertiesPanel.apiAuthOauth2Note")}
+																			</p>
+																		</div>
+																	);
+																}
+																return null;
+															})()}
+
+															{onManageVariables && (
+																<button
+																	type="button"
+																	onClick={onManageVariables}
+																	className="text-xs text-primary hover:underline"
+																>
+																	{t("propertiesPanel.apiAuthManageVarsLink")}
+																</button>
+															)}
+														</CollapsibleSection>
+
+														{/* ── Custom Headers ───────────────────────── */}
+														<div className="border-t border-border pt-4 space-y-3">
+															<div className="flex items-center justify-between">
+																<h3 className="font-semibold text-sm">
+																	{t("propertiesPanel.apiHeadersTitle")}
+																</h3>
+																<Button
+																	size="sm"
+																	variant="outline"
+																	className="h-7 text-xs"
+																	disabled={
+																		(
+																			(selectedNode.config.customHeaders as
+																				| APIHeaderEntry[]
+																				| undefined) ?? []
+																		).length >= 10
+																	}
+																	onClick={() => {
+																		const headers: APIHeaderEntry[] = [
+																			...((selectedNode.config.customHeaders as
+																				| APIHeaderEntry[]
+																				| undefined) ?? []),
+																			{ key: "", value: "" },
+																		];
+																		onUpdateNode(selectedNode.id, {
+																			config: {
+																				...selectedNode.config,
+																				customHeaders: headers,
+																			},
+																		});
+																	}}
+																>
+																	{t("propertiesPanel.apiHeadersAddBtn")}
+																</Button>
+															</div>
+															{(
+																(selectedNode.config.customHeaders as
+																	| APIHeaderEntry[]
+																	| undefined) ?? []
+															).length >= 10 && (
+																<p className="text-xs text-destructive">
+																	{t("propertiesPanel.apiHeadersMaxWarning")}
+																</p>
+															)}
+															{(
+																(selectedNode.config.customHeaders as
+																	| APIHeaderEntry[]
+																	| undefined) ?? []
+															).map((header, idx) => (
+																<div
+																	key={idx}
+																	className="flex gap-1 items-start"
+																>
+																	<Input
+																		value={header.key}
+																		onChange={(e) => {
+																			const headers = [
+																				...((selectedNode.config
+																					.customHeaders as APIHeaderEntry[]) ??
+																					[]),
+																			];
+																			headers[idx] = {
+																				...headers[idx],
+																				key: e.target.value,
+																			};
+																			onUpdateNode(selectedNode.id, {
+																				config: {
+																					...selectedNode.config,
+																					customHeaders: headers,
+																				},
+																			});
+																		}}
+																		placeholder={t(
+																			"propertiesPanel.apiHeadersKeyPlaceholder",
+																		)}
+																		className="font-mono text-xs h-8"
+																	/>
+																	<Input
+																		value={header.value}
+																		onChange={(e) => {
+																			const headers = [
+																				...((selectedNode.config
+																					.customHeaders as APIHeaderEntry[]) ??
+																					[]),
+																			];
+																			headers[idx] = {
+																				...headers[idx],
+																				value: e.target.value,
+																			};
+																			onUpdateNode(selectedNode.id, {
+																				config: {
+																					...selectedNode.config,
+																					customHeaders: headers,
+																				},
+																			});
+																		}}
+																		placeholder={t(
+																			"propertiesPanel.apiHeadersValuePlaceholder",
+																		)}
+																		className="font-mono text-xs h-8"
+																	/>
+																	<Button
+																		size="sm"
+																		variant="ghost"
+																		className="h-8 w-8 shrink-0 px-0"
+																		onClick={() => {
+																			const headers = (
+																				(selectedNode.config
+																					.customHeaders as APIHeaderEntry[]) ??
+																				[]
+																			).filter((_, i) => i !== idx);
+																			onUpdateNode(selectedNode.id, {
+																				config: {
+																					...selectedNode.config,
+																					customHeaders: headers,
+																				},
+																			});
+																		}}
+																	>
+																		×
+																	</Button>
+																</div>
+															))}
+															{(
+																(selectedNode.config.customHeaders as
+																	| APIHeaderEntry[]
+																	| undefined) ?? []
+															).length > 0 && (
+																<p className="text-xs text-muted-foreground">
+																	{t("propertiesPanel.apiHeadersValueDesc")}
+																</p>
+															)}
+														</div>
+
+														{/* ── Body (POST/PUT/PATCH only) ───────────── */}
+														{["POST", "PUT", "PATCH"].includes(
+															(selectedNode.config.method as string) || "GET",
+														) && (
+															<div className="border-t border-border pt-4 space-y-3">
+																<h3 className="font-semibold text-sm">
+																	{t("propertiesPanel.apiBodyTitle")}
+																</h3>
+																<div className="flex gap-1">
+																	{(
+																		[
+																			["none", "apiBodyModeNone"],
+																			[
+																				"field-mapping",
+																				"apiBodyModeFieldMapping",
+																			],
+																			["raw-json", "apiBodyModeRawJson"],
+																			["raw-xml", "apiBodyModeRawXml"],
+																		] as const
+																	).map(([mode, labelKey]) => (
+																		<Button
+																			key={mode}
+																			size="sm"
+																			variant={
+																				((
+																					selectedNode.config.bodyConfig as
+																						| APIBodyConfig
+																						| undefined
+																				)?.mode ?? "none") === mode
+																					? "default"
+																					: "outline"
+																			}
+																			className="flex-1 text-xs h-7"
+																			onClick={() =>
+																				onUpdateNode(selectedNode.id, {
+																					config: {
+																						...selectedNode.config,
+																						bodyConfig: {
+																							...((selectedNode.config
+																								.bodyConfig as
+																								| APIBodyConfig
+																								| undefined) ?? {}),
+																							mode: mode as APIBodyMode,
+																						},
+																					},
+																				})
+																			}
+																		>
+																			{t(`propertiesPanel.${labelKey}`)}
+																		</Button>
+																	))}
+																</div>
+
+																{(() => {
+																	const bc = (selectedNode.config.bodyConfig as
+																		| APIBodyConfig
+																		| undefined) ?? { mode: "none" };
+																	const updateBody = (
+																		patch: Partial<APIBodyConfig>,
+																	) =>
+																		onUpdateNode(selectedNode.id, {
+																			config: {
+																				...selectedNode.config,
+																				bodyConfig: { ...bc, ...patch },
+																			},
+																		});
+
+																	if (bc.mode === "raw-json") {
+																		const jsonValue = bc.rawJson ?? "";
+																		const jsonInvalid =
+																			jsonValue.trim() !== "" &&
+																			!isValidJson(jsonValue);
+																		return (
+																			<div className="space-y-1">
+																				<Label>
+																					{t(
+																						"propertiesPanel.apiBodyRawJsonLabel",
+																					)}
+																				</Label>
+																				<Textarea
+																					ref={rawJsonTextareaRef}
+																					value={jsonValue}
+																					onChange={(e) =>
+																						updateBody({
+																							rawJson: e.target.value,
+																						})
+																					}
+																					placeholder={t(
+																						"propertiesPanel.apiBodyRawJsonPlaceholder",
+																					)}
+																					rows={4}
+																					aria-invalid={jsonInvalid}
+																					className={cn(
+																						"font-mono text-xs resize-none",
+																						jsonInvalid &&
+																							"border-destructive focus-visible:ring-destructive",
+																					)}
+																				/>
+																				{jsonInvalid ? (
+																					<p className="text-xs text-destructive">
+																						{t(
+																							"propertiesPanel.apiBodyRawJsonError",
 																						)}
-																						className="font-mono text-xs h-8 flex-1"
-																					/>
+																					</p>
+																				) : (
+																					<p className="text-xs text-muted-foreground">
+																						{t(
+																							"propertiesPanel.apiBodyRawJsonDesc",
+																						)}
+																					</p>
+																				)}
+																				<div className="rounded-md border border-border/60 overflow-hidden">
+																					<button
+																						type="button"
+																						onClick={() =>
+																							setShowRawJsonVarPicker(
+																								!showRawJsonVarPicker,
+																							)
+																						}
+																						className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+																					>
+																						<span className="font-medium">
+																							{t(
+																								"propertiesPanel.availableVarsLabel",
+																							)}
+																						</span>
+																						<span>
+																							{showRawJsonVarPicker ? "▲" : "▼"}
+																						</span>
+																					</button>
+																					{showRawJsonVarPicker &&
+																						(upstreamVariableNodes.length >
+																						0 ? (
+																							<VariablePicker
+																								nodes={upstreamVariableNodes}
+																								onSelect={(variable) =>
+																									insertVariableIntoBodyConfig(
+																										rawJsonTextareaRef,
+																										variable.path,
+																										"rawJson",
+																									)
+																								}
+																								className="rounded-none border-0 shadow-none"
+																							/>
+																						) : (
+																							<div className="px-3 py-2 text-xs text-muted-foreground">
+																								{t(
+																									"propertiesPanel.noVarsAvailable",
+																								)}
+																							</div>
+																						))}
+																				</div>
+																			</div>
+																		);
+																	}
+																	if (bc.mode === "raw-xml") {
+																		const xmlValue = bc.rawXml ?? "";
+																		const xmlInvalid =
+																			xmlValue.trim() !== "" &&
+																			!isWellFormedXml(xmlValue);
+																		return (
+																			<div className="space-y-1">
+																				<Label>
+																					{t(
+																						"propertiesPanel.apiBodyRawXmlLabel",
+																					)}
+																				</Label>
+																				<Textarea
+																					ref={rawXmlTextareaRef}
+																					value={xmlValue}
+																					onChange={(e) =>
+																						updateBody({
+																							rawXml: e.target.value,
+																						})
+																					}
+																					placeholder={t(
+																						"propertiesPanel.apiBodyRawXmlPlaceholder",
+																					)}
+																					rows={4}
+																					aria-invalid={xmlInvalid}
+																					className={cn(
+																						"font-mono text-xs resize-none",
+																						xmlInvalid &&
+																							"border-destructive focus-visible:ring-destructive",
+																					)}
+																				/>
+																				{xmlInvalid ? (
+																					<p className="text-xs text-destructive">
+																						{t(
+																							"propertiesPanel.apiBodyRawXmlError",
+																						)}
+																					</p>
+																				) : (
+																					<p className="text-xs text-muted-foreground">
+																						{t(
+																							"propertiesPanel.apiBodyRawXmlDesc",
+																						)}
+																					</p>
+																				)}
+																				<div className="rounded-md border border-border/60 overflow-hidden">
+																					<button
+																						type="button"
+																						onClick={() =>
+																							setShowRawXmlVarPicker(
+																								!showRawXmlVarPicker,
+																							)
+																						}
+																						className="w-full flex items-center justify-between px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors text-xs text-muted-foreground"
+																					>
+																						<span className="font-medium">
+																							{t(
+																								"propertiesPanel.availableVarsLabel",
+																							)}
+																						</span>
+																						<span>
+																							{showRawXmlVarPicker ? "▲" : "▼"}
+																						</span>
+																					</button>
+																					{showRawXmlVarPicker &&
+																						(upstreamVariableNodes.length >
+																						0 ? (
+																							<VariablePicker
+																								nodes={upstreamVariableNodes}
+																								onSelect={(variable) =>
+																									insertVariableIntoBodyConfig(
+																										rawXmlTextareaRef,
+																										variable.path,
+																										"rawXml",
+																									)
+																								}
+																								className="rounded-none border-0 shadow-none"
+																							/>
+																						) : (
+																							<div className="px-3 py-2 text-xs text-muted-foreground">
+																								{t(
+																									"propertiesPanel.noVarsAvailable",
+																								)}
+																							</div>
+																						))}
+																				</div>
+																			</div>
+																		);
+																	}
+																	if (bc.mode === "field-mapping") {
+																		return (
+																			<div className="space-y-2">
+																				<div className="flex items-center justify-between">
+																					<Label>
+																						{t(
+																							"propertiesPanel.apiBodyFieldMappingLabel",
+																						)}
+																					</Label>
 																					<Button
 																						size="sm"
-																						variant="ghost"
-																						className="h-8 w-8 shrink-0 px-0"
+																						variant="outline"
+																						className="h-7 text-xs"
 																						onClick={() =>
 																							updateBody({
-																								fieldMappings: (
-																									bc.fieldMappings ?? []
-																								).filter((_, i) => i !== idx),
+																								fieldMappings: [
+																									...(bc.fieldMappings ?? []),
+																									{
+																										sourceExpression: "",
+																										targetKey: "",
+																									},
+																								],
 																							})
 																						}
 																					>
-																						×
+																						{t(
+																							"propertiesPanel.apiBodyAddMappingBtn",
+																						)}
 																					</Button>
 																				</div>
-																			),
-																		)}
-																	</div>
-																);
-															}
-															return null;
-														})()}
-													</div>
+																				{(bc.fieldMappings ?? []).map(
+																					(mapping, idx) => (
+																						<div
+																							key={idx}
+																							className="flex gap-1 items-start"
+																						>
+																							<Input
+																								value={mapping.sourceExpression}
+																								onChange={(e) => {
+																									const mappings = [
+																										...(bc.fieldMappings ?? []),
+																									];
+																									mappings[idx] = {
+																										...mappings[idx],
+																										sourceExpression:
+																											e.target.value,
+																									};
+																									updateBody({
+																										fieldMappings: mappings,
+																									});
+																								}}
+																								placeholder={t(
+																									"propertiesPanel.apiBodySourceLabel",
+																								)}
+																								className="font-mono text-xs h-8 flex-1"
+																							/>
+																							<Input
+																								value={mapping.targetKey}
+																								onChange={(e) => {
+																									const mappings = [
+																										...(bc.fieldMappings ?? []),
+																									];
+																									mappings[idx] = {
+																										...mappings[idx],
+																										targetKey: e.target.value,
+																									};
+																									updateBody({
+																										fieldMappings: mappings,
+																									});
+																								}}
+																								placeholder={t(
+																									"propertiesPanel.apiBodyTargetPlaceholder",
+																								)}
+																								className="font-mono text-xs h-8 flex-1"
+																							/>
+																							<Button
+																								size="sm"
+																								variant="ghost"
+																								className="h-8 w-8 shrink-0 px-0"
+																								onClick={() =>
+																									updateBody({
+																										fieldMappings: (
+																											bc.fieldMappings ?? []
+																										).filter(
+																											(_, i) => i !== idx,
+																										),
+																									})
+																								}
+																							>
+																								×
+																							</Button>
+																						</div>
+																					),
+																				)}
+																			</div>
+																		);
+																	}
+																	return null;
+																})()}
+															</div>
+														)}
+													</>
 												)}
 
 												{/* ── Response Path ────────────────────────── */}
@@ -3459,90 +3688,94 @@ export function PropertiesPanel({
 													</p>
 												</div>
 
-												<Button
-													size="sm"
-													variant="secondary"
-													className="w-full"
-													onClick={handleOpenApiMock}
-												>
-													{t("propertiesPanel.apiTestMockBtn")}
-												</Button>
+												{!isAiNameMatch && (
+													<>
+														<Button
+															size="sm"
+															variant="secondary"
+															className="w-full"
+															onClick={handleOpenApiMock}
+														>
+															{t("propertiesPanel.apiTestMockBtn")}
+														</Button>
 
-												{showApiMock && (
-													<div className="rounded-md border border-border bg-muted/40 p-3 space-y-3">
-														<div className="space-y-1">
-															<p className="text-xs font-medium">
-																{t("propertiesPanel.apiRequestPreview")}
-															</p>
-															<div className="rounded-md bg-muted px-3 py-2 font-mono text-xs">
-																<span className="text-blue-400">
-																	{(selectedNode.config.method as string) ||
-																		"GET"}
-																</span>{" "}
-																<span className="text-muted-foreground break-all">
-																	{(selectedNode.config.url as string) ||
-																		"/api/endpoint"}
-																</span>
-															</div>
-														</div>
+														{showApiMock && (
+															<div className="rounded-md border border-border bg-muted/40 p-3 space-y-3">
+																<div className="space-y-1">
+																	<p className="text-xs font-medium">
+																		{t("propertiesPanel.apiRequestPreview")}
+																	</p>
+																	<div className="rounded-md bg-muted px-3 py-2 font-mono text-xs">
+																		<span className="text-blue-400">
+																			{(selectedNode.config.method as string) ||
+																				"GET"}
+																		</span>{" "}
+																		<span className="text-muted-foreground break-all">
+																			{(selectedNode.config.url as string) ||
+																				"/api/endpoint"}
+																		</span>
+																	</div>
+																</div>
 
-														<div className="space-y-1">
-															<label className="text-xs font-medium">
-																{t("propertiesPanel.apiMockResponseLabel")}
-															</label>
-															<Textarea
-																value={apiMockResponse}
-																onChange={(e) => {
-																	setApiMockResponse(e.target.value);
-																	setApiMockSimulated(false);
-																	setApiMockError(null);
-																}}
-																rows={4}
-																className="font-mono text-xs resize-none"
-																placeholder={t(
-																	"propertiesPanel.apiMockResponsePlaceholder",
+																<div className="space-y-1">
+																	<label className="text-xs font-medium">
+																		{t("propertiesPanel.apiMockResponseLabel")}
+																	</label>
+																	<Textarea
+																		value={apiMockResponse}
+																		onChange={(e) => {
+																			setApiMockResponse(e.target.value);
+																			setApiMockSimulated(false);
+																			setApiMockError(null);
+																		}}
+																		rows={4}
+																		className="font-mono text-xs resize-none"
+																		placeholder={t(
+																			"propertiesPanel.apiMockResponsePlaceholder",
+																		)}
+																	/>
+																</div>
+
+																{apiMockError && (
+																	<p className="text-xs text-destructive">
+																		{apiMockError}
+																	</p>
 																)}
-															/>
-														</div>
 
-														{apiMockError && (
-															<p className="text-xs text-destructive">
-																{apiMockError}
-															</p>
-														)}
+																{apiMockSimulated && !apiMockError && (
+																	<div className="rounded-md bg-emerald-500/15 p-2">
+																		<p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+																			{t("propertiesPanel.apiSimSuccessTitle")}
+																		</p>
+																		<p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+																			{t("propertiesPanel.apiSimSuccessDesc")}
+																		</p>
+																	</div>
+																)}
 
-														{apiMockSimulated && !apiMockError && (
-															<div className="rounded-md bg-emerald-500/15 p-2">
-																<p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-																	{t("propertiesPanel.apiSimSuccessTitle")}
-																</p>
-																<p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-																	{t("propertiesPanel.apiSimSuccessDesc")}
-																</p>
+																<div className="flex gap-2">
+																	<Button
+																		size="sm"
+																		variant="outline"
+																		className="flex-1"
+																		onClick={() => {
+																			setShowApiMock(false);
+																			setApiMockSimulated(false);
+																		}}
+																	>
+																		{t("propertiesPanel.apiMockClose")}
+																	</Button>
+																	<Button
+																		size="sm"
+																		className="flex-1"
+																		onClick={handleSimulateMock}
+																	>
+																		{t("propertiesPanel.apiMockSimulate")}
+																	</Button>
+																</div>
 															</div>
 														)}
-
-														<div className="flex gap-2">
-															<Button
-																size="sm"
-																variant="outline"
-																className="flex-1"
-																onClick={() => {
-																	setShowApiMock(false);
-																	setApiMockSimulated(false);
-																}}
-															>
-																{t("propertiesPanel.apiMockClose")}
-															</Button>
-															<Button
-																size="sm"
-																className="flex-1"
-																onClick={handleSimulateMock}
-															>
-																{t("propertiesPanel.apiMockSimulate")}
-															</Button>
-														</div>
-													</div>
+													</>
 												)}
 
 												<CollapsibleSection

@@ -587,6 +587,25 @@ export const translations = {
 			outputSchemaLabelResponse: "Response Schema",
 			apiMethodLabel: "Method",
 			apiUrlLabel: "URL",
+			// Call type (HTTP vs internal AI Name Match RPC)
+			apiCallTypeLabel: "Call Type",
+			apiCallTypeHttp: "External HTTP",
+			apiCallTypeAiNameMatch: "AI Name Match (internal)",
+			apiCallTypeAiNameMatchDesc:
+				"Compares names via OpenAI over an internal service binding — no URL, auth, or secrets required.",
+			aiNameMatchNamesToVerifyLabel: "Names to Verify",
+			aiNameMatchNamesToVerifyDesc:
+				"Captured/entered names that need to be checked (e.g. an applicant's full name).",
+			aiNameMatchReferenceNamesLabel: "Reference Names",
+			aiNameMatchReferenceNamesDesc:
+				"Trusted names to check against (e.g. a property owner from a prior API node).",
+			aiNameMatchAddNameBtn: "Add Name",
+			aiNameMatchExpressionPlaceholder: "Literal text or ${node.property}",
+			aiNameMatchLabelPlaceholder: "Label (optional, e.g. buyer)",
+			aiNameMatchEmptyState: "No names configured yet.",
+			aiNameMatchMinConfidenceLabel: "Minimum Confidence",
+			aiNameMatchMinConfidenceDesc:
+				"Minimum match confidence (0-100) required to consider it a match. Server default: 70.",
 			apiTestMockBtn: "Test with Mock",
 			apiRequestPreview: "Request Preview",
 			apiMockResponseLabel: "Mock Response (JSON)",
@@ -1733,6 +1752,25 @@ export const translations = {
 			outputSchemaLabelResponse: "Esquema de Respuesta",
 			apiMethodLabel: "Método",
 			apiUrlLabel: "URL",
+			// Tipo de llamada (HTTP vs RPC interno de AI Name Match)
+			apiCallTypeLabel: "Tipo de Llamada",
+			apiCallTypeHttp: "HTTP externo",
+			apiCallTypeAiNameMatch: "AI Name Match (interno)",
+			apiCallTypeAiNameMatchDesc:
+				"Compara nombres vía OpenAI mediante un service binding interno — sin URL, auth ni secretos.",
+			aiNameMatchNamesToVerifyLabel: "Nombres a Verificar",
+			aiNameMatchNamesToVerifyDesc:
+				"Nombres capturados/ingresados que deben verificarse (ej. el nombre completo de un solicitante).",
+			aiNameMatchReferenceNamesLabel: "Nombres de Referencia",
+			aiNameMatchReferenceNamesDesc:
+				"Nombres confiables contra los cuales comparar (ej. el propietario de una propiedad de un nodo API previo).",
+			aiNameMatchAddNameBtn: "Agregar Nombre",
+			aiNameMatchExpressionPlaceholder: "Texto literal o ${nodo.propiedad}",
+			aiNameMatchLabelPlaceholder: "Etiqueta (opcional, ej. buyer)",
+			aiNameMatchEmptyState: "Aún no hay nombres configurados.",
+			aiNameMatchMinConfidenceLabel: "Confianza Mínima",
+			aiNameMatchMinConfidenceDesc:
+				"Confianza mínima de coincidencia (0-100) requerida para considerarlo match. Default del servidor: 70.",
 			apiTestMockBtn: "Probar con Mock",
 			apiRequestPreview: "Preview del Request",
 			apiMockResponseLabel: "Respuesta Mock (JSON)",

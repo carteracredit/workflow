@@ -9,6 +9,9 @@ import type {
 	APIHeaderEntry,
 	APIBodyConfig,
 	APIResponseConfig,
+	APICallType,
+	AINameMatchConfig,
+	AINameMatchEntryConfig,
 	MessageNodeConfig,
 	OutputSchema,
 	NLSNodeConfig,
@@ -1093,12 +1096,55 @@ function emitContinueOnFailureCatch(
 /**
  * Generate code for an API node
  */
+/**
+ * Emits the `namesToVerify`/`referenceNames` array literal for the internal
+ * `aiNameMatch` RPC call. Each entry either interpolates to a plain string
+ * (no label) or a `{ fullName, label }` object (per `NameEntry` in
+ * proxy-svc's `domain/openai/nameMatch.ts`) when a traceability label is set.
+ */
+function emitAiNameMatchEntries(entries: AINameMatchEntryConfig[]): string {
+	if (entries.length === 0) return "[]";
+	const items = entries.map((entry) => {
+		const nameExpr = emitInterpolatedString(entry.expression || "");
+		if (entry.label) {
+			return `{ fullName: ${nameExpr}, label: ${JSON.stringify(entry.label)} }`;
+		}
+		return nameExpr;
+	});
+	return `[${items.join(", ")}]`;
+}
+
+/**
+ * Generates the body of an "AI Name Match" API node: a call to
+ * `this.env.PROXY_SVC.aiNameMatch` over the internal service binding
+ * (see `ProxySvcEntrypoint.aiNameMatch` in proxy-svc) instead of `fetch`.
+ * No URL, auth, headers, or body config apply in this mode.
+ */
+function generateAiNameMatchCall(node: WorkflowNode, indent: string): string {
+	const config = (node.config.aiNameMatchConfig as
+		| AINameMatchConfig
+		| undefined) ?? { namesToVerify: [], referenceNames: [] };
+
+	let code = `${indent}\tconst _aiNameMatchResult = await this.env.PROXY_SVC.aiNameMatch({\n`;
+	code += `${indent}\t\tnamesToVerify: ${emitAiNameMatchEntries(config.namesToVerify ?? [])},\n`;
+	code += `${indent}\t\treferenceNames: ${emitAiNameMatchEntries(config.referenceNames ?? [])},\n`;
+	if (typeof config.minConfidence === "number") {
+		code += `${indent}\t\tminConfidence: ${config.minConfidence},\n`;
+	}
+	code += `${indent}\t});\n`;
+	code += `${indent}\treturn _aiNameMatchResult as unknown as Record<string, unknown>;\n`;
+	return code;
+}
+
 function generateAPIStep(
 	node: WorkflowNode,
 	indent: string,
 	retryVarName?: string,
 ): string {
 	const stepName = createStepName(node);
+	const callType: APICallType =
+		(node.config.callType as APICallType | undefined) ?? "http";
+	const isAiNameMatch = callType === "ai-name-match";
 	const endpoint =
 		(node.config.url as string) ||
 		(node.config.endpoint as string) ||
@@ -1113,7 +1159,7 @@ function generateAPIStep(
 	const responseConfig = node.config.responseConfig as
 		| APIResponseConfig
 		| undefined;
-	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
+	const hasBody = !isAiNameMatch && ["POST", "PUT", "PATCH"].includes(method);
 	// API nodes always capture the response so the cases UI can display it,
 	// regardless of whether an explicit outputSchema is configured.
 	const varName = getVarName(node.id);
@@ -1125,6 +1171,7 @@ function generateAPIStep(
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
 	const isOAuth2 =
+		!isAiNameMatch &&
 		authConfig?.type === "oauth2-client-credentials" &&
 		authConfig.oauth2TokenUrl &&
 		authConfig.oauth2ClientId &&
@@ -1196,9 +1243,12 @@ function generateAPIStep(
 	}
 
 	// Build headers
-	const hasCustomHeaders = customHeaders.length > 0;
+	const hasCustomHeaders = !isAiNameMatch && customHeaders.length > 0;
 	const hasAuthHeader =
-		authConfig && authConfig.type !== "none" && authConfig.type !== undefined;
+		!isAiNameMatch &&
+		authConfig &&
+		authConfig.type !== "none" &&
+		authConfig.type !== undefined;
 	if (hasAuthHeader || hasCustomHeaders || hasBody) {
 		code += `${indent}\tconst headers: Record<string, string> = {};\n`;
 		if (hasBody) {
@@ -1238,67 +1288,78 @@ function generateAPIStep(
 		}
 	}
 
-	// Build fetch call
-	code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
-	code += `${indent}\t\tmethod: "${method}",\n`;
-
-	if (hasAuthHeader || hasCustomHeaders || hasBody) {
-		code += `${indent}\t\theaders,\n`;
-	}
-
-	// Body
-	if (hasBody) {
-		const mode = bodyConfig?.mode ?? "none";
-		if (mode === "raw-json" && bodyConfig?.rawJson) {
-			// Always use backticks: preserves inner JSON quotes and allows
-			// ${nodeId.prop} and ${secret.VAR} refs (both mapped via
-			// expandVariablePath so secrets resolve to this.env.VAR).
-			const dehyphenated = bodyConfig.rawJson.replace(
-				/\$\{([^}]+)\}/g,
-				(_, path: string) => `\${${expandVariablePath(path)}}`,
-			);
-			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
-			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
-		} else if (mode === "raw-xml" && bodyConfig?.rawXml) {
-			// Same backtick strategy as raw-json: preserves XML angle brackets and
-			// allows ${nodeId.prop} / ${secret.VAR} interpolation.
-			const dehyphenated = bodyConfig.rawXml.replace(
-				/\$\{([^}]+)\}/g,
-				(_, path: string) => `\${${expandVariablePath(path)}}`,
-			);
-			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
-			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
-		} else if (mode === "field-mapping" && bodyConfig?.fieldMappings?.length) {
-			const mappingsCode = bodyConfig.fieldMappings
-				.map(
-					(m) =>
-						`${JSON.stringify(m.targetKey)}: ${expandVariableRefs(m.sourceExpression)}`,
-				)
-				.join(`, `);
-			code += `${indent}\t\tbody: JSON.stringify({ ${mappingsCode} }),\n`;
-		} else {
-			code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
-		}
-	}
-
-	code += `${indent}\t});\n`;
-	code += `${indent}\tif (!response.ok) {\n`;
-	code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
-	code += `${indent}\t}\n`;
-
-	// Response extraction
-	const extractPath = responseConfig?.extractPath?.trim();
-	if (extractPath) {
-		code += `${indent}\tconst _responseData = (await response.json()) as Record<string, unknown>;\n`;
-		const accessExpr = extractPath
-			.split(".")
-			.reduce(
-				(acc, key) => `(${acc} as Record<string, unknown>)["${key}"]`,
-				"_responseData",
-			);
-		code += `${indent}\treturn ${accessExpr} as Record<string, unknown>;\n`;
+	if (isAiNameMatch) {
+		code += generateAiNameMatchCall(node, indent);
 	} else {
-		code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
+		// Build fetch call
+		code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
+		code += `${indent}\t\tmethod: "${method}",\n`;
+
+		if (hasAuthHeader || hasCustomHeaders || hasBody) {
+			code += `${indent}\t\theaders,\n`;
+		}
+
+		// Body
+		if (hasBody) {
+			const mode = bodyConfig?.mode ?? "none";
+			if (mode === "raw-json" && bodyConfig?.rawJson) {
+				// Always use backticks: preserves inner JSON quotes and allows
+				// ${nodeId.prop} and ${secret.VAR} refs (both mapped via
+				// expandVariablePath so secrets resolve to this.env.VAR).
+				const dehyphenated = bodyConfig.rawJson.replace(
+					/\$\{([^}]+)\}/g,
+					(_, path: string) => `\${${expandVariablePath(path)}}`,
+				);
+				const escaped = dehyphenated
+					.replace(/\\/g, "\\\\")
+					.replace(/`/g, "\\`");
+				code += `${indent}\t\tbody: \`${escaped}\`,\n`;
+			} else if (mode === "raw-xml" && bodyConfig?.rawXml) {
+				// Same backtick strategy as raw-json: preserves XML angle brackets and
+				// allows ${nodeId.prop} / ${secret.VAR} interpolation.
+				const dehyphenated = bodyConfig.rawXml.replace(
+					/\$\{([^}]+)\}/g,
+					(_, path: string) => `\${${expandVariablePath(path)}}`,
+				);
+				const escaped = dehyphenated
+					.replace(/\\/g, "\\\\")
+					.replace(/`/g, "\\`");
+				code += `${indent}\t\tbody: \`${escaped}\`,\n`;
+			} else if (
+				mode === "field-mapping" &&
+				bodyConfig?.fieldMappings?.length
+			) {
+				const mappingsCode = bodyConfig.fieldMappings
+					.map(
+						(m) =>
+							`${JSON.stringify(m.targetKey)}: ${expandVariableRefs(m.sourceExpression)}`,
+					)
+					.join(`, `);
+				code += `${indent}\t\tbody: JSON.stringify({ ${mappingsCode} }),\n`;
+			} else {
+				code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+			}
+		}
+
+		code += `${indent}\t});\n`;
+		code += `${indent}\tif (!response.ok) {\n`;
+		code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
+		code += `${indent}\t}\n`;
+
+		// Response extraction
+		const extractPath = responseConfig?.extractPath?.trim();
+		if (extractPath) {
+			code += `${indent}\tconst _responseData = (await response.json()) as Record<string, unknown>;\n`;
+			const accessExpr = extractPath
+				.split(".")
+				.reduce(
+					(acc, key) => `(${acc} as Record<string, unknown>)["${key}"]`,
+					"_responseData",
+				);
+			code += `${indent}\treturn ${accessExpr} as Record<string, unknown>;\n`;
+		} else {
+			code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
+		}
 	}
 
 	code += `${indent}});\n`;
@@ -3409,6 +3470,15 @@ function collectInterpolatedStrings(node: WorkflowNode): string[] {
 			push(authConfig?.oauth2Scope);
 			push(authConfig?.oauth2Username);
 			push(authConfig?.oauth2Password);
+			const aiNameMatchConfig = node.config.aiNameMatchConfig as
+				| AINameMatchConfig
+				| undefined;
+			for (const entry of aiNameMatchConfig?.namesToVerify ?? []) {
+				push(entry.expression);
+			}
+			for (const entry of aiNameMatchConfig?.referenceNames ?? []) {
+				push(entry.expression);
+			}
 			break;
 		}
 		case "Message": {
@@ -3619,6 +3689,12 @@ export function generateWorkflowCode(
 	// generated by `wrangler types` (worker-configuration.d.ts).
 	const hasMessageNodes = nodes.some((n) => n.type === "Message");
 	const hasNlsNodes = nodes.some((n) => n.type === "NLS");
+	const hasAiNameMatchNodes = nodes.some(
+		(n) =>
+			n.type === "API" &&
+			((n.config as { callType?: APICallType } | undefined)?.callType ??
+				"http") === "ai-name-match",
+	);
 	const hasSignatureChallengeNodes = nodes.some(
 		(n) =>
 			n.type === "Challenge" &&
@@ -3703,16 +3779,34 @@ export function generateWorkflowCode(
 		code += `\t\t}) => Promise<void>;\n`;
 	}
 	code += `\t};\n`;
-	if (hasNlsNodes) {
+	if (hasNlsNodes || hasAiNameMatchNodes) {
 		code += `\tPROXY_SVC: {\n`;
-		code += `\t\tnlsCreateLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
-		code += `\t\tnlsCancelLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
-		code += `\t\tnlsGetAmortization: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{\n`;
-		code += `\t\t\tLoanAmount: number; CashFlow: string; totalOfPayments: number;\n`;
-		code += `\t\t\tregularPaymentAmount: number; firstPaymentApr: string;\n`;
-		code += `\t\t\tlastPaymentAmount: number; lastPaymentDate: string | null;\n`;
-		code += `\t\t\tOriginationDate: string; apr: number | null;\n`;
-		code += `\t\t}>;\n`;
+		if (hasNlsNodes) {
+			code += `\t\tnlsCreateLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
+			code += `\t\tnlsCancelLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
+			code += `\t\tnlsGetAmortization: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{\n`;
+			code += `\t\t\tLoanAmount: number; CashFlow: string; totalOfPayments: number;\n`;
+			code += `\t\t\tregularPaymentAmount: number; firstPaymentApr: string;\n`;
+			code += `\t\t\tlastPaymentAmount: number; lastPaymentDate: string | null;\n`;
+			code += `\t\t\tOriginationDate: string; apr: number | null;\n`;
+			code += `\t\t}>;\n`;
+		}
+		if (hasAiNameMatchNodes) {
+			// Mirrors ProxySvcEntrypoint.aiNameMatch / domain/openai/nameMatch.ts
+			// in proxy-svc — no bearer token: pure computation over the service
+			// binding, not user-data access.
+			code += `\t\taiNameMatch: (input: {\n`;
+			code += `\t\t\tnamesToVerify: Array<string | { firstName?: string; middleName?: string; lastName?: string; fullName?: string; label?: string }>;\n`;
+			code += `\t\t\treferenceNames: Array<string | { firstName?: string; middleName?: string; lastName?: string; fullName?: string; label?: string }>;\n`;
+			code += `\t\t\tminConfidence?: number;\n`;
+			code += `\t\t}) => Promise<{\n`;
+			code += `\t\t\tmatched: boolean;\n`;
+			code += `\t\t\tconfidence: number;\n`;
+			code += `\t\t\tmatchedName: string | null;\n`;
+			code += `\t\t\tmatchedAgainst: string | null;\n`;
+			code += `\t\t\texplanation: string;\n`;
+			code += `\t\t}>;\n`;
+		}
 		code += `\t};\n`;
 	}
 	// User-defined variables and secrets from the variables panel (all are strings at runtime)

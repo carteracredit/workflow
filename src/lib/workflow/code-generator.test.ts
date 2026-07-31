@@ -6758,3 +6758,128 @@ describe("GeneratePDF node code generation", () => {
 		expect(result.code).not.toContain("visibilityRoles:");
 	});
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Name Match (internal RPC call type on the API node)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("generateWorkflowCode – API node AI Name Match call type", () => {
+	function makeAiNameMatchNode(config: Record<string, unknown> = {}) {
+		return createNode({
+			id: "api-1",
+			type: "API",
+			title: "Verify Owner",
+			config: {
+				callType: "ai-name-match",
+				aiNameMatchConfig: {
+					namesToVerify: [{ id: "n1", expression: "John Smith" }],
+					referenceNames: [{ id: "r1", expression: "John Smith" }],
+				},
+				...config,
+			},
+		});
+	}
+
+	function genAiNameMatch(config: Record<string, unknown> = {}) {
+		const node = makeAiNameMatchNode(config);
+		const startNode = createNode({
+			id: "start-1",
+			type: "Start",
+			title: "Start",
+		});
+		const endNode = createNode({ id: "end-1", type: "End", title: "End" });
+		const nodes = [startNode, node, endNode];
+		const edges: WorkflowEdge[] = [
+			createEdge("start-1", "api-1"),
+			createEdge("api-1", "end-1"),
+		];
+		return generateWorkflowCode(nodes, edges);
+	}
+
+	it("emits a call to this.env.PROXY_SVC.aiNameMatch instead of fetch", () => {
+		const result = genAiNameMatch();
+		expect(result.code).toContain("this.env.PROXY_SVC.aiNameMatch({");
+		expect(result.code).toContain('namesToVerify: ["John Smith"]');
+		expect(result.code).toContain('referenceNames: ["John Smith"]');
+		expect(result.code).not.toContain("await fetch(");
+	});
+
+	it("does not emit URL/method/headers/auth code for the internal call type", () => {
+		const result = genAiNameMatch({
+			authConfig: { type: "bearer", bearerToken: "env:SOME_TOKEN" },
+			customHeaders: [{ key: "X-Test", value: "1" }],
+		});
+		expect(result.code).not.toContain("Authorization");
+		expect(result.code).not.toContain('headers["X-Test"]');
+		expect(result.code).not.toContain("this.env.SOME_TOKEN");
+	});
+
+	it("emits a { fullName, label } object when an entry has a label", () => {
+		const result = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [{ id: "n1", expression: "John Smith" }],
+				referenceNames: [
+					{ id: "r1", expression: "John Smith", label: "owner" },
+				],
+			},
+		});
+		expect(result.code).toContain(
+			'referenceNames: [{ fullName: "John Smith", label: "owner" }]',
+		);
+	});
+
+	it("interpolates ${node.prop} expressions in name entries", () => {
+		const result = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [{ id: "n1", expression: "${node-123.fullName}" }],
+				referenceNames: [{ id: "r1", expression: "John Smith" }],
+			},
+		});
+		expect(result.code).toContain("namesToVerify: [`${node_123.fullName}`]");
+		expect(result.code).not.toContain("${node-123.fullName}");
+	});
+
+	it("includes minConfidence only when explicitly configured", () => {
+		const withConfidence = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [{ id: "n1", expression: "John Smith" }],
+				referenceNames: [{ id: "r1", expression: "John Smith" }],
+				minConfidence: 85,
+			},
+		});
+		expect(withConfidence.code).toContain("minConfidence: 85");
+
+		const withoutConfidence = genAiNameMatch();
+		// The WorkflowEnv interface always declares the optional `minConfidence?:`
+		// param; only the runtime call-site `minConfidence: <value>,` should be absent.
+		expect(withoutConfidence.code).not.toContain("minConfidence: ");
+	});
+
+	it("still applies retries/timeout failure handling around the RPC call", () => {
+		const result = genAiNameMatch({
+			failureHandling: {
+				onFailure: "retry",
+				maxRetries: 2,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 15000,
+			},
+		});
+		expect(result.code).toContain("retries:");
+		expect(result.code).toContain("limit: 2");
+		expect(result.code).toContain('timeout: "15 seconds"');
+		expect(result.code).toContain("this.env.PROXY_SVC.aiNameMatch(");
+	});
+
+	it("includes the aiNameMatch RPC signature in WorkflowEnv.PROXY_SVC", () => {
+		const result = genAiNameMatch();
+		expect(result.code).toContain("PROXY_SVC");
+		expect(result.code).toContain("aiNameMatch:");
+		expect(result.code).toContain("matchedName: string | null");
+	});
+
+	it("does NOT include PROXY_SVC.aiNameMatch when every API node uses the http call type", () => {
+		const result = genApi({ url: "https://api.example.com/data" });
+		expect(result.code).not.toContain("PROXY_SVC");
+	});
+});

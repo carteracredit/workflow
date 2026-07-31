@@ -887,6 +887,172 @@ describe("validateWorkflow", () => {
 			).toBe(true);
 		});
 
+		describe("AI Name Match call type", () => {
+			const startNode: WorkflowNode = {
+				id: "start-1",
+				type: "Start",
+				title: "Start",
+				description: "",
+				roles: [],
+				config: {},
+				position: { x: 0, y: 0 },
+				groupId: null,
+			};
+
+			it("should NOT require a URL when callType is ai-name-match", () => {
+				const nodes: WorkflowNode[] = [
+					startNode,
+					{
+						id: "api-1",
+						type: "API",
+						title: "Name Match",
+						description: "",
+						roles: [],
+						config: {
+							callType: "ai-name-match",
+							aiNameMatchConfig: {
+								namesToVerify: [{ id: "n1", expression: "John Smith" }],
+								referenceNames: [{ id: "r1", expression: "John Smith" }],
+							},
+						},
+						position: { x: 100, y: 0 },
+						groupId: null,
+					},
+				];
+
+				const errors = validateWorkflow(nodes, []);
+				expect(
+					errors.some(
+						(e) =>
+							e.nodeId === "api-1" && e.message.includes("URL configurada"),
+					),
+				).toBe(false);
+			});
+
+			it("should error when namesToVerify is empty", () => {
+				const nodes: WorkflowNode[] = [
+					startNode,
+					{
+						id: "api-1",
+						type: "API",
+						title: "Name Match",
+						description: "",
+						roles: [],
+						config: {
+							callType: "ai-name-match",
+							aiNameMatchConfig: {
+								namesToVerify: [],
+								referenceNames: [{ id: "r1", expression: "John Smith" }],
+							},
+						},
+						position: { x: 100, y: 0 },
+						groupId: null,
+					},
+				];
+
+				const errors = validateWorkflow(nodes, []);
+				expect(
+					errors.some(
+						(e) =>
+							e.nodeId === "api-1" && e.message.includes("nombre a verificar"),
+					),
+				).toBe(true);
+			});
+
+			it("should error when referenceNames is empty", () => {
+				const nodes: WorkflowNode[] = [
+					startNode,
+					{
+						id: "api-1",
+						type: "API",
+						title: "Name Match",
+						description: "",
+						roles: [],
+						config: {
+							callType: "ai-name-match",
+							aiNameMatchConfig: {
+								namesToVerify: [{ id: "n1", expression: "John Smith" }],
+								referenceNames: [],
+							},
+						},
+						position: { x: 100, y: 0 },
+						groupId: null,
+					},
+				];
+
+				const errors = validateWorkflow(nodes, []);
+				expect(
+					errors.some(
+						(e) =>
+							e.nodeId === "api-1" &&
+							e.message.includes("nombre de referencia"),
+					),
+				).toBe(true);
+			});
+
+			it("should error when an entry has an empty expression", () => {
+				const nodes: WorkflowNode[] = [
+					startNode,
+					{
+						id: "api-1",
+						type: "API",
+						title: "Name Match",
+						description: "",
+						roles: [],
+						config: {
+							callType: "ai-name-match",
+							aiNameMatchConfig: {
+								namesToVerify: [{ id: "n1", expression: "   " }],
+								referenceNames: [{ id: "r1", expression: "John Smith" }],
+							},
+						},
+						position: { x: 100, y: 0 },
+						groupId: null,
+					},
+				];
+
+				const errors = validateWorkflow(nodes, []);
+				expect(
+					errors.some(
+						(e) =>
+							e.nodeId === "api-1" &&
+							e.message.includes("deben tener una expresión configurada"),
+					),
+				).toBe(true);
+			});
+
+			it("should error when minConfidence is out of the 0-100 range", () => {
+				const nodes: WorkflowNode[] = [
+					startNode,
+					{
+						id: "api-1",
+						type: "API",
+						title: "Name Match",
+						description: "",
+						roles: [],
+						config: {
+							callType: "ai-name-match",
+							aiNameMatchConfig: {
+								namesToVerify: [{ id: "n1", expression: "John Smith" }],
+								referenceNames: [{ id: "r1", expression: "John Smith" }],
+								minConfidence: 150,
+							},
+						},
+						position: { x: 100, y: 0 },
+						groupId: null,
+					},
+				];
+
+				const errors = validateWorkflow(nodes, []);
+				expect(
+					errors.some(
+						(e) =>
+							e.nodeId === "api-1" && e.message.includes("confianza mínima"),
+					),
+				).toBe(true);
+			});
+		});
+
 		it("should error when API node has maxRetries > 2", () => {
 			const nodes: WorkflowNode[] = [
 				{
