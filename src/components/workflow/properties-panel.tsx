@@ -75,6 +75,7 @@ import {
 	ROLE_OPTIONS,
 	MAX_CHALLENGE_RETRIES,
 	DEFAULT_CHALLENGE_RETRY_CONFIG,
+	createAiNameMatchOutputSchema,
 } from "@/lib/workflow/types";
 import {
 	validateTransformCode,
@@ -2823,14 +2824,22 @@ export function PropertiesPanel({
 													</Label>
 													<Select
 														value={callType}
-														onValueChange={(value) =>
+														onValueChange={(value) => {
+															const nextConfig: Record<string, unknown> = {
+																...selectedNode.config,
+																callType: value as APICallType,
+															};
+															// The RPC response shape is fixed, so switching into
+															// this mode always (re)applies its output schema —
+															// any schema left over from HTTP mode wouldn't match.
+															if (value === "ai-name-match") {
+																nextConfig.outputSchema =
+																	createAiNameMatchOutputSchema();
+															}
 															onUpdateNode(selectedNode.id, {
-																config: {
-																	...selectedNode.config,
-																	callType: value as APICallType,
-																},
-															})
-														}
+																config: nextConfig,
+															});
+														}}
 													>
 														<SelectTrigger id="api-call-type">
 															<SelectValue />
@@ -3652,41 +3661,45 @@ export function PropertiesPanel({
 													</>
 												)}
 
-												{/* ── Response Path ────────────────────────── */}
-												<div className="border-t border-border pt-4 space-y-2">
-													<h3 className="font-semibold text-sm">
-														{t("propertiesPanel.apiResponseTitle")}
-													</h3>
-													<Label>
-														{t("propertiesPanel.apiResponsePathLabel")}
-													</Label>
-													<Input
-														value={
-															(
-																selectedNode.config.responseConfig as
-																	| APIResponseConfig
-																	| undefined
-															)?.extractPath ?? ""
-														}
-														onChange={(e) =>
-															onUpdateNode(selectedNode.id, {
-																config: {
-																	...selectedNode.config,
-																	responseConfig: {
-																		extractPath: e.target.value,
+												{/* ── Response Path (n/a for the internal RPC: the */}
+												{/* result is returned as-is, no HTTP body to extract */}
+												{/* from) ─────────────────────────────────────────── */}
+												{!isAiNameMatch && (
+													<div className="border-t border-border pt-4 space-y-2">
+														<h3 className="font-semibold text-sm">
+															{t("propertiesPanel.apiResponseTitle")}
+														</h3>
+														<Label>
+															{t("propertiesPanel.apiResponsePathLabel")}
+														</Label>
+														<Input
+															value={
+																(
+																	selectedNode.config.responseConfig as
+																		| APIResponseConfig
+																		| undefined
+																)?.extractPath ?? ""
+															}
+															onChange={(e) =>
+																onUpdateNode(selectedNode.id, {
+																	config: {
+																		...selectedNode.config,
+																		responseConfig: {
+																			extractPath: e.target.value,
+																		},
 																	},
-																},
-															})
-														}
-														placeholder={t(
-															"propertiesPanel.apiResponsePathPlaceholder",
-														)}
-														className="font-mono text-sm"
-													/>
-													<p className="text-xs text-muted-foreground">
-														{t("propertiesPanel.apiResponsePathDesc")}
-													</p>
-												</div>
+																})
+															}
+															placeholder={t(
+																"propertiesPanel.apiResponsePathPlaceholder",
+															)}
+															className="font-mono text-sm"
+														/>
+														<p className="text-xs text-muted-foreground">
+															{t("propertiesPanel.apiResponsePathDesc")}
+														</p>
+													</div>
+												)}
 
 												{!isAiNameMatch && (
 													<>

@@ -7,7 +7,7 @@
  *   - Invalid JSON in raw-json mode shows an error message
  *   - Valid JSON clears the error
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { PropertiesPanel } from "./properties-panel";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -279,5 +279,70 @@ describe("PropertiesPanel – API body XML mode", () => {
 		expect(
 			screen.getAllByText(/variables disponibles/i).length,
 		).toBeGreaterThan(0);
+	});
+});
+
+// ── AI Name Match call type ─────────────────────────────────────────────────
+
+// jsdom doesn't implement pointer capture, which Radix Select's trigger relies
+// on to open the listbox — polyfill just enough for fireEvent.click to work.
+beforeAll(() => {
+	if (!Element.prototype.hasPointerCapture) {
+		Element.prototype.hasPointerCapture = () => false;
+	}
+	if (!Element.prototype.scrollIntoView) {
+		Element.prototype.scrollIntoView = () => {};
+	}
+});
+
+describe("PropertiesPanel – AI Name Match call type", () => {
+	it("shows the Response Extraction field for the default (http) call type", () => {
+		renderPanel(makeNode());
+		expect(screen.getByText(/extracción de respuesta/i)).toBeTruthy();
+	});
+
+	it("hides the Response Extraction field when callType is ai-name-match", () => {
+		const node = makeNode({
+			config: {
+				callType: "ai-name-match",
+				aiNameMatchConfig: { namesToVerify: [], referenceNames: [] },
+			},
+		});
+		renderPanel(node);
+		expect(screen.queryByText(/extracción de respuesta/i)).toBeNull();
+	});
+
+	it("auto-populates the fixed output schema when switching to ai-name-match", async () => {
+		const onUpdateNode = vi.fn<UpdateNodeFn>();
+		renderPanel(makeNode(), onUpdateNode);
+
+		fireEvent.click(screen.getByRole("combobox", { name: /tipo de llamada/i }));
+		fireEvent.click(
+			await screen.findByRole("option", { name: /ai name match/i }),
+		);
+
+		expect(onUpdateNode).toHaveBeenCalledWith(
+			"api-node-1",
+			expect.objectContaining({
+				config: expect.objectContaining({
+					callType: "ai-name-match",
+					outputSchema: expect.objectContaining({
+						properties: expect.arrayContaining([
+							expect.objectContaining({ name: "matched", type: "boolean" }),
+							expect.objectContaining({ name: "confidence", type: "number" }),
+							expect.objectContaining({ name: "matchedName", type: "string" }),
+							expect.objectContaining({
+								name: "matchedAgainst",
+								type: "string",
+							}),
+							expect.objectContaining({
+								name: "explanation",
+								type: "string",
+							}),
+						]),
+					}),
+				}),
+			}),
+		);
 	});
 });

@@ -123,6 +123,51 @@ export function createDefaultAINameMatchConfig(): AINameMatchConfig {
 	return { namesToVerify: [], referenceNames: [] };
 }
 
+/**
+ * Fixed output schema for the internal AI Name Match RPC — mirrors
+ * `MatchNamesResult` in proxy-svc's `domain/openai/nameMatch.ts`. Returned as a
+ * fresh object each call to avoid accidental sharing/mutation across nodes.
+ * All properties are `readOnly` since the RPC response shape cannot change
+ * per-workflow (same pattern as `nlsOutputFieldsToSchema`).
+ */
+export function createAiNameMatchOutputSchema(): OutputSchema {
+	return {
+		name: "aiNameMatchOutput",
+		properties: [
+			{
+				id: "ai-name-match-matched",
+				name: "matched",
+				type: "boolean",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-confidence",
+				name: "confidence",
+				type: "number",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-matchedName",
+				name: "matchedName",
+				type: "string",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-matchedAgainst",
+				name: "matchedAgainst",
+				type: "string",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-explanation",
+				name: "explanation",
+				type: "string",
+				readOnly: true,
+			},
+		],
+	};
+}
+
 export type TimeoutUnit = "seconds" | "minutes" | "hours" | "days";
 
 export type ChallengeType = "acceptance" | "signature";
