@@ -911,8 +911,12 @@ describe("validateWorkflow", () => {
 						config: {
 							callType: "ai-name-match",
 							aiNameMatchConfig: {
-								namesToVerify: [{ id: "n1", expression: "John Smith" }],
-								referenceNames: [{ id: "r1", expression: "John Smith" }],
+								namesToVerify: [
+									{ id: "n1", mode: "full", fullName: "John Smith" },
+								],
+								referenceNames: [
+									{ id: "r1", mode: "full", fullName: "John Smith" },
+								],
 							},
 						},
 						position: { x: 100, y: 0 },
@@ -942,7 +946,9 @@ describe("validateWorkflow", () => {
 							callType: "ai-name-match",
 							aiNameMatchConfig: {
 								namesToVerify: [],
-								referenceNames: [{ id: "r1", expression: "John Smith" }],
+								referenceNames: [
+									{ id: "r1", mode: "full", fullName: "John Smith" },
+								],
 							},
 						},
 						position: { x: 100, y: 0 },
@@ -971,7 +977,9 @@ describe("validateWorkflow", () => {
 						config: {
 							callType: "ai-name-match",
 							aiNameMatchConfig: {
-								namesToVerify: [{ id: "n1", expression: "John Smith" }],
+								namesToVerify: [
+									{ id: "n1", mode: "full", fullName: "John Smith" },
+								],
 								referenceNames: [],
 							},
 						},
@@ -990,7 +998,7 @@ describe("validateWorkflow", () => {
 				).toBe(true);
 			});
 
-			it("should error when an entry has an empty expression", () => {
+			it("should error when a 'full' mode entry has an empty fullName", () => {
 				const nodes: WorkflowNode[] = [
 					startNode,
 					{
@@ -1002,8 +1010,10 @@ describe("validateWorkflow", () => {
 						config: {
 							callType: "ai-name-match",
 							aiNameMatchConfig: {
-								namesToVerify: [{ id: "n1", expression: "   " }],
-								referenceNames: [{ id: "r1", expression: "John Smith" }],
+								namesToVerify: [{ id: "n1", mode: "full", fullName: "   " }],
+								referenceNames: [
+									{ id: "r1", mode: "full", fullName: "John Smith" },
+								],
 							},
 						},
 						position: { x: 100, y: 0 },
@@ -1016,9 +1026,85 @@ describe("validateWorkflow", () => {
 					errors.some(
 						(e) =>
 							e.nodeId === "api-1" &&
-							e.message.includes("deben tener una expresión configurada"),
+							e.message.includes('modo "nombre completo"') &&
+							e.message.includes("requiere una expresión configurada"),
 					),
 				).toBe(true);
+			});
+
+			it("should error when a 'parts' mode entry is missing firstName or lastName", () => {
+				const nodes: WorkflowNode[] = [
+					startNode,
+					{
+						id: "api-1",
+						type: "API",
+						title: "Name Match",
+						description: "",
+						roles: [],
+						config: {
+							callType: "ai-name-match",
+							aiNameMatchConfig: {
+								namesToVerify: [
+									{ id: "n1", mode: "full", fullName: "John Smith" },
+								],
+								referenceNames: [
+									{ id: "r1", mode: "parts", lastName: "Smith" },
+								],
+							},
+						},
+						position: { x: 100, y: 0 },
+						groupId: null,
+					},
+				];
+
+				const errors = validateWorkflow(nodes, []);
+				expect(
+					errors.some(
+						(e) =>
+							e.nodeId === "api-1" &&
+							e.message.includes('modo "por partes"') &&
+							e.message.includes("requiere un nombre"),
+					),
+				).toBe(true);
+				expect(
+					errors.some((e) => e.message.includes("requiere un apellido")),
+				).toBe(false);
+			});
+
+			it("should NOT error for a 'parts' mode entry with firstName+lastName but no middleName", () => {
+				const nodes: WorkflowNode[] = [
+					startNode,
+					{
+						id: "api-1",
+						type: "API",
+						title: "Name Match",
+						description: "",
+						roles: [],
+						config: {
+							callType: "ai-name-match",
+							aiNameMatchConfig: {
+								namesToVerify: [
+									{ id: "n1", mode: "full", fullName: "John Smith" },
+								],
+								referenceNames: [
+									{
+										id: "r1",
+										mode: "parts",
+										firstName: "John",
+										lastName: "Smith",
+									},
+								],
+							},
+						},
+						position: { x: 100, y: 0 },
+						groupId: null,
+					},
+				];
+
+				const errors = validateWorkflow(nodes, []);
+				expect(
+					errors.some((e) => e.nodeId === "api-1" && e.severity === "error"),
+				).toBe(false);
 			});
 
 			it("should error when minConfidence is out of the 0-100 range", () => {
@@ -1033,8 +1119,12 @@ describe("validateWorkflow", () => {
 						config: {
 							callType: "ai-name-match",
 							aiNameMatchConfig: {
-								namesToVerify: [{ id: "n1", expression: "John Smith" }],
-								referenceNames: [{ id: "r1", expression: "John Smith" }],
+								namesToVerify: [
+									{ id: "n1", mode: "full", fullName: "John Smith" },
+								],
+								referenceNames: [
+									{ id: "r1", mode: "full", fullName: "John Smith" },
+								],
 								minConfidence: 150,
 							},
 						},

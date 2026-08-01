@@ -104,11 +104,32 @@ export interface APIResponseConfig {
 // see ProxySvcEntrypoint.aiNameMatch in proxy-svc).
 export type APICallType = "http" | "ai-name-match";
 
+/**
+ * "full" — a single `fullName` expression.
+ * "parts" — `firstName`/`middleName`/`lastName` expressions, composed by
+ * proxy-svc the same way it prioritizes `NameParts` in `domain/openai/nameMatch.ts`
+ * (fullName wins if present, otherwise firstName + middleName + lastName).
+ */
+export type AINameMatchEntryMode = "full" | "parts";
+
 export interface AINameMatchEntryConfig {
 	id: string;
-	/** Literal text and/or `${nodeId.prop}` variable refs producing the name. */
-	expression: string;
-	/** Optional traceability label (e.g. "buyer", "owner"), echoed back by the match result. */
+	/** Which fields apply below. Defaults to "full" when absent. */
+	mode: AINameMatchEntryMode;
+	/** Literal text and/or `${nodeId.prop}` variable refs. Required when mode === "full". */
+	fullName?: string;
+	/** Required when mode === "parts". */
+	firstName?: string;
+	/** Optional even in "parts" mode. */
+	middleName?: string;
+	/** Required when mode === "parts". */
+	lastName?: string;
+	/**
+	 * Free-text identifier (e.g. "buyer", "owner") — purely for traceability.
+	 * Not used by the model to compare names; echoed back verbatim inside
+	 * `matchedAgainst` (e.g. "JOHN SMITH [buyer]") so you can tell which
+	 * reference/candidate produced the match.
+	 */
 	label?: string;
 }
 

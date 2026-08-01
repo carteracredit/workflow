@@ -600,8 +600,15 @@ export const translations = {
 			aiNameMatchReferenceNamesDesc:
 				"Trusted names to check against (e.g. a property owner from a prior API node).",
 			aiNameMatchAddNameBtn: "Add Name",
-			aiNameMatchExpressionPlaceholder: "Literal text or ${node.property}",
-			aiNameMatchLabelPlaceholder: "Label (optional, e.g. buyer)",
+			aiNameMatchModeFullLabel: "Full name",
+			aiNameMatchModePartsLabel: "By parts",
+			aiNameMatchFullNamePlaceholder: "Literal text or ${node.property}",
+			aiNameMatchFirstNamePlaceholder: "First name(s)",
+			aiNameMatchMiddleNamePlaceholder: "Middle name (optional)",
+			aiNameMatchLastNamePlaceholder: "Last name(s)",
+			aiNameMatchLabelPlaceholder: "Identifier (optional, e.g. buyer)",
+			aiNameMatchLabelHelp:
+				'Free text only — not used to compare names. Echoed back verbatim in the result\'s matchedAgainst (e.g. "JOHN SMITH [buyer]") so you can tell which entry matched.',
 			aiNameMatchEmptyState: "No names configured yet.",
 			aiNameMatchMinConfidenceLabel: "Minimum Confidence",
 			aiNameMatchMinConfidenceDesc:
@@ -1765,8 +1772,15 @@ export const translations = {
 			aiNameMatchReferenceNamesDesc:
 				"Nombres confiables contra los cuales comparar (ej. el propietario de una propiedad de un nodo API previo).",
 			aiNameMatchAddNameBtn: "Agregar Nombre",
-			aiNameMatchExpressionPlaceholder: "Texto literal o ${nodo.propiedad}",
-			aiNameMatchLabelPlaceholder: "Etiqueta (opcional, ej. buyer)",
+			aiNameMatchModeFullLabel: "Nombre completo",
+			aiNameMatchModePartsLabel: "Por partes",
+			aiNameMatchFullNamePlaceholder: "Texto literal o ${nodo.propiedad}",
+			aiNameMatchFirstNamePlaceholder: "Nombre(s)",
+			aiNameMatchMiddleNamePlaceholder: "Segundo nombre (opcional)",
+			aiNameMatchLastNamePlaceholder: "Apellido(s)",
+			aiNameMatchLabelPlaceholder: "Identificador (opcional, ej. buyer)",
+			aiNameMatchLabelHelp:
+				'Solo texto libre — no se usa para comparar nombres. Se devuelve tal cual dentro de matchedAgainst (ej. "JOHN SMITH [buyer]") para que sepas qué entrada hizo match.',
 			aiNameMatchEmptyState: "Aún no hay nombres configurados.",
 			aiNameMatchMinConfidenceLabel: "Confianza Mínima",
 			aiNameMatchMinConfidenceDesc:

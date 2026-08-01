@@ -345,4 +345,91 @@ describe("PropertiesPanel – AI Name Match call type", () => {
 			}),
 		);
 	});
+
+	it("shows only the fullName field for a 'full' mode entry", () => {
+		const node = makeNode({
+			config: {
+				callType: "ai-name-match",
+				aiNameMatchConfig: {
+					namesToVerify: [{ id: "n1", mode: "full", fullName: "" }],
+					referenceNames: [],
+				},
+			},
+		});
+		renderPanel(node);
+
+		expect(
+			screen.getByPlaceholderText("Texto literal o ${nodo.propiedad}"),
+		).toBeTruthy();
+		expect(screen.queryByPlaceholderText("Nombre(s)")).toBeNull();
+	});
+
+	it("shows firstName/middleName/lastName fields for a 'parts' mode entry", () => {
+		const node = makeNode({
+			config: {
+				callType: "ai-name-match",
+				aiNameMatchConfig: {
+					namesToVerify: [{ id: "n1", mode: "parts" }],
+					referenceNames: [],
+				},
+			},
+		});
+		renderPanel(node);
+
+		expect(screen.getByPlaceholderText("Nombre(s)")).toBeTruthy();
+		expect(
+			screen.getByPlaceholderText("Segundo nombre (opcional)"),
+		).toBeTruthy();
+		expect(screen.getByPlaceholderText("Apellido(s)")).toBeTruthy();
+		expect(
+			screen.queryByPlaceholderText("Texto literal o ${nodo.propiedad}"),
+		).toBeNull();
+	});
+
+	it("clicking the 'Por partes' toggle updates the entry's mode", () => {
+		const onUpdateNode = vi.fn<UpdateNodeFn>();
+		const node = makeNode({
+			config: {
+				callType: "ai-name-match",
+				aiNameMatchConfig: {
+					namesToVerify: [{ id: "n1", mode: "full", fullName: "" }],
+					referenceNames: [],
+				},
+			},
+		});
+		renderPanel(node, onUpdateNode);
+
+		fireEvent.click(screen.getByText("Por partes"));
+
+		expect(onUpdateNode).toHaveBeenCalledWith(
+			"api-node-1",
+			expect.objectContaining({
+				config: expect.objectContaining({
+					aiNameMatchConfig: expect.objectContaining({
+						namesToVerify: [
+							expect.objectContaining({ id: "n1", mode: "parts" }),
+						],
+					}),
+				}),
+			}),
+		);
+	});
+
+	it("shows the identifier field with its help text explaining it is not used for comparison", () => {
+		const node = makeNode({
+			config: {
+				callType: "ai-name-match",
+				aiNameMatchConfig: {
+					namesToVerify: [{ id: "n1", mode: "full", fullName: "" }],
+					referenceNames: [],
+				},
+			},
+		});
+		renderPanel(node);
+
+		expect(
+			screen.getByPlaceholderText("Identificador (opcional, ej. buyer)"),
+		).toBeTruthy();
+		expect(screen.getByText(/no se usa para comparar nombres/i)).toBeTruthy();
+	});
 });
