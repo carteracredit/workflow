@@ -314,13 +314,25 @@ export const ApiNodeAiNameMatch: Story = {
 					callType: "ai-name-match",
 					aiNameMatchConfig: {
 						namesToVerify: [
-							{ id: "n1", expression: "${formCliente.fullName}" },
+							{
+								id: "n1",
+								mode: "full",
+								fullName: "${formCliente.fullName}",
+							},
 						],
 						referenceNames: [
 							{
 								id: "r1",
-								expression: "${consultaPropiedad.ownerName}",
+								mode: "full",
+								fullName: "${consultaPropiedad.ownerName}",
 								label: "owner",
+							},
+							{
+								id: "r2",
+								mode: "parts",
+								firstName: "${consultaPropiedad.buyerFirstName}",
+								lastName: "${consultaPropiedad.buyerLastName}",
+								label: "buyer",
 							},
 						],
 						minConfidence: 80,

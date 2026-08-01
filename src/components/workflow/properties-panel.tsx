@@ -2728,6 +2728,37 @@ export function PropertiesPanel({
 											const entries = aiNameMatch[field] ?? [];
 											const updateEntries = (next: AINameMatchEntryConfig[]) =>
 												updateAiNameMatch({ [field]: next });
+											const updateEntry = (
+												idx: number,
+												patch: Partial<AINameMatchEntryConfig>,
+											) => {
+												const next = [...entries];
+												next[idx] = { ...next[idx], ...patch };
+												updateEntries(next);
+											};
+											const renderNamePartInput = (
+												entry: AINameMatchEntryConfig,
+												idx: number,
+												key:
+													| "fullName"
+													| "firstName"
+													| "middleName"
+													| "lastName",
+												placeholder: string,
+											) => (
+												<VariableTemplateInput
+													nodes={upstreamVariableNodes}
+													value={parseTemplateStringToSegments(
+														entry[key] ?? "",
+													)}
+													onChange={(segs) =>
+														updateEntry(idx, {
+															[key]: segmentsToTemplateString(segs),
+														})
+													}
+													placeholder={placeholder}
+												/>
+											);
 											return (
 												<div className="space-y-2">
 													<div className="flex items-center justify-between">
@@ -2741,7 +2772,8 @@ export function PropertiesPanel({
 																	...entries,
 																	{
 																		id: `name_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-																		expression: "",
+																		mode: "full",
+																		fullName: "",
 																	},
 																])
 															}
@@ -2757,60 +2789,118 @@ export function PropertiesPanel({
 															{t("propertiesPanel.aiNameMatchEmptyState")}
 														</p>
 													) : (
-														entries.map((entry, idx) => (
-															<div
-																key={entry.id}
-																className="flex gap-1 items-start"
-															>
-																<div className="flex-1 min-w-0">
-																	<VariableTemplateInput
-																		nodes={upstreamVariableNodes}
-																		value={parseTemplateStringToSegments(
-																			entry.expression,
-																		)}
-																		onChange={(segs) => {
-																			const next = [...entries];
-																			next[idx] = {
-																				...next[idx],
-																				expression:
-																					segmentsToTemplateString(segs),
-																			};
-																			updateEntries(next);
-																		}}
-																		placeholder={t(
-																			"propertiesPanel.aiNameMatchExpressionPlaceholder",
-																		)}
-																	/>
-																</div>
-																<Input
-																	value={entry.label ?? ""}
-																	onChange={(e) => {
-																		const next = [...entries];
-																		next[idx] = {
-																			...next[idx],
-																			label: e.target.value || undefined,
-																		};
-																		updateEntries(next);
-																	}}
-																	placeholder={t(
-																		"propertiesPanel.aiNameMatchLabelPlaceholder",
-																	)}
-																	className="text-xs h-8 w-36 shrink-0"
-																/>
-																<Button
-																	size="sm"
-																	variant="ghost"
-																	className="h-8 w-8 shrink-0 px-0"
-																	onClick={() =>
-																		updateEntries(
-																			entries.filter((_, i) => i !== idx),
-																		)
-																	}
+														entries.map((entry, idx) => {
+															const mode = entry.mode ?? "full";
+															return (
+																<div
+																	key={entry.id}
+																	className="rounded-md border border-border p-2 space-y-2"
 																>
-																	×
-																</Button>
-															</div>
-														))
+																	<div className="flex items-center justify-between">
+																		<div className="flex rounded-sm bg-muted p-0.5">
+																			<button
+																				type="button"
+																				onClick={() =>
+																					updateEntry(idx, { mode: "full" })
+																				}
+																				className={cn(
+																					"px-2 py-0.5 text-[11px] rounded-sm transition-colors",
+																					mode === "full"
+																						? "bg-primary text-primary-foreground"
+																						: "text-muted-foreground hover:text-foreground",
+																				)}
+																			>
+																				{t(
+																					"propertiesPanel.aiNameMatchModeFullLabel",
+																				)}
+																			</button>
+																			<button
+																				type="button"
+																				onClick={() =>
+																					updateEntry(idx, { mode: "parts" })
+																				}
+																				className={cn(
+																					"px-2 py-0.5 text-[11px] rounded-sm transition-colors",
+																					mode === "parts"
+																						? "bg-primary text-primary-foreground"
+																						: "text-muted-foreground hover:text-foreground",
+																				)}
+																			>
+																				{t(
+																					"propertiesPanel.aiNameMatchModePartsLabel",
+																				)}
+																			</button>
+																		</div>
+																		<Button
+																			size="sm"
+																			variant="ghost"
+																			className="h-6 w-6 shrink-0 px-0"
+																			onClick={() =>
+																				updateEntries(
+																					entries.filter((_, i) => i !== idx),
+																				)
+																			}
+																		>
+																			×
+																		</Button>
+																	</div>
+
+																	{mode === "full" ? (
+																		renderNamePartInput(
+																			entry,
+																			idx,
+																			"fullName",
+																			t(
+																				"propertiesPanel.aiNameMatchFullNamePlaceholder",
+																			),
+																		)
+																	) : (
+																		<div className="space-y-1">
+																			{renderNamePartInput(
+																				entry,
+																				idx,
+																				"firstName",
+																				t(
+																					"propertiesPanel.aiNameMatchFirstNamePlaceholder",
+																				),
+																			)}
+																			{renderNamePartInput(
+																				entry,
+																				idx,
+																				"middleName",
+																				t(
+																					"propertiesPanel.aiNameMatchMiddleNamePlaceholder",
+																				),
+																			)}
+																			{renderNamePartInput(
+																				entry,
+																				idx,
+																				"lastName",
+																				t(
+																					"propertiesPanel.aiNameMatchLastNamePlaceholder",
+																				),
+																			)}
+																		</div>
+																	)}
+
+																	<Input
+																		value={entry.label ?? ""}
+																		onChange={(e) =>
+																			updateEntry(idx, {
+																				label: e.target.value || undefined,
+																			})
+																		}
+																		placeholder={t(
+																			"propertiesPanel.aiNameMatchLabelPlaceholder",
+																		)}
+																		className="text-xs h-8"
+																	/>
+																	<p className="text-[11px] text-muted-foreground">
+																		{t("propertiesPanel.aiNameMatchLabelHelp")}
+																	</p>
+																</div>
+															);
+														})
 													)}
 												</div>
 											);

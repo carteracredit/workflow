@@ -1098,18 +1098,40 @@ function emitContinueOnFailureCatch(
  */
 /**
  * Emits the `namesToVerify`/`referenceNames` array literal for the internal
- * `aiNameMatch` RPC call. Each entry either interpolates to a plain string
- * (no label) or a `{ fullName, label }` object (per `NameEntry` in
- * proxy-svc's `domain/openai/nameMatch.ts`) when a traceability label is set.
+ * `aiNameMatch` RPC call. Each field is interpolated null-safely (`?? ""`) so
+ * a variable that resolves to nothing at runtime (e.g. an optional "second
+ * buyer" field) becomes an empty string instead of the literal text
+ * "null"/"undefined" — proxy-svc's `normalizeNameInput` already drops
+ * entries that end up empty rather than failing the whole call (see
+ * `domain/openai/nameMatch.ts`).
+ *
+ * - "full" mode, no label → plain interpolated string.
+ * - "full" mode with a label, or "parts" mode (always) → a `NameParts`
+ *   object (`{ firstName?, middleName?, lastName?, fullName?, label? }`).
  */
 function emitAiNameMatchEntries(entries: AINameMatchEntryConfig[]): string {
 	if (entries.length === 0) return "[]";
 	const items = entries.map((entry) => {
-		const nameExpr = emitInterpolatedString(entry.expression || "");
-		if (entry.label) {
-			return `{ fullName: ${nameExpr}, label: ${JSON.stringify(entry.label)} }`;
+		const labelProp = entry.label
+			? `, label: ${JSON.stringify(entry.label)}`
+			: "";
+
+		if ((entry.mode ?? "full") === "parts") {
+			const firstNameExpr = emitNullSafeInterpolatedString(
+				entry.firstName || "",
+			);
+			const lastNameExpr = emitNullSafeInterpolatedString(entry.lastName || "");
+			const middleNameProp = entry.middleName
+				? `, middleName: ${emitNullSafeInterpolatedString(entry.middleName)}`
+				: "";
+			return `{ firstName: ${firstNameExpr}, lastName: ${lastNameExpr}${middleNameProp}${labelProp} }`;
 		}
-		return nameExpr;
+
+		const fullNameExpr = emitNullSafeInterpolatedString(entry.fullName || "");
+		if (entry.label) {
+			return `{ fullName: ${fullNameExpr}${labelProp} }`;
+		}
+		return fullNameExpr;
 	});
 	return `[${items.join(", ")}]`;
 }
@@ -3473,11 +3495,17 @@ function collectInterpolatedStrings(node: WorkflowNode): string[] {
 			const aiNameMatchConfig = node.config.aiNameMatchConfig as
 				| AINameMatchConfig
 				| undefined;
+			const pushAiNameMatchEntry = (entry: AINameMatchEntryConfig) => {
+				push(entry.fullName);
+				push(entry.firstName);
+				push(entry.middleName);
+				push(entry.lastName);
+			};
 			for (const entry of aiNameMatchConfig?.namesToVerify ?? []) {
-				push(entry.expression);
+				pushAiNameMatchEntry(entry);
 			}
 			for (const entry of aiNameMatchConfig?.referenceNames ?? []) {
-				push(entry.expression);
+				pushAiNameMatchEntry(entry);
 			}
 			break;
 		}

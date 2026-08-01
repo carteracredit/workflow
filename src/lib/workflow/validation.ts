@@ -357,8 +357,41 @@ export function validateWorkflow(
 					| undefined;
 				const namesToVerify = aiNameMatch?.namesToVerify ?? [];
 				const referenceNames = aiNameMatch?.referenceNames ?? [];
-				const hasEmptyExpression = (entries: typeof namesToVerify): boolean =>
-					entries.some((e) => !e.expression?.trim());
+
+				// A "full" entry needs fullName; a "parts" entry needs BOTH
+				// firstName and lastName (middleName is always optional) — mirrors
+				// how proxy-svc's normalizeNameInput composes NameParts.
+				const validateEntries = (
+					entries: typeof namesToVerify,
+					listLabel: string,
+				) => {
+					entries.forEach((entry, idx) => {
+						const mode = entry.mode ?? "full";
+						const position = `${listLabel} #${idx + 1}`;
+						if (mode === "parts") {
+							if (!entry.firstName?.trim()) {
+								errors.push({
+									nodeId: node.id,
+									message: `"${node.title}": ${position} (modo "por partes") requiere un nombre`,
+									severity: "error",
+								});
+							}
+							if (!entry.lastName?.trim()) {
+								errors.push({
+									nodeId: node.id,
+									message: `"${node.title}": ${position} (modo "por partes") requiere un apellido`,
+									severity: "error",
+								});
+							}
+						} else if (!entry.fullName?.trim()) {
+							errors.push({
+								nodeId: node.id,
+								message: `"${node.title}": ${position} (modo "nombre completo") requiere una expresión configurada`,
+								severity: "error",
+							});
+						}
+					});
+				};
 
 				if (namesToVerify.length === 0) {
 					errors.push({
@@ -366,12 +399,8 @@ export function validateWorkflow(
 						message: `"${node.title}" debe tener al menos un nombre a verificar configurado`,
 						severity: "error",
 					});
-				} else if (hasEmptyExpression(namesToVerify)) {
-					errors.push({
-						nodeId: node.id,
-						message: `"${node.title}": todos los nombres a verificar deben tener una expresión configurada`,
-						severity: "error",
-					});
+				} else {
+					validateEntries(namesToVerify, "el nombre a verificar");
 				}
 
 				if (referenceNames.length === 0) {
@@ -380,12 +409,8 @@ export function validateWorkflow(
 						message: `"${node.title}" debe tener al menos un nombre de referencia configurado`,
 						severity: "error",
 					});
-				} else if (hasEmptyExpression(referenceNames)) {
-					errors.push({
-						nodeId: node.id,
-						message: `"${node.title}": todos los nombres de referencia deben tener una expresión configurada`,
-						severity: "error",
-					});
+				} else {
+					validateEntries(referenceNames, "el nombre de referencia");
 				}
 
 				const minConfidence = aiNameMatch?.minConfidence;

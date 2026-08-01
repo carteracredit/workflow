@@ -6772,8 +6772,8 @@ describe("generateWorkflowCode – API node AI Name Match call type", () => {
 			config: {
 				callType: "ai-name-match",
 				aiNameMatchConfig: {
-					namesToVerify: [{ id: "n1", expression: "John Smith" }],
-					referenceNames: [{ id: "r1", expression: "John Smith" }],
+					namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
+					referenceNames: [{ id: "r1", mode: "full", fullName: "John Smith" }],
 				},
 				...config,
 			},
@@ -6814,12 +6814,17 @@ describe("generateWorkflowCode – API node AI Name Match call type", () => {
 		expect(result.code).not.toContain("this.env.SOME_TOKEN");
 	});
 
-	it("emits a { fullName, label } object when an entry has a label", () => {
+	it("emits a { fullName, label } object when a 'full' entry has a label", () => {
 		const result = genAiNameMatch({
 			aiNameMatchConfig: {
-				namesToVerify: [{ id: "n1", expression: "John Smith" }],
+				namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
 				referenceNames: [
-					{ id: "r1", expression: "John Smith", label: "owner" },
+					{
+						id: "r1",
+						mode: "full",
+						fullName: "John Smith",
+						label: "owner",
+					},
 				],
 			},
 		});
@@ -6828,22 +6833,89 @@ describe("generateWorkflowCode – API node AI Name Match call type", () => {
 		);
 	});
 
-	it("interpolates ${node.prop} expressions in name entries", () => {
+	it("emits a { firstName, lastName } object for a 'parts' entry, omitting unset middleName", () => {
 		const result = genAiNameMatch({
 			aiNameMatchConfig: {
-				namesToVerify: [{ id: "n1", expression: "${node-123.fullName}" }],
-				referenceNames: [{ id: "r1", expression: "John Smith" }],
+				namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
+				referenceNames: [
+					{
+						id: "r1",
+						mode: "parts",
+						firstName: "John",
+						lastName: "Smith",
+						label: "buyer",
+					},
+				],
 			},
 		});
-		expect(result.code).toContain("namesToVerify: [`${node_123.fullName}`]");
+		expect(result.code).toContain(
+			'referenceNames: [{ firstName: "John", lastName: "Smith", label: "buyer" }]',
+		);
+	});
+
+	it("includes middleName in a 'parts' entry when configured", () => {
+		const result = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
+				referenceNames: [
+					{
+						id: "r1",
+						mode: "parts",
+						firstName: "Maria",
+						middleName: "C",
+						lastName: "Lopez",
+					},
+				],
+			},
+		});
+		expect(result.code).toContain(
+			'referenceNames: [{ firstName: "Maria", lastName: "Lopez", middleName: "C" }]',
+		);
+	});
+
+	it('interpolates ${node.prop} expressions in name entries null-safely (?? "")', () => {
+		const result = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [
+					{ id: "n1", mode: "full", fullName: "${node-123.fullName}" },
+				],
+				referenceNames: [{ id: "r1", mode: "full", fullName: "John Smith" }],
+			},
+		});
+		expect(result.code).toContain(
+			'namesToVerify: [`${(node_123.fullName) ?? ""}`]',
+		);
 		expect(result.code).not.toContain("${node-123.fullName}");
+	});
+
+	it("interpolates 'parts' expressions null-safely so a missing optional buyer2 doesn't render literal null/undefined", () => {
+		const result = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
+				referenceNames: [
+					{
+						id: "r1",
+						mode: "parts",
+						firstName: "${estated.buyer2FirstName}",
+						lastName: "${estated.buyer2LastName}",
+					},
+				],
+			},
+		});
+		expect(result.code).toContain(
+			'firstName: `${(estated.buyer2FirstName) ?? ""}`',
+		);
+		expect(result.code).toContain(
+			'lastName: `${(estated.buyer2LastName) ?? ""}`',
+		);
+		expect(result.code).not.toContain("undefined");
 	});
 
 	it("includes minConfidence only when explicitly configured", () => {
 		const withConfidence = genAiNameMatch({
 			aiNameMatchConfig: {
-				namesToVerify: [{ id: "n1", expression: "John Smith" }],
-				referenceNames: [{ id: "r1", expression: "John Smith" }],
+				namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
+				referenceNames: [{ id: "r1", mode: "full", fullName: "John Smith" }],
 				minConfidence: 85,
 			},
 		});
