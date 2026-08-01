@@ -1,3 +1,10 @@
+# [1.6.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.6.0-rc.2...v1.6.0-rc.3) (2026-08-01)
+
+
+### Features
+
+* **api:** implement AI Name Match output schema and update properties panel ([d03182d](https://github.com/carteracredit/workflow/commit/d03182d4638a16fb0bbb42776f9a3c49354be8a9))
+
 # [1.6.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.6.0-rc.1...v1.6.0-rc.2) (2026-07-31)
 
 
