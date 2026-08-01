@@ -1,3 +1,10 @@
+# [1.6.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.6.0-rc.3...v1.6.0-rc.4) (2026-08-01)
+
+
+### Features
+
+* **api:** enhance AI Name Match functionality with full and parts modes ([3593eff](https://github.com/carteracredit/workflow/commit/3593eff60d9eb8551c7115b4dd712f95d1730ffb))
+
 # [1.6.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.6.0-rc.2...v1.6.0-rc.3) (2026-08-01)
 
 
