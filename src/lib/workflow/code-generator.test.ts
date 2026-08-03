@@ -483,8 +483,10 @@ describe("generateWorkflowCode", () => {
 
 		const result = generateWorkflowCode(nodes, edges);
 
-		// Variable reference should be expanded to valid JS using the camelCase alias
-		expect(result.code).toContain("if (pokemonAvailable.count > 0)");
+		// Variable reference should be expanded to valid JS using the camelCase
+		// alias, with optional chaining so a response missing "count" evaluates
+		// to falsy/undefined instead of throwing.
+		expect(result.code).toContain("if (pokemonAvailable?.count > 0)");
 		// The original template syntax must NOT appear in generated code
 		expect(result.code).not.toContain("${node-1773093521695.count}");
 		// The API node is referenced from a Decision condition that lives
@@ -499,6 +501,46 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).not.toMatch(
 			/const pokemonAvailable\s*=\s*await step\.do/,
 		);
+	});
+
+	it("expands a deep nested path in a Decision condition with optional chaining at every hop", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "node-1773093521696",
+				type: "API",
+				title: "Verify Owner",
+				config: {
+					url: "https://estated.com",
+					method: "GET",
+					outputSchema: {
+						properties: [{ name: "owner", type: "object" }],
+					},
+				},
+			}),
+			createNode({
+				id: "decision",
+				type: "Decision",
+				title: "Has owner name",
+				config: {
+					condition: "${node-1773093521696.owner.name} !== ''",
+				},
+			}),
+			createNode({ id: "end-yes", type: "End", title: "Si" }),
+			createNode({ id: "end-no", type: "Reject", title: "No" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "node-1773093521696"),
+			createEdge("node-1773093521696", "decision"),
+			createEdge("decision", "end-yes", { fromPort: "top" }),
+			createEdge("decision", "end-no", { fromPort: "bottom" }),
+		];
+
+		const result = generateWorkflowCode(nodes, edges);
+
+		// A response missing "owner" (e.g. Estated returned no data) should
+		// make the condition evaluate to falsy instead of throwing.
+		expect(result.code).toContain("if (verifyOwner?.owner?.name !== '') {");
 	});
 
 	it("should always capture step result for API nodes (response is always visible in cases UI)", () => {
@@ -3924,6 +3966,41 @@ describe("generateWorkflowCode – ${secret.X} in Decision and Transform", () =>
 		expect(result.code).toContain("apiKey: this.env.STRIPE_KEY");
 		expect(result.code).not.toContain("${secret.STRIPE_KEY}");
 	});
+
+	it("does NOT use optional chaining for deep paths in Transform code (may be an assignment target)", () => {
+		const nodes: WorkflowNode[] = [
+			createNode({ id: "start", type: "Start", title: "Inicio" }),
+			createNode({
+				id: "node-transform-src",
+				type: "API",
+				title: "Get Data",
+				config: {
+					url: "https://example.com",
+					method: "GET",
+					outputSchema: {
+						properties: [{ name: "owner", type: "object" }],
+					},
+				},
+			}),
+			createNode({
+				id: "transform",
+				type: "Transform",
+				title: "Build payload",
+				config: {
+					code: "return { name: ${getData.owner.name} };",
+				},
+			}),
+			createNode({ id: "end", type: "End", title: "Fin" }),
+		];
+		const edges: WorkflowEdge[] = [
+			createEdge("start", "node-transform-src"),
+			createEdge("node-transform-src", "transform"),
+			createEdge("transform", "end"),
+		];
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain("name: getData.owner.name");
+		expect(result.code).not.toContain("getData?.owner?.name");
+	});
 });
 
 describe("generateWorkflowCode – start-node alias rewriting to event.payload", () => {
@@ -3998,7 +4075,7 @@ describe("generateWorkflowCode – start-node alias rewriting to event.payload",
 			createEdge("decision", "end-bot", { fromPort: "bottom" }),
 		];
 		const { code } = generateWorkflowCode(nodes, edges);
-		expect(code).toContain("event.payload.clientName !== ''");
+		expect(code).toContain("event.payload?.clientName !== ''");
 		expect(code).not.toContain("inicio.clientName");
 	});
 
@@ -4832,7 +4909,7 @@ describe("generateWorkflowCode – cross-node variable hoisting", () => {
 		);
 		const formTryIdx = result.code.indexOf("// Form: Test Form");
 		const pdfFieldIdx = result.code.indexOf(
-			'_pdfFieldValues["1bS"] = `${(testForm.name.firstName) ?? ""}`;',
+			'_pdfFieldValues["1bS"] = `${(testForm?.name?.firstName) ?? ""}`;',
 		);
 		expect(hoistIdx).toBeGreaterThanOrEqual(0);
 		expect(hoistIdx).toBeLessThan(formTryIdx);
@@ -4893,7 +4970,7 @@ describe("generateWorkflowCode – cross-node variable hoisting", () => {
 			/const altForm\s*=\s*\(await waitForEventDurable/,
 		);
 		expect(result.code).toContain(
-			'_pdfFieldValues["F1"] = `${(altForm.value) ?? ""}`;',
+			'_pdfFieldValues["F1"] = `${(altForm?.value) ?? ""}`;',
 		);
 		expect(result.warnings).toHaveLength(0);
 	});
@@ -6645,7 +6722,7 @@ describe("GeneratePDF node code generation", () => {
 		const { nodes, edges } = makeGeneratePdfWorkflow(cfg);
 		const result = generateWorkflowCode(nodes, edges);
 		expect(result.code).toContain(
-			'_pdfFieldValues["middle_name"] = `${(start.roleContacts.org_manager.middleName) ?? ""}`;',
+			'_pdfFieldValues["middle_name"] = `${(start?.roleContacts?.org_manager?.middleName) ?? ""}`;',
 		);
 		expect(result.code).not.toContain(
 			'_pdfFieldValues["middle_name"] = `${start.roleContacts.org_manager.middleName}`;',
@@ -6873,7 +6950,7 @@ describe("generateWorkflowCode – API node AI Name Match call type", () => {
 		);
 	});
 
-	it('interpolates ${node.prop} expressions in name entries null-safely (?? "")', () => {
+	it('interpolates ${node.prop} expressions in name entries null-safely with optional chaining (?. and ?? "")', () => {
 		const result = genAiNameMatch({
 			aiNameMatchConfig: {
 				namesToVerify: [
@@ -6883,7 +6960,7 @@ describe("generateWorkflowCode – API node AI Name Match call type", () => {
 			},
 		});
 		expect(result.code).toContain(
-			'namesToVerify: [`${(node_123.fullName) ?? ""}`]',
+			'namesToVerify: [`${(node_123?.fullName) ?? ""}`]',
 		);
 		expect(result.code).not.toContain("${node-123.fullName}");
 	});
@@ -6903,12 +6980,49 @@ describe("generateWorkflowCode – API node AI Name Match call type", () => {
 			},
 		});
 		expect(result.code).toContain(
-			'firstName: `${(estated.buyer2FirstName) ?? ""}`',
+			'firstName: `${(estated?.buyer2FirstName) ?? ""}`',
 		);
 		expect(result.code).toContain(
-			'lastName: `${(estated.buyer2LastName) ?? ""}`',
+			'lastName: `${(estated?.buyer2LastName) ?? ""}`',
 		);
 		expect(result.code).not.toContain("undefined");
+	});
+
+	it("chains optional access at every hop of a deep path, matching the real Estated TypeError bug report (estated.owner.name with owner undefined)", () => {
+		const result = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
+				referenceNames: [
+					{ id: "r1", mode: "full", fullName: "${estated.owner.name}" },
+				],
+			},
+		});
+		// Every intermediate hop is guarded, not just the leaf value: if
+		// `estated.owner` is undefined (Estated returned no data), this
+		// evaluates to "" instead of throwing
+		// "Cannot read properties of undefined (reading 'name')".
+		expect(result.code).toContain(
+			'referenceNames: [`${(estated?.owner?.name) ?? ""}`]',
+		);
+		expect(result.code).not.toContain("estated.owner.name");
+	});
+
+	it("guards array-index and bracket-notation segments with optional chaining in a deep path", () => {
+		const result = genAiNameMatch({
+			aiNameMatchConfig: {
+				namesToVerify: [{ id: "n1", mode: "full", fullName: "John Smith" }],
+				referenceNames: [
+					{
+						id: "r1",
+						mode: "full",
+						fullName: "${estated.results[0].my-field.name}",
+					},
+				],
+			},
+		});
+		expect(result.code).toContain(
+			'referenceNames: [`${(estated?.results?.[0]?.["my-field"]?.name) ?? ""}`]',
+		);
 	});
 
 	it("includes minConfidence only when explicitly configured", () => {
