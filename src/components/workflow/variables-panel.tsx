@@ -128,6 +128,13 @@ export function VariablesPanel({
 
 	const [variables, setVariables] = useState<WorkflowVariable[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	// True after a create/edit/delete that hasn't been pushed to the workers
+	// yet via "Sync". Does NOT track state across reloads (the backend has no
+	// sync-state field to persist it) — after a reload the badge simply stays
+	// hidden until the next local modification, which is the least misleading
+	// option available. Rotating a secret does not set this: `rotateSecret`
+	// already syncs to all workers in the same request.
+	const [dirty, setDirty] = useState(false);
 	const [showCreateForm, setShowCreateForm] = useState(false);
 	const [editingVar, setEditingVar] = useState<WorkflowVariable | null>(null);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -229,6 +236,7 @@ export function VariablesPanel({
 				setVariables((prev) =>
 					prev.map((v) => (v.id === editingVar.id ? updated : v)),
 				);
+				setDirty(true);
 				toast.success(t("variablesPanel.toastUpdated"));
 			} else {
 				const created = await createVariable(
@@ -243,6 +251,7 @@ export function VariablesPanel({
 					{ jwt },
 				);
 				setVariables((prev) => [...prev, created]);
+				setDirty(true);
 				toast.success(t("variablesPanel.toastCreated"));
 			}
 			setShowCreateForm(false);
@@ -261,6 +270,7 @@ export function VariablesPanel({
 		try {
 			await deleteVariable(workflowId, v.id, { jwt });
 			setVariables((prev) => prev.filter((x) => x.id !== v.id));
+			setDirty(true);
 			toast.success(t("variablesPanel.toastDeleted"));
 		} catch (err) {
 			const msg = extractApiErrorMessage(err);
@@ -304,7 +314,10 @@ export function VariablesPanel({
 			const result = await syncAllVariables(workflowId, { jwt });
 			if (result.synced.length === 0 && result.failed.length === 0) {
 				toast.info(t("variablesPanel.syncSuccessNoDeployments"));
+				setDirty(false);
 			} else if (result.failed.length > 0) {
+				// Partial failure: some workers are still out of sync, keep the
+				// "pending" badge visible.
 				toast.error(t("variablesPanel.syncError"), {
 					description: `Failed: ${result.failed.join(", ")}`,
 				});
@@ -314,6 +327,7 @@ export function VariablesPanel({
 						.replace("{n}", String(result.variableCount))
 						.replace("{w}", String(result.synced.length)),
 				);
+				setDirty(false);
 			}
 			setShowSyncPanel(false);
 		} catch (err) {
@@ -323,8 +337,6 @@ export function VariablesPanel({
 			setIsSyncing(false);
 		}
 	};
-
-	const hasDraftChanges = variables.length > 0;
 
 	return (
 		<Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -349,7 +361,7 @@ export function VariablesPanel({
 
 				{/* Header actions: badge on its own row so it never overlaps the buttons */}
 				<div className="min-w-0 space-y-3">
-					{hasDraftChanges && (
+					{dirty && (
 						<div className="flex flex-wrap items-center gap-2">
 							<Badge
 								variant="outline"

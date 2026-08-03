@@ -98,6 +98,97 @@ export interface APIResponseConfig {
 	extractPath?: string; // dot-notation, e.g. "payload.data"
 }
 
+// ─── AI Name Match (internal RPC call type for the API node) ──────────────
+// Compares candidate names against reference names via OpenAI over the
+// `PROXY_SVC` service binding (no external URL/auth/headers/body needed —
+// see ProxySvcEntrypoint.aiNameMatch in proxy-svc).
+export type APICallType = "http" | "ai-name-match";
+
+/**
+ * "full" — a single `fullName` expression.
+ * "parts" — `firstName`/`middleName`/`lastName` expressions, composed by
+ * proxy-svc the same way it prioritizes `NameParts` in `domain/openai/nameMatch.ts`
+ * (fullName wins if present, otherwise firstName + middleName + lastName).
+ */
+export type AINameMatchEntryMode = "full" | "parts";
+
+export interface AINameMatchEntryConfig {
+	id: string;
+	/** Which fields apply below. Defaults to "full" when absent. */
+	mode: AINameMatchEntryMode;
+	/** Literal text and/or `${nodeId.prop}` variable refs. Required when mode === "full". */
+	fullName?: string;
+	/** Required when mode === "parts". */
+	firstName?: string;
+	/** Optional even in "parts" mode. */
+	middleName?: string;
+	/** Required when mode === "parts". */
+	lastName?: string;
+	/**
+	 * Free-text identifier (e.g. "buyer", "owner") — purely for traceability.
+	 * Not used by the model to compare names; echoed back verbatim inside
+	 * `matchedAgainst` (e.g. "JOHN SMITH [buyer]") so you can tell which
+	 * reference/candidate produced the match.
+	 */
+	label?: string;
+}
+
+export interface AINameMatchConfig {
+	namesToVerify: AINameMatchEntryConfig[];
+	referenceNames: AINameMatchEntryConfig[];
+	/** Minimum model confidence (0-100) required for a match. Server default: 70. */
+	minConfidence?: number;
+}
+
+export function createDefaultAINameMatchConfig(): AINameMatchConfig {
+	return { namesToVerify: [], referenceNames: [] };
+}
+
+/**
+ * Fixed output schema for the internal AI Name Match RPC — mirrors
+ * `MatchNamesResult` in proxy-svc's `domain/openai/nameMatch.ts`. Returned as a
+ * fresh object each call to avoid accidental sharing/mutation across nodes.
+ * All properties are `readOnly` since the RPC response shape cannot change
+ * per-workflow (same pattern as `nlsOutputFieldsToSchema`).
+ */
+export function createAiNameMatchOutputSchema(): OutputSchema {
+	return {
+		name: "aiNameMatchOutput",
+		properties: [
+			{
+				id: "ai-name-match-matched",
+				name: "matched",
+				type: "boolean",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-confidence",
+				name: "confidence",
+				type: "number",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-matchedName",
+				name: "matchedName",
+				type: "string",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-matchedAgainst",
+				name: "matchedAgainst",
+				type: "string",
+				readOnly: true,
+			},
+			{
+				id: "ai-name-match-explanation",
+				name: "explanation",
+				type: "string",
+				readOnly: true,
+			},
+		],
+	};
+}
+
 export type TimeoutUnit = "seconds" | "minutes" | "hours" | "days";
 
 export type ChallengeType = "acceptance" | "signature";

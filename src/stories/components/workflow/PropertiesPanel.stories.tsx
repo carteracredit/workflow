@@ -302,6 +302,86 @@ export const ApiNodeJsonTemplateInvalid: Story = {
 	},
 };
 
+export const ApiNodeAiNameMatch: Story = {
+	name: "API — AI Name Match (interno)",
+	args: {
+		selectedNodes: [
+			{
+				...apiNodeBase,
+				id: "api-name-match",
+				title: "Verificar Propietario",
+				config: {
+					callType: "ai-name-match",
+					aiNameMatchConfig: {
+						namesToVerify: [
+							{
+								id: "n1",
+								mode: "full",
+								fullName: "${formCliente.fullName}",
+							},
+						],
+						referenceNames: [
+							{
+								id: "r1",
+								mode: "full",
+								fullName: "${consultaPropiedad.ownerName}",
+								label: "owner",
+							},
+							{
+								id: "r2",
+								mode: "parts",
+								firstName: "${consultaPropiedad.buyerFirstName}",
+								lastName: "${consultaPropiedad.buyerLastName}",
+								label: "buyer",
+							},
+						],
+						minConfidence: 80,
+					},
+					// Auto-populated by the editor when the call type is switched to
+					// "ai-name-match" — mirrors ProxySvcEntrypoint.aiNameMatch's fixed
+					// response shape (see createAiNameMatchOutputSchema in types.ts).
+					outputSchema: {
+						name: "aiNameMatchOutput",
+						properties: [
+							{
+								id: "ai-name-match-matched",
+								name: "matched",
+								type: "boolean",
+								readOnly: true,
+							},
+							{
+								id: "ai-name-match-confidence",
+								name: "confidence",
+								type: "number",
+								readOnly: true,
+							},
+							{
+								id: "ai-name-match-matchedName",
+								name: "matchedName",
+								type: "string",
+								readOnly: true,
+							},
+							{
+								id: "ai-name-match-matchedAgainst",
+								name: "matchedAgainst",
+								type: "string",
+								readOnly: true,
+							},
+							{
+								id: "ai-name-match-explanation",
+								name: "explanation",
+								type: "string",
+								readOnly: true,
+							},
+						],
+					},
+				},
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
 // ─── NLS Node Stories ──────────────────────────────────────────────────────────
 
 const nlsNodeBase: WorkflowNode = {

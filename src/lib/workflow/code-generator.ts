@@ -9,6 +9,9 @@ import type {
 	APIHeaderEntry,
 	APIBodyConfig,
 	APIResponseConfig,
+	APICallType,
+	AINameMatchConfig,
+	AINameMatchEntryConfig,
 	MessageNodeConfig,
 	OutputSchema,
 	NLSNodeConfig,
@@ -185,13 +188,23 @@ function getVarName(nodeId: string): string {
  *  Array accessors like `[0]` are preserved intact and appended to the
  *  preceding segment.
  *
+ * When `optional` is true, every connector between segments (and every
+ * array/bracket accessor) uses `?.` instead of `.` so a missing intermediate
+ * object (e.g. an API response that came back without a nested field) reads
+ * as `undefined` instead of throwing "Cannot read properties of undefined".
+ * The very first segment never gets a leading connector here — that's the
+ * caller's job (see `joinPropertyTrail`), since it depends on the base
+ * expression the trail is attached to.
+ *
  * Examples:
- *   "phone"                  → "phone"
- *   "results[0].url"         → "results[0].url"
- *   "my-field"               → `["my-field"]`
- *   "data.my-key.value"      → `data["my-key"].value`
+ *   "phone"                              → "phone"
+ *   "results[0].url"                     → "results[0].url"
+ *   "my-field"                           → `["my-field"]`
+ *   "data.my-key.value"                  → `data["my-key"].value`
+ *   "owner.name" (optional)              → "owner?.name"
+ *   "results[0].url" (optional)          → "results?.[0]?.url"
  */
-function expandPropertyTrail(trail: string): string {
+function expandPropertyTrail(trail: string, optional = false): string {
 	const parts: string[] = [];
 	let buf = "";
 	let depth = 0;
@@ -215,24 +228,53 @@ function expandPropertyTrail(trail: string): string {
 		.map((part, i) => {
 			const bracketIdx = part.indexOf("[");
 			const name = bracketIdx >= 0 ? part.slice(0, bracketIdx) : part;
-			const suffix = bracketIdx >= 0 ? part.slice(bracketIdx) : "";
+			const rawSuffix = bracketIdx >= 0 ? part.slice(bracketIdx) : "";
+			// Chained index accessors on this segment (e.g. "[0][1]") each need
+			// their own guard in optional mode.
+			const suffix = optional ? rawSuffix.replace(/\[/g, "?.[") : rawSuffix;
 
 			if (!name) return suffix;
 
 			if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
-				return (i === 0 ? name : `.${name}`) + suffix;
+				const connector = i === 0 ? "" : optional ? "?." : ".";
+				return connector + name + suffix;
 			}
+			// Bracket notation never needs a leading dot, even mid-chain
+			// (`a.b["my-key"]` is valid JS), but in optional mode a mid-chain
+			// bracket still needs `?.` to guard the preceding segment.
 			const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-			return `["${escaped}"]${suffix}`;
+			const connector = i === 0 ? "" : optional ? "?." : "";
+			return `${connector}["${escaped}"]${suffix}`;
 		})
 		.join("");
+}
+
+/**
+ * Joins a base expression with an already-expanded property trail.
+ *
+ * Bracket-notation trails (`["key"]`, optionally prefixed with `?.`) attach
+ * directly with no connector — `base.["key"]` is a syntax error, `base["key"]`
+ * and `base?.["key"]` are not. Identifier trails get `.` (or `?.` in optional
+ * mode).
+ */
+function joinPropertyTrail(
+	base: string,
+	trail: string,
+	optional: boolean,
+): string {
+	if (trail.startsWith("[") || trail.startsWith("?.[")) {
+		return `${base}${trail}`;
+	}
+	return `${base}${optional ? "?." : "."}${trail}`;
 }
 
 /**
  * Expands a single variable-picker path into a runtime JavaScript expression.
  *
  *  - `secret.NAME`          → `this.env.NAME` (workflow-level variable/secret;
- *                             preserves UPPER_SNAKE case).
+ *                             preserves UPPER_SNAKE case). Never made optional:
+ *                             `this.env` always exists, so a missing binding
+ *                             just reads as `undefined`, it never throws.
  *  - `<alias.prop…>`        → The first segment is kept as-is when it is
  *                             already a valid camelCase alias (new format), or
  *                             dehyphenated when it is a legacy `node-<id>`.
@@ -245,8 +287,16 @@ function expandPropertyTrail(trail: string): string {
  * one place, regardless of whether the reference lives inside an auth field,
  * a URL, a header value, a request body, a Decision condition, or a Transform
  * code block.
+ *
+ * @param optional When true, every hop after the base alias is chained with
+ * `?.` instead of `.` (see `expandPropertyTrail`). Use this for expressions
+ * where a missing nested field (e.g. an upstream API response without the
+ * expected shape) should evaluate to `undefined` rather than throw — NOT for
+ * URLs/headers/raw bodies, where that would silently render the literal text
+ * "undefined", nor for Transform code, which can use these paths as
+ * assignment targets that `?.` would break.
  */
-function expandVariablePath(path: string): string {
+function expandVariablePath(path: string, optional = false): string {
 	const trimmed = path.trim();
 	if (/^secret\./.test(trimmed)) {
 		return `this.env.${trimmed.slice("secret.".length)}`;
@@ -263,7 +313,11 @@ function expandVariablePath(path: string): string {
 		if (propertyTrail === null) {
 			return "event.payload";
 		}
-		return `event.payload.${expandPropertyTrail(propertyTrail)}`;
+		return joinPropertyTrail(
+			"event.payload",
+			expandPropertyTrail(propertyTrail, optional),
+			optional,
+		);
 	}
 
 	// For legacy node-IDs (`node-<timestamp>`), look up the camelCase alias
@@ -281,7 +335,11 @@ function expandVariablePath(path: string): string {
 		return safeFirst;
 	}
 
-	return `${safeFirst}.${expandPropertyTrail(propertyTrail)}`;
+	return joinPropertyTrail(
+		safeFirst,
+		expandPropertyTrail(propertyTrail, optional),
+		optional,
+	);
 }
 
 /**
@@ -297,10 +355,16 @@ function expandVariablePath(path: string): string {
  *
  * Use this for Decision conditions and Transform code bodies (bare expressions).
  * For quoted string values use `emitInterpolatedString` instead.
+ *
+ * @param optional Forwarded to `expandVariablePath` — pass `true` for
+ * Decision conditions (a bare boolean expression, never an assignment
+ * target) so a missing nested field short-circuits to `undefined` instead of
+ * throwing. Leave `false` (default) for Transform code, which may use these
+ * paths as assignment targets.
  */
-function expandVariableRefs(expr: string): string {
+function expandVariableRefs(expr: string, optional = false): string {
 	return expr.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
-		expandVariablePath(path),
+		expandVariablePath(path, optional),
 	);
 }
 
@@ -343,22 +407,29 @@ function emitInterpolatedString(str: string): string {
 
 /**
  * Same contract as `emitInterpolatedString`, but each `${...}` token is
- * wrapped with `?? ""` so a `null`/`undefined` runtime value renders as an
- * empty string instead of the literal text "null"/"undefined".
+ * expanded with optional chaining (`?.`) and wrapped with `?? ""`, so:
+ *  - a missing leaf value (e.g. `middleName` not present) renders as an
+ *    empty string instead of the literal text "null"/"undefined", and
+ *  - a missing INTERMEDIATE object in the path (e.g. an upstream API
+ *    response that came back without the expected nested field) also
+ *    resolves to an empty string instead of throwing
+ *    "Cannot read properties of undefined (reading '...')" at runtime.
  *
- * Used for GeneratePDF field mappings: an AcroForm text field showing the
- * word "null" looks like a bug to the end user, so a missing value should
- * simply leave the field blank.
+ * Used for GeneratePDF field mappings (a blank field beats showing "null" to
+ * the end user) and for AI Name Match name entries (a reference name that
+ * can't be resolved should be dropped by proxy-svc's `normalizeNameInput`,
+ * not crash the whole workflow step).
  *
  * Examples:
- *   "${start.roleContacts.org_manager.middleName}" → `` `${(event.payload.roleContacts.org_manager.middleName) ?? ""}` ``
+ *   "${start.roleContacts.org_manager.middleName}" → `` `${(event.payload?.roleContacts?.org_manager?.middleName) ?? ""}` ``
+ *   "${estated.owner.name}" (estated.owner undefined) → `` `${(estated?.owner?.name) ?? ""}` `` evaluates to `""`, not a thrown TypeError.
  */
 function emitNullSafeInterpolatedString(str: string): string {
 	if (!containsVariableRefs(str)) {
 		return `"${escapeString(str)}"`;
 	}
 	const expanded = str.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
-		return `\${(${expandVariablePath(path)}) ?? ""}`;
+		return `\${(${expandVariablePath(path, true)}) ?? ""}`;
 	});
 	const escaped = expanded.replace(/`/g, "\\`");
 	return `\`${escaped}\``;
@@ -1093,12 +1164,77 @@ function emitContinueOnFailureCatch(
 /**
  * Generate code for an API node
  */
+/**
+ * Emits the `namesToVerify`/`referenceNames` array literal for the internal
+ * `aiNameMatch` RPC call. Each field is interpolated null-safely (`?? ""`) so
+ * a variable that resolves to nothing at runtime (e.g. an optional "second
+ * buyer" field) becomes an empty string instead of the literal text
+ * "null"/"undefined" — proxy-svc's `normalizeNameInput` already drops
+ * entries that end up empty rather than failing the whole call (see
+ * `domain/openai/nameMatch.ts`).
+ *
+ * - "full" mode, no label → plain interpolated string.
+ * - "full" mode with a label, or "parts" mode (always) → a `NameParts`
+ *   object (`{ firstName?, middleName?, lastName?, fullName?, label? }`).
+ */
+function emitAiNameMatchEntries(entries: AINameMatchEntryConfig[]): string {
+	if (entries.length === 0) return "[]";
+	const items = entries.map((entry) => {
+		const labelProp = entry.label
+			? `, label: ${JSON.stringify(entry.label)}`
+			: "";
+
+		if ((entry.mode ?? "full") === "parts") {
+			const firstNameExpr = emitNullSafeInterpolatedString(
+				entry.firstName || "",
+			);
+			const lastNameExpr = emitNullSafeInterpolatedString(entry.lastName || "");
+			const middleNameProp = entry.middleName
+				? `, middleName: ${emitNullSafeInterpolatedString(entry.middleName)}`
+				: "";
+			return `{ firstName: ${firstNameExpr}, lastName: ${lastNameExpr}${middleNameProp}${labelProp} }`;
+		}
+
+		const fullNameExpr = emitNullSafeInterpolatedString(entry.fullName || "");
+		if (entry.label) {
+			return `{ fullName: ${fullNameExpr}${labelProp} }`;
+		}
+		return fullNameExpr;
+	});
+	return `[${items.join(", ")}]`;
+}
+
+/**
+ * Generates the body of an "AI Name Match" API node: a call to
+ * `this.env.PROXY_SVC.aiNameMatch` over the internal service binding
+ * (see `ProxySvcEntrypoint.aiNameMatch` in proxy-svc) instead of `fetch`.
+ * No URL, auth, headers, or body config apply in this mode.
+ */
+function generateAiNameMatchCall(node: WorkflowNode, indent: string): string {
+	const config = (node.config.aiNameMatchConfig as
+		| AINameMatchConfig
+		| undefined) ?? { namesToVerify: [], referenceNames: [] };
+
+	let code = `${indent}\tconst _aiNameMatchResult = await this.env.PROXY_SVC.aiNameMatch({\n`;
+	code += `${indent}\t\tnamesToVerify: ${emitAiNameMatchEntries(config.namesToVerify ?? [])},\n`;
+	code += `${indent}\t\treferenceNames: ${emitAiNameMatchEntries(config.referenceNames ?? [])},\n`;
+	if (typeof config.minConfidence === "number") {
+		code += `${indent}\t\tminConfidence: ${config.minConfidence},\n`;
+	}
+	code += `${indent}\t});\n`;
+	code += `${indent}\treturn _aiNameMatchResult as unknown as Record<string, unknown>;\n`;
+	return code;
+}
+
 function generateAPIStep(
 	node: WorkflowNode,
 	indent: string,
 	retryVarName?: string,
 ): string {
 	const stepName = createStepName(node);
+	const callType: APICallType =
+		(node.config.callType as APICallType | undefined) ?? "http";
+	const isAiNameMatch = callType === "ai-name-match";
 	const endpoint =
 		(node.config.url as string) ||
 		(node.config.endpoint as string) ||
@@ -1113,7 +1249,7 @@ function generateAPIStep(
 	const responseConfig = node.config.responseConfig as
 		| APIResponseConfig
 		| undefined;
-	const hasBody = ["POST", "PUT", "PATCH"].includes(method);
+	const hasBody = !isAiNameMatch && ["POST", "PUT", "PATCH"].includes(method);
 	// API nodes always capture the response so the cases UI can display it,
 	// regardless of whether an explicit outputSchema is configured.
 	const varName = getVarName(node.id);
@@ -1125,6 +1261,7 @@ function generateAPIStep(
 		? retryStepNameExpr(stepName, retryVarName)
 		: `"${stepName}"`;
 	const isOAuth2 =
+		!isAiNameMatch &&
 		authConfig?.type === "oauth2-client-credentials" &&
 		authConfig.oauth2TokenUrl &&
 		authConfig.oauth2ClientId &&
@@ -1196,9 +1333,12 @@ function generateAPIStep(
 	}
 
 	// Build headers
-	const hasCustomHeaders = customHeaders.length > 0;
+	const hasCustomHeaders = !isAiNameMatch && customHeaders.length > 0;
 	const hasAuthHeader =
-		authConfig && authConfig.type !== "none" && authConfig.type !== undefined;
+		!isAiNameMatch &&
+		authConfig &&
+		authConfig.type !== "none" &&
+		authConfig.type !== undefined;
 	if (hasAuthHeader || hasCustomHeaders || hasBody) {
 		code += `${indent}\tconst headers: Record<string, string> = {};\n`;
 		if (hasBody) {
@@ -1238,67 +1378,78 @@ function generateAPIStep(
 		}
 	}
 
-	// Build fetch call
-	code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
-	code += `${indent}\t\tmethod: "${method}",\n`;
-
-	if (hasAuthHeader || hasCustomHeaders || hasBody) {
-		code += `${indent}\t\theaders,\n`;
-	}
-
-	// Body
-	if (hasBody) {
-		const mode = bodyConfig?.mode ?? "none";
-		if (mode === "raw-json" && bodyConfig?.rawJson) {
-			// Always use backticks: preserves inner JSON quotes and allows
-			// ${nodeId.prop} and ${secret.VAR} refs (both mapped via
-			// expandVariablePath so secrets resolve to this.env.VAR).
-			const dehyphenated = bodyConfig.rawJson.replace(
-				/\$\{([^}]+)\}/g,
-				(_, path: string) => `\${${expandVariablePath(path)}}`,
-			);
-			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
-			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
-		} else if (mode === "raw-xml" && bodyConfig?.rawXml) {
-			// Same backtick strategy as raw-json: preserves XML angle brackets and
-			// allows ${nodeId.prop} / ${secret.VAR} interpolation.
-			const dehyphenated = bodyConfig.rawXml.replace(
-				/\$\{([^}]+)\}/g,
-				(_, path: string) => `\${${expandVariablePath(path)}}`,
-			);
-			const escaped = dehyphenated.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
-			code += `${indent}\t\tbody: \`${escaped}\`,\n`;
-		} else if (mode === "field-mapping" && bodyConfig?.fieldMappings?.length) {
-			const mappingsCode = bodyConfig.fieldMappings
-				.map(
-					(m) =>
-						`${JSON.stringify(m.targetKey)}: ${expandVariableRefs(m.sourceExpression)}`,
-				)
-				.join(`, `);
-			code += `${indent}\t\tbody: JSON.stringify({ ${mappingsCode} }),\n`;
-		} else {
-			code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
-		}
-	}
-
-	code += `${indent}\t});\n`;
-	code += `${indent}\tif (!response.ok) {\n`;
-	code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
-	code += `${indent}\t}\n`;
-
-	// Response extraction
-	const extractPath = responseConfig?.extractPath?.trim();
-	if (extractPath) {
-		code += `${indent}\tconst _responseData = (await response.json()) as Record<string, unknown>;\n`;
-		const accessExpr = extractPath
-			.split(".")
-			.reduce(
-				(acc, key) => `(${acc} as Record<string, unknown>)["${key}"]`,
-				"_responseData",
-			);
-		code += `${indent}\treturn ${accessExpr} as Record<string, unknown>;\n`;
+	if (isAiNameMatch) {
+		code += generateAiNameMatchCall(node, indent);
 	} else {
-		code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
+		// Build fetch call
+		code += `${indent}\tconst response = await fetch(${emitInterpolatedString(endpoint)}, {\n`;
+		code += `${indent}\t\tmethod: "${method}",\n`;
+
+		if (hasAuthHeader || hasCustomHeaders || hasBody) {
+			code += `${indent}\t\theaders,\n`;
+		}
+
+		// Body
+		if (hasBody) {
+			const mode = bodyConfig?.mode ?? "none";
+			if (mode === "raw-json" && bodyConfig?.rawJson) {
+				// Always use backticks: preserves inner JSON quotes and allows
+				// ${nodeId.prop} and ${secret.VAR} refs (both mapped via
+				// expandVariablePath so secrets resolve to this.env.VAR).
+				const dehyphenated = bodyConfig.rawJson.replace(
+					/\$\{([^}]+)\}/g,
+					(_, path: string) => `\${${expandVariablePath(path)}}`,
+				);
+				const escaped = dehyphenated
+					.replace(/\\/g, "\\\\")
+					.replace(/`/g, "\\`");
+				code += `${indent}\t\tbody: \`${escaped}\`,\n`;
+			} else if (mode === "raw-xml" && bodyConfig?.rawXml) {
+				// Same backtick strategy as raw-json: preserves XML angle brackets and
+				// allows ${nodeId.prop} / ${secret.VAR} interpolation.
+				const dehyphenated = bodyConfig.rawXml.replace(
+					/\$\{([^}]+)\}/g,
+					(_, path: string) => `\${${expandVariablePath(path)}}`,
+				);
+				const escaped = dehyphenated
+					.replace(/\\/g, "\\\\")
+					.replace(/`/g, "\\`");
+				code += `${indent}\t\tbody: \`${escaped}\`,\n`;
+			} else if (
+				mode === "field-mapping" &&
+				bodyConfig?.fieldMappings?.length
+			) {
+				const mappingsCode = bodyConfig.fieldMappings
+					.map(
+						(m) =>
+							`${JSON.stringify(m.targetKey)}: ${expandVariableRefs(m.sourceExpression)}`,
+					)
+					.join(`, `);
+				code += `${indent}\t\tbody: JSON.stringify({ ${mappingsCode} }),\n`;
+			} else {
+				code += `${indent}\t\tbody: JSON.stringify(event.payload),\n`;
+			}
+		}
+
+		code += `${indent}\t});\n`;
+		code += `${indent}\tif (!response.ok) {\n`;
+		code += `${indent}\t\tthrow new Error(\`API call failed: \${response.status}\`);\n`;
+		code += `${indent}\t}\n`;
+
+		// Response extraction
+		const extractPath = responseConfig?.extractPath?.trim();
+		if (extractPath) {
+			code += `${indent}\tconst _responseData = (await response.json()) as Record<string, unknown>;\n`;
+			const accessExpr = extractPath
+				.split(".")
+				.reduce(
+					(acc, key) => `(${acc} as Record<string, unknown>)["${key}"]`,
+					"_responseData",
+				);
+			code += `${indent}\treturn ${accessExpr} as Record<string, unknown>;\n`;
+		} else {
+			code += `${indent}\treturn (await response.json()) as Record<string, unknown>;\n`;
+		}
 	}
 
 	code += `${indent}});\n`;
@@ -3161,7 +3312,11 @@ function traverseBranch(
 			const innerStop = convergenceNodeId ?? stopAtNodeId;
 
 			code += `${indent}// Decision: ${node.title}\n`;
-			code += `${indent}if (${expandVariableRefs(condition)}) {\n`;
+			// Optional chaining: a condition referencing a nested field on an
+			// upstream response that came back without that shape (e.g. an
+			// empty API result) should evaluate to `undefined`/falsy, not
+			// throw and take down the whole workflow run.
+			code += `${indent}if (${expandVariableRefs(condition, true)}) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(
@@ -3409,6 +3564,21 @@ function collectInterpolatedStrings(node: WorkflowNode): string[] {
 			push(authConfig?.oauth2Scope);
 			push(authConfig?.oauth2Username);
 			push(authConfig?.oauth2Password);
+			const aiNameMatchConfig = node.config.aiNameMatchConfig as
+				| AINameMatchConfig
+				| undefined;
+			const pushAiNameMatchEntry = (entry: AINameMatchEntryConfig) => {
+				push(entry.fullName);
+				push(entry.firstName);
+				push(entry.middleName);
+				push(entry.lastName);
+			};
+			for (const entry of aiNameMatchConfig?.namesToVerify ?? []) {
+				pushAiNameMatchEntry(entry);
+			}
+			for (const entry of aiNameMatchConfig?.referenceNames ?? []) {
+				pushAiNameMatchEntry(entry);
+			}
 			break;
 		}
 		case "Message": {
@@ -3619,6 +3789,12 @@ export function generateWorkflowCode(
 	// generated by `wrangler types` (worker-configuration.d.ts).
 	const hasMessageNodes = nodes.some((n) => n.type === "Message");
 	const hasNlsNodes = nodes.some((n) => n.type === "NLS");
+	const hasAiNameMatchNodes = nodes.some(
+		(n) =>
+			n.type === "API" &&
+			((n.config as { callType?: APICallType } | undefined)?.callType ??
+				"http") === "ai-name-match",
+	);
 	const hasSignatureChallengeNodes = nodes.some(
 		(n) =>
 			n.type === "Challenge" &&
@@ -3703,16 +3879,34 @@ export function generateWorkflowCode(
 		code += `\t\t}) => Promise<void>;\n`;
 	}
 	code += `\t};\n`;
-	if (hasNlsNodes) {
+	if (hasNlsNodes || hasAiNameMatchNodes) {
 		code += `\tPROXY_SVC: {\n`;
-		code += `\t\tnlsCreateLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
-		code += `\t\tnlsCancelLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
-		code += `\t\tnlsGetAmortization: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{\n`;
-		code += `\t\t\tLoanAmount: number; CashFlow: string; totalOfPayments: number;\n`;
-		code += `\t\t\tregularPaymentAmount: number; firstPaymentApr: string;\n`;
-		code += `\t\t\tlastPaymentAmount: number; lastPaymentDate: string | null;\n`;
-		code += `\t\t\tOriginationDate: string; apr: number | null;\n`;
-		code += `\t\t}>;\n`;
+		if (hasNlsNodes) {
+			code += `\t\tnlsCreateLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
+			code += `\t\tnlsCancelLoan: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{ success: boolean; raw?: unknown }>;\n`;
+			code += `\t\tnlsGetAmortization: (input: { bearerToken: string; body: Record<string, unknown> }) => Promise<{\n`;
+			code += `\t\t\tLoanAmount: number; CashFlow: string; totalOfPayments: number;\n`;
+			code += `\t\t\tregularPaymentAmount: number; firstPaymentApr: string;\n`;
+			code += `\t\t\tlastPaymentAmount: number; lastPaymentDate: string | null;\n`;
+			code += `\t\t\tOriginationDate: string; apr: number | null;\n`;
+			code += `\t\t}>;\n`;
+		}
+		if (hasAiNameMatchNodes) {
+			// Mirrors ProxySvcEntrypoint.aiNameMatch / domain/openai/nameMatch.ts
+			// in proxy-svc — no bearer token: pure computation over the service
+			// binding, not user-data access.
+			code += `\t\taiNameMatch: (input: {\n`;
+			code += `\t\t\tnamesToVerify: Array<string | { firstName?: string; middleName?: string; lastName?: string; fullName?: string; label?: string }>;\n`;
+			code += `\t\t\treferenceNames: Array<string | { firstName?: string; middleName?: string; lastName?: string; fullName?: string; label?: string }>;\n`;
+			code += `\t\t\tminConfidence?: number;\n`;
+			code += `\t\t}) => Promise<{\n`;
+			code += `\t\t\tmatched: boolean;\n`;
+			code += `\t\t\tconfidence: number;\n`;
+			code += `\t\t\tmatchedName: string | null;\n`;
+			code += `\t\t\tmatchedAgainst: string | null;\n`;
+			code += `\t\t\texplanation: string;\n`;
+			code += `\t\t}>;\n`;
+		}
 		code += `\t};\n`;
 	}
 	// User-defined variables and secrets from the variables panel (all are strings at runtime)

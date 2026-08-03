@@ -51,6 +51,22 @@ describe("parseTemplateStringToSegments", () => {
 		expect(segs[0].type).toBe("variable");
 		expect(segs[1]).toMatchObject({ type: "text", value: " - disponible" });
 	});
+
+	it("preserves a whitespace-only text segment between two variables (regression: space between streetNumber and streetName)", () => {
+		const segs = parseTemplateStringToSegments(
+			"${event.payload.streetNumber} ${event.payload.streetName}",
+		);
+		expect(segs).toHaveLength(3);
+		expect(segs[0]).toMatchObject({
+			type: "variable",
+			variablePath: "event.payload.streetNumber",
+		});
+		expect(segs[1]).toMatchObject({ type: "text", value: " " });
+		expect(segs[2]).toMatchObject({
+			type: "variable",
+			variablePath: "event.payload.streetName",
+		});
+	});
 });
 
 describe("segmentsToTemplateString", () => {
@@ -81,6 +97,14 @@ describe("segmentsToTemplateString", () => {
 	it("round-trips through parseTemplateStringToSegments", () => {
 		const original =
 			"Estimado ${event.payload.clientFirstName}, producto: ${event.payload.productName}";
+		const segs = parseTemplateStringToSegments(original);
+		const back = segmentsToTemplateString(segs);
+		expect(back).toBe(original);
+	});
+
+	it("round-trips a whitespace-only segment between two variables (regression: space between streetNumber and streetName)", () => {
+		const original =
+			"${event.payload.streetNumber} ${event.payload.streetName}";
 		const segs = parseTemplateStringToSegments(original);
 		const back = segmentsToTemplateString(segs);
 		expect(back).toBe(original);

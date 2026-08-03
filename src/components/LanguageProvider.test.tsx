@@ -156,7 +156,6 @@ describe("LanguageProvider", () => {
 			language: "es",
 			dateFormat: "DD/MM/YYYY",
 			clockFormat: "12h",
-			avatarUrl: null,
 			paymentMethods: [],
 			sources: {
 				theme: "default",

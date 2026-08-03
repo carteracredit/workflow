@@ -3,6 +3,8 @@ import type {
 	WorkflowEdge,
 	ValidationError,
 	APIFailureHandling,
+	APICallType,
+	AINameMatchConfig,
 	ChallengeNodeConfig,
 	Flag,
 	MessageNodeConfig,
@@ -346,8 +348,84 @@ export function validateWorkflow(
 		}
 
 		if (node.type === "API") {
-			// Validar URL
-			if (!node.config.url) {
+			const callType: APICallType =
+				(node.config.callType as APICallType | undefined) ?? "http";
+
+			if (callType === "ai-name-match") {
+				const aiNameMatch = node.config.aiNameMatchConfig as
+					| AINameMatchConfig
+					| undefined;
+				const namesToVerify = aiNameMatch?.namesToVerify ?? [];
+				const referenceNames = aiNameMatch?.referenceNames ?? [];
+
+				// A "full" entry needs fullName; a "parts" entry needs BOTH
+				// firstName and lastName (middleName is always optional) — mirrors
+				// how proxy-svc's normalizeNameInput composes NameParts.
+				const validateEntries = (
+					entries: typeof namesToVerify,
+					listLabel: string,
+				) => {
+					entries.forEach((entry, idx) => {
+						const mode = entry.mode ?? "full";
+						const position = `${listLabel} #${idx + 1}`;
+						if (mode === "parts") {
+							if (!entry.firstName?.trim()) {
+								errors.push({
+									nodeId: node.id,
+									message: `"${node.title}": ${position} (modo "por partes") requiere un nombre`,
+									severity: "error",
+								});
+							}
+							if (!entry.lastName?.trim()) {
+								errors.push({
+									nodeId: node.id,
+									message: `"${node.title}": ${position} (modo "por partes") requiere un apellido`,
+									severity: "error",
+								});
+							}
+						} else if (!entry.fullName?.trim()) {
+							errors.push({
+								nodeId: node.id,
+								message: `"${node.title}": ${position} (modo "nombre completo") requiere una expresión configurada`,
+								severity: "error",
+							});
+						}
+					});
+				};
+
+				if (namesToVerify.length === 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener al menos un nombre a verificar configurado`,
+						severity: "error",
+					});
+				} else {
+					validateEntries(namesToVerify, "el nombre a verificar");
+				}
+
+				if (referenceNames.length === 0) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}" debe tener al menos un nombre de referencia configurado`,
+						severity: "error",
+					});
+				} else {
+					validateEntries(referenceNames, "el nombre de referencia");
+				}
+
+				const minConfidence = aiNameMatch?.minConfidence;
+				if (
+					minConfidence !== undefined &&
+					(minConfidence < 0 || minConfidence > 100)
+				) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": la confianza mínima debe estar entre 0 y 100`,
+						severity: "error",
+					});
+				}
+			} else if (!node.config.url) {
+				// Validar URL (solo aplica al modo HTTP externo)
 				errors.push({
 					nodeId: node.id,
 					message: `"${node.title}" debe tener una URL configurada`,

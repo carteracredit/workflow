@@ -86,7 +86,6 @@ describe("ThemeProvider", () => {
 			timezone: "UTC",
 			dateFormat: "DD/MM/YYYY",
 			clockFormat: "12h",
-			avatarUrl: null,
 			paymentMethods: [],
 			sources: {
 				theme: "browser",
@@ -123,7 +122,6 @@ describe("ThemeProvider", () => {
 			timezone: "UTC",
 			dateFormat: "DD/MM/YYYY",
 			clockFormat: "12h",
-			avatarUrl: null,
 			paymentMethods: [],
 			sources: {
 				theme: "user",

@@ -38,7 +38,6 @@ export interface UserSettings {
 	language: LanguageCode | null;
 	dateFormat: DateFormat | null;
 	clockFormat: ClockFormat | null;
-	avatarUrl: string | null;
 	paymentMethods: PaymentMethod[];
 	metadata: UserSettingsMetadata | null;
 	createdAt: string;
@@ -51,14 +50,13 @@ export interface ResolvedSettings {
 	language: LanguageCode;
 	dateFormat: DateFormat;
 	clockFormat: ClockFormat;
-	avatarUrl: string | null;
 	paymentMethods: PaymentMethod[];
 	sources: {
-		theme: "user" | "organization" | "browser" | "default";
-		timezone: "user" | "organization" | "browser" | "default";
-		language: "user" | "organization" | "browser" | "default";
-		dateFormat: "user" | "organization" | "default";
-		clockFormat: "user" | "organization" | "default";
+		theme: "user" | "browser" | "default";
+		timezone: "user" | "browser" | "default";
+		language: "user" | "browser" | "default";
+		dateFormat: "user" | "default";
+		clockFormat: "user" | "default";
 	};
 }
 
@@ -68,7 +66,6 @@ export interface UpdateUserSettingsInput {
 	language?: LanguageCode | null;
 	dateFormat?: DateFormat | null;
 	clockFormat?: ClockFormat | null;
-	avatarUrl?: string | null;
 	paymentMethods?: PaymentMethod[];
 	metadata?: UserSettingsMetadata;
 }
