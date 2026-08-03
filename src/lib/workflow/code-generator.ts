@@ -188,13 +188,23 @@ function getVarName(nodeId: string): string {
  *  Array accessors like `[0]` are preserved intact and appended to the
  *  preceding segment.
  *
+ * When `optional` is true, every connector between segments (and every
+ * array/bracket accessor) uses `?.` instead of `.` so a missing intermediate
+ * object (e.g. an API response that came back without a nested field) reads
+ * as `undefined` instead of throwing "Cannot read properties of undefined".
+ * The very first segment never gets a leading connector here — that's the
+ * caller's job (see `joinPropertyTrail`), since it depends on the base
+ * expression the trail is attached to.
+ *
  * Examples:
- *   "phone"                  → "phone"
- *   "results[0].url"         → "results[0].url"
- *   "my-field"               → `["my-field"]`
- *   "data.my-key.value"      → `data["my-key"].value`
+ *   "phone"                              → "phone"
+ *   "results[0].url"                     → "results[0].url"
+ *   "my-field"                           → `["my-field"]`
+ *   "data.my-key.value"                  → `data["my-key"].value`
+ *   "owner.name" (optional)              → "owner?.name"
+ *   "results[0].url" (optional)          → "results?.[0]?.url"
  */
-function expandPropertyTrail(trail: string): string {
+function expandPropertyTrail(trail: string, optional = false): string {
 	const parts: string[] = [];
 	let buf = "";
 	let depth = 0;
@@ -218,24 +228,53 @@ function expandPropertyTrail(trail: string): string {
 		.map((part, i) => {
 			const bracketIdx = part.indexOf("[");
 			const name = bracketIdx >= 0 ? part.slice(0, bracketIdx) : part;
-			const suffix = bracketIdx >= 0 ? part.slice(bracketIdx) : "";
+			const rawSuffix = bracketIdx >= 0 ? part.slice(bracketIdx) : "";
+			// Chained index accessors on this segment (e.g. "[0][1]") each need
+			// their own guard in optional mode.
+			const suffix = optional ? rawSuffix.replace(/\[/g, "?.[") : rawSuffix;
 
 			if (!name) return suffix;
 
 			if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
-				return (i === 0 ? name : `.${name}`) + suffix;
+				const connector = i === 0 ? "" : optional ? "?." : ".";
+				return connector + name + suffix;
 			}
+			// Bracket notation never needs a leading dot, even mid-chain
+			// (`a.b["my-key"]` is valid JS), but in optional mode a mid-chain
+			// bracket still needs `?.` to guard the preceding segment.
 			const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-			return `["${escaped}"]${suffix}`;
+			const connector = i === 0 ? "" : optional ? "?." : "";
+			return `${connector}["${escaped}"]${suffix}`;
 		})
 		.join("");
+}
+
+/**
+ * Joins a base expression with an already-expanded property trail.
+ *
+ * Bracket-notation trails (`["key"]`, optionally prefixed with `?.`) attach
+ * directly with no connector — `base.["key"]` is a syntax error, `base["key"]`
+ * and `base?.["key"]` are not. Identifier trails get `.` (or `?.` in optional
+ * mode).
+ */
+function joinPropertyTrail(
+	base: string,
+	trail: string,
+	optional: boolean,
+): string {
+	if (trail.startsWith("[") || trail.startsWith("?.[")) {
+		return `${base}${trail}`;
+	}
+	return `${base}${optional ? "?." : "."}${trail}`;
 }
 
 /**
  * Expands a single variable-picker path into a runtime JavaScript expression.
  *
  *  - `secret.NAME`          → `this.env.NAME` (workflow-level variable/secret;
- *                             preserves UPPER_SNAKE case).
+ *                             preserves UPPER_SNAKE case). Never made optional:
+ *                             `this.env` always exists, so a missing binding
+ *                             just reads as `undefined`, it never throws.
  *  - `<alias.prop…>`        → The first segment is kept as-is when it is
  *                             already a valid camelCase alias (new format), or
  *                             dehyphenated when it is a legacy `node-<id>`.
@@ -248,8 +287,16 @@ function expandPropertyTrail(trail: string): string {
  * one place, regardless of whether the reference lives inside an auth field,
  * a URL, a header value, a request body, a Decision condition, or a Transform
  * code block.
+ *
+ * @param optional When true, every hop after the base alias is chained with
+ * `?.` instead of `.` (see `expandPropertyTrail`). Use this for expressions
+ * where a missing nested field (e.g. an upstream API response without the
+ * expected shape) should evaluate to `undefined` rather than throw — NOT for
+ * URLs/headers/raw bodies, where that would silently render the literal text
+ * "undefined", nor for Transform code, which can use these paths as
+ * assignment targets that `?.` would break.
  */
-function expandVariablePath(path: string): string {
+function expandVariablePath(path: string, optional = false): string {
 	const trimmed = path.trim();
 	if (/^secret\./.test(trimmed)) {
 		return `this.env.${trimmed.slice("secret.".length)}`;
@@ -266,7 +313,11 @@ function expandVariablePath(path: string): string {
 		if (propertyTrail === null) {
 			return "event.payload";
 		}
-		return `event.payload.${expandPropertyTrail(propertyTrail)}`;
+		return joinPropertyTrail(
+			"event.payload",
+			expandPropertyTrail(propertyTrail, optional),
+			optional,
+		);
 	}
 
 	// For legacy node-IDs (`node-<timestamp>`), look up the camelCase alias
@@ -284,7 +335,11 @@ function expandVariablePath(path: string): string {
 		return safeFirst;
 	}
 
-	return `${safeFirst}.${expandPropertyTrail(propertyTrail)}`;
+	return joinPropertyTrail(
+		safeFirst,
+		expandPropertyTrail(propertyTrail, optional),
+		optional,
+	);
 }
 
 /**
@@ -300,10 +355,16 @@ function expandVariablePath(path: string): string {
  *
  * Use this for Decision conditions and Transform code bodies (bare expressions).
  * For quoted string values use `emitInterpolatedString` instead.
+ *
+ * @param optional Forwarded to `expandVariablePath` — pass `true` for
+ * Decision conditions (a bare boolean expression, never an assignment
+ * target) so a missing nested field short-circuits to `undefined` instead of
+ * throwing. Leave `false` (default) for Transform code, which may use these
+ * paths as assignment targets.
  */
-function expandVariableRefs(expr: string): string {
+function expandVariableRefs(expr: string, optional = false): string {
 	return expr.replace(/\$\{([^}]+)\}/g, (_, path: string) =>
-		expandVariablePath(path),
+		expandVariablePath(path, optional),
 	);
 }
 
@@ -346,22 +407,29 @@ function emitInterpolatedString(str: string): string {
 
 /**
  * Same contract as `emitInterpolatedString`, but each `${...}` token is
- * wrapped with `?? ""` so a `null`/`undefined` runtime value renders as an
- * empty string instead of the literal text "null"/"undefined".
+ * expanded with optional chaining (`?.`) and wrapped with `?? ""`, so:
+ *  - a missing leaf value (e.g. `middleName` not present) renders as an
+ *    empty string instead of the literal text "null"/"undefined", and
+ *  - a missing INTERMEDIATE object in the path (e.g. an upstream API
+ *    response that came back without the expected nested field) also
+ *    resolves to an empty string instead of throwing
+ *    "Cannot read properties of undefined (reading '...')" at runtime.
  *
- * Used for GeneratePDF field mappings: an AcroForm text field showing the
- * word "null" looks like a bug to the end user, so a missing value should
- * simply leave the field blank.
+ * Used for GeneratePDF field mappings (a blank field beats showing "null" to
+ * the end user) and for AI Name Match name entries (a reference name that
+ * can't be resolved should be dropped by proxy-svc's `normalizeNameInput`,
+ * not crash the whole workflow step).
  *
  * Examples:
- *   "${start.roleContacts.org_manager.middleName}" → `` `${(event.payload.roleContacts.org_manager.middleName) ?? ""}` ``
+ *   "${start.roleContacts.org_manager.middleName}" → `` `${(event.payload?.roleContacts?.org_manager?.middleName) ?? ""}` ``
+ *   "${estated.owner.name}" (estated.owner undefined) → `` `${(estated?.owner?.name) ?? ""}` `` evaluates to `""`, not a thrown TypeError.
  */
 function emitNullSafeInterpolatedString(str: string): string {
 	if (!containsVariableRefs(str)) {
 		return `"${escapeString(str)}"`;
 	}
 	const expanded = str.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
-		return `\${(${expandVariablePath(path)}) ?? ""}`;
+		return `\${(${expandVariablePath(path, true)}) ?? ""}`;
 	});
 	const escaped = expanded.replace(/`/g, "\\`");
 	return `\`${escaped}\``;
@@ -3244,7 +3312,11 @@ function traverseBranch(
 			const innerStop = convergenceNodeId ?? stopAtNodeId;
 
 			code += `${indent}// Decision: ${node.title}\n`;
-			code += `${indent}if (${expandVariableRefs(condition)}) {\n`;
+			// Optional chaining: a condition referencing a nested field on an
+			// upstream response that came back without that shape (e.g. an
+			// empty API result) should evaluate to `undefined`/falsy, not
+			// throw and take down the whole workflow run.
+			code += `${indent}if (${expandVariableRefs(condition, true)}) {\n`;
 
 			if (topEdge && !ctx.visited.has(topEdge.to)) {
 				code += trimTrailingBlankLines(

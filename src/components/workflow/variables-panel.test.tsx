@@ -647,6 +647,192 @@ describe("VariablesPanel", () => {
 		});
 	});
 
+	// -----------------------------------------------------------------------
+	// "Pending publish" badge (dirty flag)
+	// -----------------------------------------------------------------------
+
+	it("does NOT show the pending-publish badge on initial load with existing variables", async () => {
+		mockListVariables.mockResolvedValue([mockVariable]);
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		expect(screen.queryByText("Pendiente de publicar")).not.toBeInTheDocument();
+	});
+
+	it("shows the pending-publish badge after creating a variable", async () => {
+		mockCreateVariable.mockResolvedValue(mockVariable);
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() =>
+			expect(
+				screen.queryByText("No hay variables definidas"),
+			).toBeInTheDocument(),
+		);
+
+		fireEvent.click(screen.getByText("Agregar Variable"));
+		await waitFor(() => screen.getByPlaceholderText("API_BASE_URL"));
+		fireEvent.change(screen.getByPlaceholderText("API_BASE_URL"), {
+			target: { value: "API_BASE_URL" },
+		});
+		fireEvent.change(screen.getByPlaceholderText("https://api.ejemplo.com"), {
+			target: { value: "https://api.example.com" },
+		});
+		fireEvent.click(screen.getByText("Guardar"));
+
+		await waitFor(() => {
+			expect(screen.getByText("Pendiente de publicar")).toBeInTheDocument();
+		});
+	});
+
+	it("shows the pending-publish badge after editing a variable", async () => {
+		const updated = { ...mockVariable, value: "https://new.example.com" };
+		mockListVariables.mockResolvedValue([mockVariable]);
+		mockUpdateVariable.mockResolvedValue(updated);
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		expect(screen.queryByText("Pendiente de publicar")).not.toBeInTheDocument();
+
+		const row = screen.getByText("API_BASE_URL").closest("tr")!;
+		const editBtn = within(row)
+			.getAllByRole("button")
+			.find((b) => b.getAttribute("title") === "Editar");
+		fireEvent.click(editBtn!);
+		await waitFor(() => screen.getByDisplayValue("API_BASE_URL"));
+		fireEvent.click(screen.getByText("Guardar"));
+
+		await waitFor(() => {
+			expect(screen.getByText("Pendiente de publicar")).toBeInTheDocument();
+		});
+	});
+
+	it("shows the pending-publish badge after deleting a variable", async () => {
+		mockListVariables.mockResolvedValue([mockVariable]);
+		mockDeleteVariable.mockResolvedValue(undefined);
+		const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_BASE_URL"));
+
+		const row = screen.getByText("API_BASE_URL").closest("tr")!;
+		const deleteBtn = within(row)
+			.getAllByRole("button")
+			.find((b) => b.getAttribute("title") === "Eliminar");
+		fireEvent.click(deleteBtn!);
+
+		await waitFor(() => {
+			expect(screen.getByText("Pendiente de publicar")).toBeInTheDocument();
+		});
+		confirmSpy.mockRestore();
+	});
+
+	it("does NOT show the pending-publish badge after rotating a secret (already synced)", async () => {
+		mockListVariables.mockResolvedValue([mockSecret]);
+		mockRotateSecret.mockResolvedValue({
+			secret: "API_SECRET_KEY",
+			synced: ["worker-v1"],
+			failed: [],
+		});
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() => screen.getByText("API_SECRET_KEY"));
+
+		const row = screen.getByText("API_SECRET_KEY").closest("tr")!;
+		const rotateBtn = within(row)
+			.getAllByRole("button")
+			.find(
+				(b) => b.getAttribute("title") === "Rotar Secreto en Workers Activos",
+			);
+		fireEvent.click(rotateBtn!);
+		await waitFor(() => screen.getByText("Rotar Secreto en Workers Activos"));
+
+		const secretInput = screen
+			.getByText("Nuevo Valor del Secreto")
+			.closest("div")!
+			.querySelector("input")!;
+		fireEvent.change(secretInput, { target: { value: "new-secret-value" } });
+		fireEvent.click(screen.getByText("Rotar Secreto"));
+
+		await waitFor(() => {
+			expect(mockRotateSecret).toHaveBeenCalled();
+		});
+		expect(screen.queryByText("Pendiente de publicar")).not.toBeInTheDocument();
+	});
+
+	it("hides the pending-publish badge after a successful sync", async () => {
+		mockCreateVariable.mockResolvedValue(mockVariable);
+		mockSyncAllVariables.mockResolvedValue({
+			synced: ["workflow-test-dev-v1"],
+			failed: [],
+			variableCount: 1,
+		});
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() =>
+			expect(
+				screen.queryByText("No hay variables definidas"),
+			).toBeInTheDocument(),
+		);
+
+		fireEvent.click(screen.getByText("Agregar Variable"));
+		await waitFor(() => screen.getByPlaceholderText("API_BASE_URL"));
+		fireEvent.change(screen.getByPlaceholderText("API_BASE_URL"), {
+			target: { value: "API_BASE_URL" },
+		});
+		fireEvent.change(screen.getByPlaceholderText("https://api.ejemplo.com"), {
+			target: { value: "https://api.example.com" },
+		});
+		fireEvent.click(screen.getByText("Guardar"));
+		await waitFor(() => {
+			expect(screen.getByText("Pendiente de publicar")).toBeInTheDocument();
+		});
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+		await waitFor(() => screen.getByText("Sincronizar Ahora"));
+		fireEvent.click(screen.getByText("Sincronizar Ahora"));
+
+		await waitFor(() => {
+			expect(
+				screen.queryByText("Pendiente de publicar"),
+			).not.toBeInTheDocument();
+		});
+	});
+
+	it("keeps the pending-publish badge visible when sync has failed workers", async () => {
+		const { toast } = await import("sonner");
+		mockCreateVariable.mockResolvedValue(mockVariable);
+		mockSyncAllVariables.mockResolvedValue({
+			synced: [],
+			failed: ["workflow-test-dev-v1"],
+			variableCount: 1,
+		});
+		render(<VariablesPanel {...defaultProps} />);
+		await waitFor(() =>
+			expect(
+				screen.queryByText("No hay variables definidas"),
+			).toBeInTheDocument(),
+		);
+
+		fireEvent.click(screen.getByText("Agregar Variable"));
+		await waitFor(() => screen.getByPlaceholderText("API_BASE_URL"));
+		fireEvent.change(screen.getByPlaceholderText("API_BASE_URL"), {
+			target: { value: "API_BASE_URL" },
+		});
+		fireEvent.change(screen.getByPlaceholderText("https://api.ejemplo.com"), {
+			target: { value: "https://api.example.com" },
+		});
+		fireEvent.click(screen.getByText("Guardar"));
+		await waitFor(() => {
+			expect(screen.getByText("Pendiente de publicar")).toBeInTheDocument();
+		});
+
+		fireEvent.click(screen.getByText("Sincronizar con Cloudflare"));
+		await waitFor(() => screen.getByText("Sincronizar Ahora"));
+		fireEvent.click(screen.getByText("Sincronizar Ahora"));
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalled();
+		});
+		expect(screen.getByText("Pendiente de publicar")).toBeInTheDocument();
+	});
+
 	it("shows error toast when sync has failed workers", async () => {
 		const { toast } = await import("sonner");
 		mockListVariables.mockResolvedValue([mockVariable]);

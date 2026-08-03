@@ -74,7 +74,10 @@ export function VariableTemplateInput({
 		(variable: VariableNode, node: VariableSourceNode) => {
 			const newSegments = [...segments];
 
-			if (textInput.trim()) {
+			// Use .length, not .trim(), so a whitespace-only pending value (e.g. a
+			// single space typed to separate two variables) is preserved instead
+			// of being silently dropped.
+			if (textInput.length > 0) {
 				newSegments.push({ id: generateId(), type: "text", value: textInput });
 			}
 
@@ -108,7 +111,7 @@ export function VariableTemplateInput({
 			handleRemoveSegment(segments[segments.length - 1].id);
 			e.preventDefault();
 		}
-		if (e.key === "Enter" && textInput.trim()) {
+		if (e.key === "Enter" && textInput.length > 0) {
 			updateSegments([
 				...segments,
 				{ id: generateId(), type: "text" as const, value: textInput },
@@ -129,7 +132,7 @@ export function VariableTemplateInput({
 	const handleBlur = (e: React.FocusEvent) => {
 		const relatedTarget = e.relatedTarget as HTMLElement;
 		if (relatedTarget?.closest("[data-variable-picker]")) return;
-		if (textInput.trim()) {
+		if (textInput.length > 0) {
 			updateSegments([
 				...segments,
 				{ id: generateId(), type: "text" as const, value: textInput },
@@ -243,7 +246,7 @@ function SegmentBadge({ segment, onRemove }: SegmentBadgeProps) {
 	if (segment.type === "text") {
 		return (
 			<span className="inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 bg-muted/60 text-foreground text-xs rounded border border-border/50">
-				<span className="truncate">{segment.value}</span>
+				<span className="truncate whitespace-pre">{segment.value}</span>
 				<button
 					type="button"
 					onClick={(e) => {
