@@ -19,6 +19,13 @@
 
 * **api:** introduce AI Name Match call type for API nodes ([ae08a65](https://github.com/carteracredit/workflow/commit/ae08a65d2c1dbdd1775a271ca3e84ef7b8daebec))
 
+# [1.6.0](https://github.com/carteracredit/workflow/compare/v1.5.0...v1.6.0) (2026-07-21)
+
+
+### Features
+
+* enhance PDF field handling and null safety in code generation ([f7d0a04](https://github.com/carteracredit/workflow/commit/f7d0a0419e7255c79468a5505a94dd5a871fe2dc))
+
 # [1.6.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.5.0...v1.6.0-rc.1) (2026-07-21)
 
 
