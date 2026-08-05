@@ -2987,7 +2987,7 @@ export function PropertiesPanel({
 																			raw === "" ? undefined : Number(raw),
 																	});
 																}}
-																placeholder="70"
+																placeholder="80"
 																className="w-24"
 															/>
 															<p className="text-xs text-muted-foreground">

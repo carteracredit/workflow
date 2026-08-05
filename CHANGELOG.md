@@ -1,3 +1,11 @@
+## [1.7.1-rc.1](https://github.com/carteracredit/workflow/compare/v1.7.0...v1.7.1-rc.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **properties-panel:** update default confidence placeholder value from 70 to 80 ([17e837c](https://github.com/carteracredit/workflow/commit/17e837c938e32fb9fb19efd0f83f330cc099166a))
+* **translations:** update minimum confidence description from 70 to 80 ([8345d1d](https://github.com/carteracredit/workflow/commit/8345d1d5c89018dcedf736638c5b815247bcce27))
+
 # [1.7.0](https://github.com/carteracredit/workflow/compare/v1.6.0...v1.7.0) (2026-08-03)
 
 
@@ -6,6 +14,20 @@
 * **api:** enhance AI Name Match functionality with full and parts modes ([3593eff](https://github.com/carteracredit/workflow/commit/3593eff60d9eb8551c7115b4dd712f95d1730ffb))
 * **api:** implement AI Name Match output schema and update properties panel ([d03182d](https://github.com/carteracredit/workflow/commit/d03182d4638a16fb0bbb42776f9a3c49354be8a9))
 * **api:** introduce AI Name Match call type for API nodes ([ae08a65](https://github.com/carteracredit/workflow/commit/ae08a65d2c1dbdd1775a271ca3e84ef7b8daebec))
+
+# [1.7.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.7.0-rc.2...v1.7.0-rc.3) (2026-08-05)
+
+
+### Bug Fixes
+
+* **translations:** update minimum confidence description from 70 to 80 ([8345d1d](https://github.com/carteracredit/workflow/commit/8345d1d5c89018dcedf736638c5b815247bcce27))
+
+# [1.7.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.7.0-rc.1...v1.7.0-rc.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* **properties-panel:** update default confidence placeholder value from 70 to 80 ([17e837c](https://github.com/carteracredit/workflow/commit/17e837c938e32fb9fb19efd0f83f330cc099166a))
 
 # [1.7.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.6.0...v1.7.0-rc.1) (2026-08-03)
 

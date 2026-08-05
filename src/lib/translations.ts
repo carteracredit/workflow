@@ -612,7 +612,7 @@ export const translations = {
 			aiNameMatchEmptyState: "No names configured yet.",
 			aiNameMatchMinConfidenceLabel: "Minimum Confidence",
 			aiNameMatchMinConfidenceDesc:
-				"Minimum match confidence (0-100) required to consider it a match. Server default: 70.",
+				"Minimum match confidence (0-100) required to consider it a match. Server default: 80.",
 			apiTestMockBtn: "Test with Mock",
 			apiRequestPreview: "Request Preview",
 			apiMockResponseLabel: "Mock Response (JSON)",
@@ -1784,7 +1784,7 @@ export const translations = {
 			aiNameMatchEmptyState: "Aún no hay nombres configurados.",
 			aiNameMatchMinConfidenceLabel: "Confianza Mínima",
 			aiNameMatchMinConfidenceDesc:
-				"Confianza mínima de coincidencia (0-100) requerida para considerarlo match. Default del servidor: 70.",
+				"Confianza mínima de coincidencia (0-100) requerida para considerarlo match. Default del servidor: 80.",
 			apiTestMockBtn: "Probar con Mock",
 			apiRequestPreview: "Preview del Request",
 			apiMockResponseLabel: "Respuesta Mock (JSON)",
