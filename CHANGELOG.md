@@ -1,3 +1,11 @@
+## [1.7.1-rc.1](https://github.com/carteracredit/workflow/compare/v1.7.0...v1.7.1-rc.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **properties-panel:** update default confidence placeholder value from 70 to 80 ([17e837c](https://github.com/carteracredit/workflow/commit/17e837c938e32fb9fb19efd0f83f330cc099166a))
+* **translations:** update minimum confidence description from 70 to 80 ([8345d1d](https://github.com/carteracredit/workflow/commit/8345d1d5c89018dcedf736638c5b815247bcce27))
+
 # [1.7.0](https://github.com/carteracredit/workflow/compare/v1.6.0...v1.7.0) (2026-08-03)
 
 
