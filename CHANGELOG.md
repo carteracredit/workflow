@@ -1,3 +1,10 @@
+# [1.7.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.7.0-rc.2...v1.7.0-rc.3) (2026-08-05)
+
+
+### Bug Fixes
+
+* **translations:** update minimum confidence description from 70 to 80 ([8345d1d](https://github.com/carteracredit/workflow/commit/8345d1d5c89018dcedf736638c5b815247bcce27))
+
 # [1.7.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.7.0-rc.1...v1.7.0-rc.2) (2026-08-05)
 
 
