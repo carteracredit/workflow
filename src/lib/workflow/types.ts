@@ -136,7 +136,7 @@ export interface AINameMatchEntryConfig {
 export interface AINameMatchConfig {
 	namesToVerify: AINameMatchEntryConfig[];
 	referenceNames: AINameMatchEntryConfig[];
-	/** Minimum model confidence (0-100) required for a match. Server default: 70. */
+	/** Minimum model confidence (0-100) required for a match. Server default: 80. */
 	minConfidence?: number;
 }
 
