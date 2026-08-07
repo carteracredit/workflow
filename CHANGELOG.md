@@ -1,3 +1,10 @@
+# [1.8.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.7.1-rc.1...v1.8.0-rc.1) (2026-08-07)
+
+
+### Features
+
+* **logrocket:** integrate LogRocket for session replay and error tracking ([a3ba319](https://github.com/carteracredit/workflow/commit/a3ba319c98234ec334dacf7b1a28c60137db2c45))
+
 ## [1.7.1-rc.1](https://github.com/carteracredit/workflow/compare/v1.7.0...v1.7.1-rc.1) (2026-08-05)
 
 
