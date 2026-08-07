@@ -3116,7 +3116,7 @@ export function PropertiesPanel({
 
 																if (auth.type === "bearer") {
 																	return (
-																		<div className="space-y-2">
+																		<div className="space-y-2" data-private>
 																			<Label>
 																				{t(
 																					"propertiesPanel.apiAuthBearerTokenLabel",
@@ -3144,7 +3144,7 @@ export function PropertiesPanel({
 																}
 																if (auth.type === "api-key") {
 																	return (
-																		<div className="space-y-2">
+																		<div className="space-y-2" data-private>
 																			<div className="space-y-1">
 																				<Label>
 																					{t(
@@ -3193,7 +3193,7 @@ export function PropertiesPanel({
 																}
 																if (auth.type === "oauth2-client-credentials") {
 																	return (
-																		<div className="space-y-2">
+																		<div className="space-y-2" data-private>
 																			{(
 																				[
 																					[

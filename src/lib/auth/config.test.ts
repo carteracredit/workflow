@@ -1,13 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getAuthServiceUrl, getAuthAppUrl, getEnvironment } from "./config";
+import {
+	getAuthServiceUrl,
+	getAuthAppUrl,
+	getEnvironment,
+	getSentryDsn,
+} from "./config";
 
 describe("auth config", () => {
 	const originalServiceUrl = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
 	const originalAppUrl = process.env.NEXT_PUBLIC_AUTH_APP_URL;
+	const originalSentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
 	beforeEach(() => {
 		delete process.env.NEXT_PUBLIC_AUTH_SERVICE_URL;
 		delete process.env.NEXT_PUBLIC_AUTH_APP_URL;
+		delete process.env.NEXT_PUBLIC_SENTRY_DSN;
 	});
 
 	afterEach(() => {
@@ -16,6 +23,9 @@ describe("auth config", () => {
 		}
 		if (originalAppUrl !== undefined) {
 			process.env.NEXT_PUBLIC_AUTH_APP_URL = originalAppUrl;
+		}
+		if (originalSentryDsn !== undefined) {
+			process.env.NEXT_PUBLIC_SENTRY_DSN = originalSentryDsn;
 		}
 	});
 
@@ -60,6 +70,26 @@ describe("auth config", () => {
 
 		it("returns 'dev' when using default URL", () => {
 			expect(getEnvironment()).toBe("dev");
+		});
+	});
+
+	describe("getSentryDsn", () => {
+		it("returns undefined when NEXT_PUBLIC_SENTRY_DSN is not set", () => {
+			expect(getSentryDsn()).toBeUndefined();
+		});
+
+		it("returns undefined when NEXT_PUBLIC_SENTRY_DSN is an empty string", () => {
+			process.env.NEXT_PUBLIC_SENTRY_DSN = "";
+			expect(getSentryDsn()).toBeUndefined();
+		});
+
+		it("returns the DSN when NEXT_PUBLIC_SENTRY_DSN is set", () => {
+			process.env.NEXT_PUBLIC_SENTRY_DSN = "https://example@sentry.io/1";
+			expect(getSentryDsn()).toBe("https://example@sentry.io/1");
+		});
+
+		it("does not throw when NEXT_PUBLIC_SENTRY_DSN is missing", () => {
+			expect(() => getSentryDsn()).not.toThrow();
 		});
 	});
 });
