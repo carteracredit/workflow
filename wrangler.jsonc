@@ -1,6 +1,11 @@
 /**
  * For more details on how to configure Wrangler, refer to:
  * https://developers.cloudflare.com/workers/wrangler/configuration/
+ *
+ * NEXT_PUBLIC_* build vars (incl. LogRocket) are set per-environment in the
+ * Cloudflare Worker's build settings, not in this file:
+ * - NEXT_PUBLIC_LOGROCKET_APP_ID: "5dfmec/cartera-dev" (dev) / "5dfmec/cartera-prod" (prod)
+ * - NEXT_PUBLIC_LOGROCKET_ROOT_HOSTNAME: ".carteracredit.workers.dev" (dev) / ".cartera.credit" (prod)
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",

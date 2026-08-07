@@ -602,7 +602,7 @@ export function VariablesPanel({
 								<Label className="text-xs">
 									{t("variablesPanel.secretValueLabel")}
 								</Label>
-								<div className="relative">
+								<div className="relative" data-private>
 									<Input
 										type={showSecretValue ? "text" : "password"}
 										placeholder={t("variablesPanel.secretValuePlaceholder")}
@@ -722,7 +722,7 @@ export function VariablesPanel({
 							<Label className="text-xs">
 								{t("variablesPanel.rotateNewValueLabel")}
 							</Label>
-							<div className="relative">
+							<div className="relative" data-private>
 								<Input
 									type={rotateShowValue ? "text" : "password"}
 									placeholder={t("variablesPanel.secretValuePlaceholder")}

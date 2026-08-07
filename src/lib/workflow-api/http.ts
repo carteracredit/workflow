@@ -1,3 +1,5 @@
+import { withLogRocketHeader } from "@/lib/workflow-api/logrocket-headers";
+
 export class ApiError extends Error {
 	name = "ApiError" as const;
 	status: number;
@@ -106,7 +108,7 @@ export async function fetchJson<T>(
 	}
 	const res = await fetch(url, {
 		...fetchInit,
-		headers,
+		headers: withLogRocketHeader(headers),
 	});
 
 	const contentType = res.headers.get("content-type") ?? "";
@@ -125,7 +127,7 @@ export async function fetchJson<T>(
 					};
 					const retryRes = await fetch(url, {
 						...fetchInit,
-						headers: retryHeaders,
+						headers: withLogRocketHeader(retryHeaders),
 					});
 					const retryContentType = retryRes.headers.get("content-type") ?? "";
 					const retryIsJson = retryContentType.includes("application/json");

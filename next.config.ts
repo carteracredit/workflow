@@ -6,8 +6,19 @@ import type { NextConfig } from "next";
 const sentryEnvironment =
 	process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV || "development";
 
+// Commit SHA injected by Cloudflare Workers Builds (unset when building locally).
+// Exposed to the client bundle via `env` below so LogRocket can reuse the same
+// release identifier as Sentry without requiring a NEXT_PUBLIC_ prefix at the source.
+const commitSha = process.env.WORKERS_CI_COMMIT_SHA;
+
+const sentryReleaseName = commitSha
+	? `workflow@${sentryEnvironment}-${commitSha}`
+	: `workflow@${sentryEnvironment}`;
+
 const nextConfig: NextConfig = {
-	/* config options here */
+	env: {
+		NEXT_PUBLIC_COMMIT_SHA: commitSha ?? "",
+	},
 };
 
 export default withSentryConfig(nextConfig, {
@@ -27,15 +38,23 @@ export default withSentryConfig(nextConfig, {
 	// Upload a larger set of source maps for prettier stack traces (increases build time)
 	widenClientFileUpload: true,
 
+	// Keep source map files after Sentry upload so logrocket:sourcemaps can
+	// upload the same artifacts. Delete them from .open-next/ only after that step
+	// (see scripts/logrocket-sourcemaps.mjs) so they are never served publicly.
+	sourcemaps: {
+		deleteSourcemapsAfterUpload: false,
+	},
+
 	// Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
 	// This can increase your server load as well as your hosting bill.
 	// Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
 	// side errors will fail.
 	tunnelRoute: "/monitoring",
 
-	// Set the release name based on environment for better tracking in Sentry
+	// Set the release name based on environment (and commit SHA, when available)
+	// for better tracking in Sentry
 	release: {
-		name: `workflow@${sentryEnvironment}`,
+		name: sentryReleaseName,
 	},
 
 	webpack: {
