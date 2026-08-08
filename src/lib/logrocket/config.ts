@@ -9,7 +9,7 @@ export interface LogRocketConfig {
 	appId: string;
 	rootHostname: string;
 	environment: string;
-	/** e.g. `workflow@production-abc1234`, reusing the same commit SHA as the Sentry release. */
+	/** e.g. `workflow-production-abc1234` (no @ — LogRocket rejects it). */
 	release: string;
 }
 
@@ -20,17 +20,20 @@ export interface LogRocketConfig {
 export const getLogRocketConfig = (): LogRocketConfig => {
 	const appId = process.env.NEXT_PUBLIC_LOGROCKET_APP_ID ?? "";
 	const rootHostname = process.env.NEXT_PUBLIC_LOGROCKET_ROOT_HOSTNAME ?? "";
-	const environment =
+	const environment = (
 		process.env.NEXT_PUBLIC_ENVIRONMENT ||
 		process.env.NODE_ENV ||
-		"development";
-	const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA || undefined;
+		"development"
+	).trim();
+	const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA?.trim() || undefined;
+	// LogRocket release versions are capped at 60 chars; use short SHA.
+	const shortSha = commitSha ? commitSha.slice(0, 7) : "local";
 
 	return {
 		enabled: appId !== "",
 		appId,
 		rootHostname,
 		environment,
-		release: `workflow@${environment}-${commitSha ?? "local"}`,
+		release: `workflow-${environment}-${shortSha}`,
 	};
 };

@@ -3,13 +3,16 @@ import type { NextConfig } from "next";
 
 // Determine environment from NEXT_PUBLIC_ENVIRONMENT (set in Cloudflare Worker config)
 // Set NEXT_PUBLIC_ENVIRONMENT=development for dev branch, NEXT_PUBLIC_ENVIRONMENT=production for main branch
-const sentryEnvironment =
-	process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV || "development";
+const sentryEnvironment = (
+	process.env.NEXT_PUBLIC_ENVIRONMENT ||
+	process.env.NODE_ENV ||
+	"development"
+).trim();
 
 // Commit SHA injected by Cloudflare Workers Builds (unset when building locally).
 // Exposed to the client bundle via `env` below so LogRocket can reuse the same
 // release identifier as Sentry without requiring a NEXT_PUBLIC_ prefix at the source.
-const commitSha = process.env.WORKERS_CI_COMMIT_SHA;
+const commitSha = process.env.WORKERS_CI_COMMIT_SHA?.trim() || undefined;
 
 const sentryReleaseName = commitSha
 	? `workflow@${sentryEnvironment}-${commitSha}`
@@ -46,9 +49,13 @@ export default withSentryConfig(nextConfig, {
 	},
 
 	// Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
-	// This can increase your server load as well as your hosting bill.
-	// Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
-	// side errors will fail.
+	// Exclude `/monitoring` from auth middleware matchers or client reporting fails.
+	// Known (non-blocking) behavior on Cloudflare/OpenNext: some POSTs return 401 from
+	// Sentry ingest with body `bad envelope authentication header` / `username is empty`.
+	// Verified 2026-08-08: the tunnel reaches Sentry (same body via direct ingest for bad
+	// envelopes); Authorization is not the cause; error+API sample events still arrive.
+	// Do not remove the tunnel solely for those 401s — they are envelope-auth rejects for
+	// specific payload types, not a total outage.
 	tunnelRoute: "/monitoring",
 
 	// Set the release name based on environment (and commit SHA, when available)
