@@ -46,12 +46,10 @@ export const getEnvironment = (): "dev" | "prod" => {
 /**
  * Gets the Sentry DSN URL from environment variables.
  * Build-time env var: NEXT_PUBLIC_SENTRY_DSN
- * @throws Error if NEXT_PUBLIC_SENTRY_DSN is not set
+ * @returns The DSN string, or `undefined` if NEXT_PUBLIC_SENTRY_DSN is not set.
+ *   Passing `undefined` to `Sentry.init({ dsn })` disables event reporting
+ *   without throwing, so a missing build var never breaks app startup.
  */
-export const getSentryDsn = (): string => {
-	const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
-	if (!dsn) {
-		throw new Error("NEXT_PUBLIC_SENTRY_DSN is not set");
-	}
-	return dsn;
+export const getSentryDsn = (): string | undefined => {
+	return process.env.NEXT_PUBLIC_SENTRY_DSN || undefined;
 };

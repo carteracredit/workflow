@@ -13,6 +13,9 @@ const isDevelopment = environment === "development";
 Sentry.init({
 	dsn,
 	environment,
+	integrations: [
+		Sentry.consoleLoggingIntegration({ levels: ["error", "warn"] }),
+	],
 	tracesSampleRate: isDevelopment ? 1.0 : 0.2,
 	enableLogs: true,
 	sendDefaultPii: true,

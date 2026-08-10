@@ -6,6 +6,20 @@
 * **properties-panel:** update default confidence placeholder value from 70 to 80 ([17e837c](https://github.com/carteracredit/workflow/commit/17e837c938e32fb9fb19efd0f83f330cc099166a))
 * **translations:** update minimum confidence description from 70 to 80 ([8345d1d](https://github.com/carteracredit/workflow/commit/8345d1d5c89018dcedf736638c5b815247bcce27))
 
+# [1.8.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.8.0-rc.1...v1.8.0-rc.2) (2026-08-08)
+
+
+### Bug Fixes
+
+* **logrocket:** improve source map upload process and release format ([52846e1](https://github.com/carteracredit/workflow/commit/52846e1382800c00f3ea04ab1017649851a2b66d))
+
+# [1.8.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.7.1-rc.1...v1.8.0-rc.1) (2026-08-07)
+
+
+### Features
+
+* **logrocket:** integrate LogRocket for session replay and error tracking ([a3ba319](https://github.com/carteracredit/workflow/commit/a3ba319c98234ec334dacf7b1a28c60137db2c45))
+
 ## [1.7.1-rc.1](https://github.com/carteracredit/workflow/compare/v1.7.0...v1.7.1-rc.1) (2026-08-05)
 
 
