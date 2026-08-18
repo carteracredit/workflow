@@ -80,7 +80,7 @@ export const translations = {
 		// User Menu
 		userAccount: "My account",
 		userProfile: "Profile",
-		userLogout: "Log Out",
+		userLogout: "Sign out",
 		userBilling: "Billing",
 		userNotifications: "Notifications",
 		userPreferences: "Preferences",
@@ -165,7 +165,7 @@ export const translations = {
 			myAccount: "My account",
 			profile: "Profile",
 			preferences: "Preferences",
-			logout: "Log Out",
+			logout: "Sign out",
 		},
 
 		// Validation
@@ -1249,7 +1249,7 @@ export const translations = {
 		// User Menu
 		userAccount: "Mi cuenta",
 		userProfile: "Perfil",
-		userLogout: "Cerrar Sesión",
+		userLogout: "Cerrar sesión",
 		userBilling: "Facturación",
 		userNotifications: "Notificaciones",
 		userPreferences: "Preferencias",
@@ -1334,7 +1334,7 @@ export const translations = {
 			myAccount: "Mi cuenta",
 			profile: "Perfil",
 			preferences: "Preferencias",
-			logout: "Cerrar Sesión",
+			logout: "Cerrar sesión",
 		},
 
 		// Validation

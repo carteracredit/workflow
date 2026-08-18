@@ -187,7 +187,7 @@ function UserMenu() {
 				<DropdownMenuSeparator />
 				<DropdownMenuItem
 					onClick={handleLogout}
-					className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
+					className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive [&_svg]:text-destructive"
 				>
 					<LogOut className="h-4 w-4" />
 					{t("userLogout")}
