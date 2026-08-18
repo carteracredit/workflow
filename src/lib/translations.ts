@@ -78,7 +78,7 @@ export const translations = {
 		languageToggle: "Toggle language",
 
 		// User Menu
-		userAccount: "My Account",
+		userAccount: "My account",
 		userProfile: "Profile",
 		userLogout: "Log Out",
 		userBilling: "Billing",
@@ -162,7 +162,7 @@ export const translations = {
 		// User
 		user: {
 			avatar: "User avatar",
-			myAccount: "My Account",
+			myAccount: "My account",
 			profile: "Profile",
 			preferences: "Preferences",
 			logout: "Log Out",
@@ -1247,7 +1247,7 @@ export const translations = {
 		languageToggle: "Cambiar idioma",
 
 		// User Menu
-		userAccount: "Mi Cuenta",
+		userAccount: "Mi cuenta",
 		userProfile: "Perfil",
 		userLogout: "Cerrar Sesión",
 		userBilling: "Facturación",
@@ -1331,7 +1331,7 @@ export const translations = {
 		// User
 		user: {
 			avatar: "Avatar de usuario",
-			myAccount: "Mi Cuenta",
+			myAccount: "Mi cuenta",
 			profile: "Perfil",
 			preferences: "Preferencias",
 			logout: "Cerrar Sesión",
