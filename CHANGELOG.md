@@ -1,3 +1,15 @@
+# [1.8.0](https://github.com/carteracredit/workflow/compare/v1.7.1...v1.8.0) (2026-08-10)
+
+
+### Bug Fixes
+
+* **logrocket:** improve source map upload process and release format ([52846e1](https://github.com/carteracredit/workflow/commit/52846e1382800c00f3ea04ab1017649851a2b66d))
+
+
+### Features
+
+* **logrocket:** integrate LogRocket for session replay and error tracking ([a3ba319](https://github.com/carteracredit/workflow/commit/a3ba319c98234ec334dacf7b1a28c60137db2c45))
+
 # [1.8.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.8.0-rc.2...v1.8.0-rc.3) (2026-08-18)
 
 
