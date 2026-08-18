@@ -49,7 +49,7 @@ export default function ForbiddenPage() {
 						<Button
 							onClick={handleLogout}
 							variant="ghost"
-							className="w-full text-muted-foreground"
+							className="w-full text-destructive hover:text-destructive [&_svg]:text-destructive"
 						>
 							<LogOut className="mr-2 h-4 w-4" />
 							{t("forbiddenLogout")}

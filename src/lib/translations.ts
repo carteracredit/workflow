@@ -78,9 +78,9 @@ export const translations = {
 		languageToggle: "Toggle language",
 
 		// User Menu
-		userAccount: "My Account",
+		userAccount: "My account",
 		userProfile: "Profile",
-		userLogout: "Log Out",
+		userLogout: "Sign out",
 		userBilling: "Billing",
 		userNotifications: "Notifications",
 		userPreferences: "Preferences",
@@ -162,10 +162,10 @@ export const translations = {
 		// User
 		user: {
 			avatar: "User avatar",
-			myAccount: "My Account",
+			myAccount: "My account",
 			profile: "Profile",
 			preferences: "Preferences",
-			logout: "Log Out",
+			logout: "Sign out",
 		},
 
 		// Validation
@@ -1247,9 +1247,9 @@ export const translations = {
 		languageToggle: "Cambiar idioma",
 
 		// User Menu
-		userAccount: "Mi Cuenta",
+		userAccount: "Mi cuenta",
 		userProfile: "Perfil",
-		userLogout: "Cerrar Sesión",
+		userLogout: "Cerrar sesión",
 		userBilling: "Facturación",
 		userNotifications: "Notificaciones",
 		userPreferences: "Preferencias",
@@ -1331,10 +1331,10 @@ export const translations = {
 		// User
 		user: {
 			avatar: "Avatar de usuario",
-			myAccount: "Mi Cuenta",
+			myAccount: "Mi cuenta",
 			profile: "Perfil",
 			preferences: "Preferencias",
-			logout: "Cerrar Sesión",
+			logout: "Cerrar sesión",
 		},
 
 		// Validation
