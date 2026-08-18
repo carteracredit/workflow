@@ -1,3 +1,10 @@
+# [1.8.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.8.0-rc.2...v1.8.0-rc.3) (2026-08-18)
+
+
+### Bug Fixes
+
+* **translations:** update profile title in language context to enhance clarity ([09a9c6e](https://github.com/carteracredit/workflow/commit/09a9c6e3084953637b5a6a5051fa8436d10f53cc))
+
 ## [1.7.1](https://github.com/carteracredit/workflow/compare/v1.7.0...v1.7.1) (2026-08-05)
 
 
