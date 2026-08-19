@@ -141,6 +141,7 @@ function UserMenu() {
 					variant="ghost"
 					size="icon"
 					className="h-8 w-8 rounded-full p-0"
+					data-private
 				>
 					<Avatar className="h-8 w-8">
 						<AvatarImage
@@ -153,7 +154,12 @@ function UserMenu() {
 					</Avatar>
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent className="w-56" align="end" sideOffset={6}>
+			<DropdownMenuContent
+				className="w-56"
+				align="end"
+				sideOffset={6}
+				data-private
+			>
 				{/* User info header */}
 				<div className="flex items-center gap-3 px-3 py-2.5">
 					<Avatar className="h-9 w-9 shrink-0">

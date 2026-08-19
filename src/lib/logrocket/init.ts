@@ -3,7 +3,11 @@
 import LogRocket from "logrocket";
 
 import { getLogRocketConfig } from "./config";
-import { requestSanitizer, responseSanitizer } from "./sanitizers";
+import {
+	requestSanitizer,
+	responseSanitizer,
+	urlSanitizer,
+} from "./sanitizers";
 import { getSessionUrl } from "./session";
 
 let initialized = false;
@@ -21,9 +25,13 @@ export function initLogRocket(): void {
 	LogRocket.init(config.appId, {
 		release: config.release,
 		rootHostname: config.rootHostname || undefined,
+		shouldParseXHRBlob: false,
 		dom: {
 			inputSanitizer: true,
 			imageSanitizer: true,
+		},
+		browser: {
+			urlSanitizer,
 		},
 		network: {
 			requestSanitizer,
