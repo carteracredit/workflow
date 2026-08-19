@@ -1,3 +1,5 @@
+## [1.8.1](https://github.com/carteracredit/workflow/compare/v1.8.0...v1.8.1) (2026-08-18)
+
 # [1.9.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.8.1-rc.1...v1.9.0-rc.1) (2026-08-19)
 
 
