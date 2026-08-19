@@ -35,7 +35,9 @@ describe("initLogRocket", () => {
 			"org/app",
 			expect.objectContaining({
 				rootHostname: ".cartera.credit",
+				shouldParseXHRBlob: false,
 				dom: { inputSanitizer: true, imageSanitizer: true },
+				browser: { urlSanitizer: expect.any(Function) },
 			}),
 		);
 		expect(getSessionURLMock).toHaveBeenCalledTimes(1);

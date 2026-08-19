@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { setCachedSessionUrl } from "@/lib/logrocket/session-store";
 import { fetchJson, ApiError, extractApiErrorMessage } from "./http";
 
 const mockTokenCache = {
@@ -15,6 +16,11 @@ describe("fetchJson", () => {
 		vi.restoreAllMocks();
 		mockTokenCache.getCachedToken.mockResolvedValue(null);
 		mockTokenCache.forceRefresh.mockResolvedValue(null);
+		setCachedSessionUrl(undefined);
+	});
+
+	afterEach(() => {
+		setCachedSessionUrl(undefined);
 	});
 
 	it("returns parsed JSON on successful response", async () => {
@@ -203,6 +209,49 @@ describe("fetchJson", () => {
 		expect(mockTokenCache.forceRefresh).toHaveBeenCalled();
 		(globalThis as unknown as { window: unknown }).window = origWindow;
 		vi.unstubAllEnvs();
+	});
+
+	it("does not throw and omits X-LogRocket-Session-URL when no session is cached", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: { get: () => "application/json" },
+				json: () => Promise.resolve({ ok: true }),
+				text: () => Promise.resolve(""),
+			}),
+		);
+
+		const result = await fetchJson<{ ok: boolean }>("https://example.com/api");
+		expect(result.status).toBe(200);
+		expect(result.json).toEqual({ ok: true });
+
+		const fetchCall = vi.mocked(fetch).mock.calls[0];
+		const headers = new Headers(fetchCall[1]?.headers);
+		expect(headers.get("X-LogRocket-Session-URL")).toBeNull();
+	});
+
+	it("attaches X-LogRocket-Session-URL when a session is cached", async () => {
+		setCachedSessionUrl("https://app.logrocket.com/session/abc");
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: { get: () => "application/json" },
+				json: () => Promise.resolve({}),
+				text: () => Promise.resolve(""),
+			}),
+		);
+
+		await fetchJson("https://example.com/api");
+
+		const fetchCall = vi.mocked(fetch).mock.calls[0];
+		const headers = new Headers(fetchCall[1]?.headers);
+		expect(headers.get("X-LogRocket-Session-URL")).toBe(
+			"https://app.logrocket.com/session/abc",
+		);
 	});
 });
 

@@ -1,4 +1,4 @@
-import { getCachedSessionUrl } from "@/lib/logrocket/session";
+import { getCachedSessionUrl } from "@/lib/logrocket/session-store";
 
 /**
  * Merges the `X-LogRocket-Session-URL` header into an existing `HeadersInit`
