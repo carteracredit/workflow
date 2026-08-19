@@ -1,3 +1,10 @@
+# [1.9.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.8.1-rc.1...v1.9.0-rc.1) (2026-08-19)
+
+
+### Features
+
+* **logrocket:** enhance request and response sanitization ([1bea6f4](https://github.com/carteracredit/workflow/commit/1bea6f40df700840629caae5aff1e1afd9fa9dbf))
+
 ## [1.8.1-rc.1](https://github.com/carteracredit/workflow/compare/v1.8.0...v1.8.1-rc.1) (2026-08-18)
 
 
