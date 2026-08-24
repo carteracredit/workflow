@@ -91,6 +91,45 @@ export const CASE_VARIABLES: OutputSchemaProperty[] = [
 		readOnly: true,
 	},
 	{
+		id: "case-var-organization",
+		name: "organization",
+		type: "object",
+		description:
+			"Contractor organization that owns the case. loanClassNo is set by platform admins.",
+		readOnly: true,
+		properties: [
+			{
+				id: "case-var-organization-id",
+				name: "id",
+				type: "string",
+				description: "Organization UUID",
+				readOnly: true,
+			},
+			{
+				id: "case-var-organization-name",
+				name: "name",
+				type: "string",
+				description: "Organization display name",
+				readOnly: true,
+			},
+			{
+				id: "case-var-organization-slug",
+				name: "slug",
+				type: "string",
+				description: "Organization slug",
+				readOnly: true,
+			},
+			{
+				id: "case-var-organization-loanClassNo",
+				name: "loanClassNo",
+				type: "string",
+				description:
+					"NLS loan class number configured by admin for this contractor",
+				readOnly: true,
+			},
+		],
+	},
+	{
 		id: "case-var-clientAddress",
 		name: "clientAddress",
 		type: "object",

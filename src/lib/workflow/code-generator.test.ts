@@ -399,7 +399,7 @@ describe("generateWorkflowCode", () => {
 				type: "Promotion",
 				title: "Seleccionar promo",
 				roles: ["seller"],
-				config: { commission: 75 },
+				config: {},
 			}),
 			createNode({ id: "end", type: "End", title: "Fin" }),
 		];
@@ -421,6 +421,12 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain(
 			"seleccionarPromo = (_seleccionarPromoEvt === null)",
 		);
+		expect(result.code).toContain("netLoanAmount:");
+		expect(result.code).toContain("financedAmount:");
+		expect(result.code).toContain("maxInterestRate:");
+		expect(result.code).toContain("minInterestRate:");
+		expect(result.code).toContain("loanTemplateNumber:");
+		expect(result.code).toContain("loanPortfolioName:");
 	});
 
 	it("should generate Decision branching code", () => {
