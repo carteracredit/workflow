@@ -426,13 +426,18 @@ export const NlsNodeCreateLoan: Story = {
 					functionId: "createLoan",
 					fields: [
 						{
-							fieldId: "loanNumber",
-							value: "${start.loanNumber}",
+							fieldId: "loanClass1No",
+							value: "${start.organization.loanClassNo}",
 							source: "discovered",
 						},
 						{
-							fieldId: "source",
-							value: "PORTAL",
+							fieldId: "loanGroupName",
+							value: "${promo.template}",
+							source: "discovered",
+						},
+						{
+							fieldId: "loanAmount",
+							value: "${promo.netLoanAmount}",
 							source: "discovered",
 						},
 					],

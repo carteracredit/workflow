@@ -2212,6 +2212,73 @@ describe("NLS node validation", () => {
 		).toBe(false);
 	});
 
+	it("should warn when createLoan has an upstream Promotion and loanAmount is unmapped", () => {
+		const promo: WorkflowNode = {
+			id: "promo-1",
+			type: "Promotion",
+			title: "Promo",
+			description: "",
+			roles: [],
+			config: {},
+			position: { x: 50, y: 0 },
+			groupId: null,
+		};
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			fields: [],
+		};
+		const { nodes, edges } = makeNlsWorkflow(
+			cfg,
+			[promo],
+			[{ id: "e-promo-nls", from: "promo-1", to: "nls-1", label: null }],
+		);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) =>
+					e.nodeId === "nls-1" &&
+					e.severity === "warning" &&
+					e.message.includes("netLoanAmount"),
+			),
+		).toBe(true);
+	});
+
+	it("should not warn when createLoan maps loanAmount with an upstream Promotion", () => {
+		const promo: WorkflowNode = {
+			id: "promo-1",
+			type: "Promotion",
+			title: "Promo",
+			description: "",
+			roles: [],
+			config: {},
+			position: { x: 50, y: 0 },
+			groupId: null,
+		};
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			fields: [
+				{
+					fieldId: "loanAmount",
+					value: "${promo.netLoanAmount}",
+					source: "discovered",
+				},
+			],
+		};
+		const { nodes, edges } = makeNlsWorkflow(
+			cfg,
+			[promo],
+			[{ id: "e-promo-nls", from: "promo-1", to: "nls-1", label: null }],
+		);
+		const errors = validateWorkflow(nodes, edges);
+		expect(
+			errors.some(
+				(e) => e.nodeId === "nls-1" && e.message.includes("netLoanAmount"),
+			),
+		).toBe(false);
+	});
+
 	it("should error when maxRetries exceeds 2", () => {
 		const cfg: NLSNodeConfig = {
 			...createDefaultNLSConfig(),

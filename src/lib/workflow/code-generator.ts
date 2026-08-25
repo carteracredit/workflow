@@ -2648,7 +2648,7 @@ function emitPromotionOutputAssignment(
 ): string {
 	let code = "";
 	code += `${indent}${outputVar} = (${rawVar} === null)\n`;
-	code += `${indent}\t? { promotionId: "", promotionName: "", selectedTerm: 0, finalAmount: 0, monthlyPayment: 0, interestRate: 0, downPayment: 0, contractorFee: 0, commission: 0, selectedBy: "", selectedAt: "" }\n`;
+	code += `${indent}\t? { promotionId: "", promotionName: "", selectedTerm: 0, finalAmount: 0, monthlyPayment: 0, interestRate: 0, downPayment: 0, contractorFee: 0, commission: 0, netLoanAmount: 0, financedAmount: 0, template: "", loanTemplateNumber: 0, loanPortfolioName: "", maxInterestRate: 0, minInterestRate: 0, selectedBy: "", selectedAt: "" }\n`;
 	code += `${indent}\t: {\n`;
 	code += `${indent}\t\tpromotionId: String((${rawVar} as { payload: { promotionId?: string } }).payload?.promotionId ?? ""),\n`;
 	code += `${indent}\t\tpromotionName: String((${rawVar} as { payload: { promotionName?: string } }).payload?.promotionName ?? ""),\n`;
@@ -2659,6 +2659,13 @@ function emitPromotionOutputAssignment(
 	code += `${indent}\t\tdownPayment: Number((${rawVar} as { payload: { downPayment?: number } }).payload?.downPayment ?? 0),\n`;
 	code += `${indent}\t\tcontractorFee: Number((${rawVar} as { payload: { contractorFee?: number } }).payload?.contractorFee ?? 0),\n`;
 	code += `${indent}\t\tcommission: Number((${rawVar} as { payload: { commission?: number } }).payload?.commission ?? 0),\n`;
+	code += `${indent}\t\tnetLoanAmount: Number((${rawVar} as { payload: { netLoanAmount?: number } }).payload?.netLoanAmount ?? 0),\n`;
+	code += `${indent}\t\tfinancedAmount: Number((${rawVar} as { payload: { financedAmount?: number } }).payload?.financedAmount ?? 0),\n`;
+	code += `${indent}\t\ttemplate: String((${rawVar} as { payload: { template?: string } }).payload?.template ?? ""),\n`;
+	code += `${indent}\t\tloanTemplateNumber: Number((${rawVar} as { payload: { loanTemplateNumber?: number } }).payload?.loanTemplateNumber ?? 0),\n`;
+	code += `${indent}\t\tloanPortfolioName: String((${rawVar} as { payload: { loanPortfolioName?: string } }).payload?.loanPortfolioName ?? ""),\n`;
+	code += `${indent}\t\tmaxInterestRate: Number((${rawVar} as { payload: { maxInterestRate?: number } }).payload?.maxInterestRate ?? 0),\n`;
+	code += `${indent}\t\tminInterestRate: Number((${rawVar} as { payload: { minInterestRate?: number } }).payload?.minInterestRate ?? 0),\n`;
 	code += `${indent}\t\tselectedBy: String((${rawVar} as { payload: { selectedBy?: string } }).payload?.selectedBy ?? ""),\n`;
 	code += `${indent}\t\tselectedAt: String((${rawVar} as { payload: { selectedAt?: string } }).payload?.selectedAt ?? new Date().toISOString()),\n`;
 	code += `${indent}\t};\n`;

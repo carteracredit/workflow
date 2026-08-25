@@ -907,7 +907,7 @@ describe("graph-utils", () => {
 				title: "Seleccionar promoción",
 				description: "",
 				roles: [],
-				config: { commission: 55 },
+				config: {},
 				position: { x: 0, y: 0 },
 				groupId: null,
 			};
@@ -928,6 +928,13 @@ describe("graph-utils", () => {
 				"downPayment",
 				"contractorFee",
 				"commission",
+				"netLoanAmount",
+				"financedAmount",
+				"template",
+				"loanTemplateNumber",
+				"loanPortfolioName",
+				"maxInterestRate",
+				"minInterestRate",
 				"selectedBy",
 				"selectedAt",
 			]);
@@ -947,7 +954,6 @@ describe("graph-utils", () => {
 				description: "",
 				roles: [],
 				config: {
-					commission: 75,
 					outputSchema: {
 						properties: [
 							{ id: "p-1", name: "monthlyPayment", type: "string" },
