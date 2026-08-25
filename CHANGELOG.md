@@ -1,3 +1,10 @@
+# [1.10.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.9.0...v1.10.0-rc.1) (2026-08-25)
+
+
+### Features
+
+* **workflow:** add new case variables and promotion output fields ([829b673](https://github.com/carteracredit/workflow/commit/829b6739a045885325dce7555bf2128df0b09330))
+
 # [1.9.0](https://github.com/carteracredit/workflow/compare/v1.8.1...v1.9.0) (2026-08-19)
 
 
