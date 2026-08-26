@@ -23,7 +23,7 @@ const mockNode: WorkflowNode = {
 	description: "Captura de datos del solicitante",
 	roles: ["client", "seller"],
 	visibilityRoles: ["client", "seller", "credit_agent", "org_manager"],
-	config: { formId: "form-1" },
+	config: { formId: "form-1", formVersion: 1 },
 	staleTimeout: null,
 	position: { x: 100, y: 200 },
 	groupId: null,

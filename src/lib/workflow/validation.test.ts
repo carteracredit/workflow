@@ -18,7 +18,7 @@ describe("validateWorkflow", () => {
 					title: "Form",
 					description: "",
 					roles: [],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 0, y: 0 },
 					groupId: null,
 				},
@@ -84,7 +84,7 @@ describe("validateWorkflow", () => {
 					title: "Form",
 					description: "",
 					roles: [],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -188,7 +188,7 @@ describe("validateWorkflow", () => {
 					title: "Form",
 					description: "",
 					roles: ["seller"],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -234,7 +234,7 @@ describe("validateWorkflow", () => {
 					description: "",
 					roles: ["seller"],
 					visibilityRoles: [],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -257,7 +257,7 @@ describe("validateWorkflow", () => {
 					description: "",
 					roles: ["seller"],
 					visibilityRoles: ["seller", "unknown_role" as never],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -280,7 +280,7 @@ describe("validateWorkflow", () => {
 					description: "",
 					roles: ["seller"],
 					visibilityRoles: ["seller", "credit_agent"],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -316,7 +316,7 @@ describe("validateWorkflow", () => {
 					description: "",
 					roles: ["client", "seller", "credit_agent", "org_manager"],
 					visibilityRoles: ["seller", "credit_agent"],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -343,7 +343,7 @@ describe("validateWorkflow", () => {
 					description: "",
 					roles: ["seller"],
 					visibilityRoles: ["seller", "credit_agent"],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -366,7 +366,7 @@ describe("validateWorkflow", () => {
 					title: "Form",
 					description: "",
 					roles: ["seller", "credit_agent"],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -730,7 +730,7 @@ describe("validateWorkflow", () => {
 					title: "Form",
 					description: "",
 					roles: ["client"],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
@@ -813,6 +813,88 @@ describe("validateWorkflow", () => {
 						e.message.includes("formulario seleccionado"),
 				),
 			).toBe(true);
+		});
+
+		it("should error when Form node has formId but no formVersion", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["client"],
+					config: { formId: "form-1" },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [];
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "form-1" &&
+						e.message.includes("versión de formulario"),
+				),
+			).toBe(true);
+		});
+
+		it("should not error when Form node has formId and formVersion", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["client"],
+					config: { formId: "form-1", formVersion: 1 },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "end-1",
+					type: "End",
+					title: "End",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 200, y: 0 },
+					groupId: null,
+				},
+			];
+			const edges: WorkflowEdge[] = [
+				{ id: "e1", from: "start-1", to: "form-1", label: null },
+				{ id: "e2", from: "form-1", to: "end-1", label: null },
+			];
+			const errors = validateWorkflow(nodes, edges);
+			expect(
+				errors.some(
+					(e) =>
+						e.nodeId === "form-1" &&
+						(e.message.includes("formulario seleccionado") ||
+							e.message.includes("versión de formulario")),
+				),
+			).toBe(false);
 		});
 	});
 
@@ -1686,7 +1768,7 @@ describe("validateWorkflow", () => {
 					title: "Form",
 					description: "",
 					roles: ["client"],
-					config: { formId: "form-1" },
+					config: { formId: "form-1", formVersion: 1 },
 					position: { x: 100, y: 0 },
 					groupId: null,
 				},
