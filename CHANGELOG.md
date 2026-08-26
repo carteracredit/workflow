@@ -1,3 +1,11 @@
+# [1.10.0](https://github.com/carteracredit/workflow/compare/v1.9.0...v1.10.0) (2026-08-26)
+
+
+### Features
+
+* **workflow:** add formVersion to workflow configurations ([6b836da](https://github.com/carteracredit/workflow/commit/6b836da56044e147f8236cdaaf82327f087a9253))
+* **workflow:** add new case variables and promotion output fields ([829b673](https://github.com/carteracredit/workflow/commit/829b6739a045885325dce7555bf2128df0b09330))
+
 # [1.10.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.10.0-rc.1...v1.10.0-rc.2) (2026-08-26)
 
 
