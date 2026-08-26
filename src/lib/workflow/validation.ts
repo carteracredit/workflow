@@ -313,6 +313,17 @@ export function validateWorkflow(
 				severity: "error",
 			});
 		}
+		if (
+			node.type === "Form" &&
+			node.config.formId &&
+			typeof node.config.formVersion !== "number"
+		) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" debe tener una versión de formulario seleccionada`,
+				severity: "error",
+			});
+		}
 
 		if (
 			node.type === "Decision" &&
@@ -846,6 +857,12 @@ export function validateWorkflow(
 						errors.push({
 							nodeId: node.id,
 							message: `"${node.title}" debe tener un formulario seleccionado`,
+							severity: "error",
+						});
+					} else if (typeof config.formConfig.formVersion !== "number") {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe tener una versión de formulario seleccionada`,
 							severity: "error",
 						});
 					}

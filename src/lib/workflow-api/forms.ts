@@ -18,6 +18,45 @@ export interface FormField {
 	properties?: {
 		includeMiddleName?: boolean;
 		enableAutocomplete?: boolean;
+		enableUspsValidation?: boolean;
+		acceptedBrands?: string[];
+		requireHolderName?: boolean;
+		dateMin?: string;
+		dateMax?: string;
+		monthMin?: string;
+		monthMax?: string;
+		dateMinOffset?: {
+			direction: "past" | "future";
+			years?: number;
+			months?: number;
+			days?: number;
+			hours?: number;
+			minutes?: number;
+		};
+		dateMaxOffset?: {
+			direction: "past" | "future";
+			years?: number;
+			months?: number;
+			days?: number;
+			hours?: number;
+			minutes?: number;
+		};
+		monthMinOffset?: {
+			direction: "past" | "future";
+			years?: number;
+			months?: number;
+			days?: number;
+			hours?: number;
+			minutes?: number;
+		};
+		monthMaxOffset?: {
+			direction: "past" | "future";
+			years?: number;
+			months?: number;
+			days?: number;
+			hours?: number;
+			minutes?: number;
+		};
 	};
 }
 
