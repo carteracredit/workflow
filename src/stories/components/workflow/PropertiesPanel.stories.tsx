@@ -23,7 +23,7 @@ const mockNode: WorkflowNode = {
 	description: "Captura de datos del solicitante",
 	roles: ["client", "seller"],
 	visibilityRoles: ["client", "seller", "credit_agent", "org_manager"],
-	config: { formId: "form-1" },
+	config: { formId: "form-1", formVersion: 1 },
 	staleTimeout: null,
 	position: { x: 100, y: 200 },
 	groupId: null,
@@ -426,13 +426,18 @@ export const NlsNodeCreateLoan: Story = {
 					functionId: "createLoan",
 					fields: [
 						{
-							fieldId: "loanNumber",
-							value: "${start.loanNumber}",
+							fieldId: "loanClass1No",
+							value: "${start.organization.loanClassNo}",
 							source: "discovered",
 						},
 						{
-							fieldId: "source",
-							value: "PORTAL",
+							fieldId: "loanGroupName",
+							value: "${promo.template}",
+							source: "discovered",
+						},
+						{
+							fieldId: "loanAmount",
+							value: "${promo.netLoanAmount}",
 							source: "discovered",
 						},
 					],

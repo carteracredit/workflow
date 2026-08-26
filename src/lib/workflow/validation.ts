@@ -313,6 +313,17 @@ export function validateWorkflow(
 				severity: "error",
 			});
 		}
+		if (
+			node.type === "Form" &&
+			node.config.formId &&
+			typeof node.config.formVersion !== "number"
+		) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" debe tener una versión de formulario seleccionada`,
+				severity: "error",
+			});
+		}
 
 		if (
 			node.type === "Decision" &&
@@ -625,6 +636,24 @@ export function validateWorkflow(
 					// el nodo puede y debe tener conexiones salientes para el camino de éxito.
 				}
 			}
+
+			if (nlsCfg?.functionId === "createLoan") {
+				const loanAmountMapped = (nlsCfg.fields ?? []).some(
+					(f) => f.fieldId === "loanAmount" && Boolean(f.value?.trim()),
+				);
+				const hasUpstreamPromotion = findUpstreamNodes(
+					node.id,
+					nodes,
+					edges,
+				).some((n) => n.type === "Promotion");
+				if (hasUpstreamPromotion && !loanAmountMapped) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": hay un nodo Promotion aguas arriba; mapea loanAmount a \${promo.netLoanAmount} del nodo de promoción que corresponda`,
+						severity: "warning",
+					});
+				}
+			}
 		}
 
 		if (node.type === "GeneratePDF") {
@@ -828,6 +857,12 @@ export function validateWorkflow(
 						errors.push({
 							nodeId: node.id,
 							message: `"${node.title}" debe tener un formulario seleccionado`,
+							severity: "error",
+						});
+					} else if (typeof config.formConfig.formVersion !== "number") {
+						errors.push({
+							nodeId: node.id,
+							message: `"${node.title}" debe tener una versión de formulario seleccionada`,
 							severity: "error",
 						});
 					}

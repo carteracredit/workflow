@@ -82,6 +82,57 @@ export const PROMOTION_OUTPUT_SCHEMA: OutputSchemaProperty[] = [
 		readOnly: true,
 	},
 	{
+		id: "promotion-out-netLoanAmount",
+		name: "netLoanAmount",
+		type: "number",
+		description:
+			"Loan amount sent to NLS createLoan: finalAmount * (1 - contractorFee / 100)",
+		readOnly: true,
+	},
+	{
+		id: "promotion-out-financedAmount",
+		name: "financedAmount",
+		type: "number",
+		description: "Amount used for APR: finalAmount - downPayment + commission",
+		readOnly: true,
+	},
+	{
+		id: "promotion-out-template",
+		name: "template",
+		type: "string",
+		description: "NLS loan template name from the selected promotion",
+		readOnly: true,
+	},
+	{
+		id: "promotion-out-loanTemplateNumber",
+		name: "loanTemplateNumber",
+		type: "number",
+		description: "NLS loan template number from the selected promotion",
+		readOnly: true,
+	},
+	{
+		id: "promotion-out-loanPortfolioName",
+		name: "loanPortfolioName",
+		type: "string",
+		description: "NLS loan portfolio name from the selected promotion",
+		readOnly: true,
+	},
+	{
+		id: "promotion-out-maxInterestRate",
+		name: "maxInterestRate",
+		type: "number",
+		description:
+			"Admin-only APR ceiling used to decide whether to retry createLoan",
+		readOnly: true,
+	},
+	{
+		id: "promotion-out-minInterestRate",
+		name: "minInterestRate",
+		type: "number",
+		description: "Admin-only interest rate used on the NLS createLoan retry",
+		readOnly: true,
+	},
+	{
 		id: "promotion-out-selectedBy",
 		name: "selectedBy",
 		type: "string",

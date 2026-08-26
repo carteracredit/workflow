@@ -136,7 +136,7 @@ describe("validateWorkflow - ExternalLink node", () => {
 		expect(elErrors.some((e) => e.message.includes("TTL"))).toBe(true);
 	});
 
-	it("should pass with valid form mode config", () => {
+	it("should error when form mode has formId but no formVersion", () => {
 		const { nodes, edges } = makeMinimalWorkflow({
 			mode: "form",
 			channels: ["email"],
@@ -150,6 +150,27 @@ describe("validateWorkflow - ExternalLink node", () => {
 				mergeVars: [],
 			},
 			formConfig: { formId: "form-123" },
+			linkTtl: { value: 72, unit: "hours" },
+		});
+		const errors = validateWorkflow(nodes, edges);
+		const elErrors = errors.filter((e) => e.nodeId === "el");
+		expect(elErrors.some((e) => e.message.includes("versión"))).toBe(true);
+	});
+
+	it("should pass with valid form mode config", () => {
+		const { nodes, edges } = makeMinimalWorkflow({
+			mode: "form",
+			channels: ["email"],
+			recipient: {
+				source: "variable",
+				emailExpression: "${start.clientEmail}",
+			},
+			emailConfig: {
+				templateName: "my-template",
+				subject: "Hello",
+				mergeVars: [],
+			},
+			formConfig: { formId: "form-123", formVersion: 1 },
 			linkTtl: { value: 72, unit: "hours" },
 		});
 		const errors = validateWorkflow(nodes, edges);
