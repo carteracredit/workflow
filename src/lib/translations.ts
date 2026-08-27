@@ -781,9 +781,9 @@ export const translations = {
 			elChallengeTimeoutMinutes: "Minutes",
 			elChallengeTimeoutHours: "Hours",
 			elChallengeTimeoutDays: "Days",
-			elChallengePullTypeLabel: "Pull Type (T&C)",
+			elChallengePullTypeLabel: "Pull Type (legal documents)",
 			elChallengePullTypeDesc:
-				"Determines which T&C document version is shown to the applicant.",
+				"Determines which Terms & Conditions and Privacy Notice versions are shown to the applicant.",
 			elChallengePullTypeSoft: "Soft Pull",
 			elChallengePullTypeHard: "Hard Pull",
 			elChallengePullTypeNew: "New Pull",
@@ -1955,9 +1955,9 @@ export const translations = {
 			elChallengeTimeoutMinutes: "Minutos",
 			elChallengeTimeoutHours: "Horas",
 			elChallengeTimeoutDays: "Días",
-			elChallengePullTypeLabel: "Tipo de Pull (T&C)",
+			elChallengePullTypeLabel: "Tipo de Pull (documentos legales)",
 			elChallengePullTypeDesc:
-				"Determina qué versión del documento de T&C se muestra al solicitante.",
+				"Determina qué versión de los Términos y Condiciones y del Aviso de Privacidad se muestra al solicitante.",
 			elChallengePullTypeSoft: "Soft Pull",
 			elChallengePullTypeHard: "Hard Pull",
 			elChallengePullTypeNew: "New Pull",
