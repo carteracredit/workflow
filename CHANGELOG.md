@@ -1,3 +1,10 @@
+# [1.10.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.10.0-rc.2...v1.10.0-rc.3) (2026-08-27)
+
+
+### Bug Fixes
+
+* **translations:** update pull type labels and descriptions for clarity ([1264f84](https://github.com/carteracredit/workflow/commit/1264f847a51112ad1aedaa6b69f5f8daada41e37))
+
 # [1.10.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.10.0-rc.1...v1.10.0-rc.2) (2026-08-26)
 
 
