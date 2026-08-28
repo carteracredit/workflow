@@ -426,7 +426,6 @@ describe("generateWorkflowCode", () => {
 		expect(result.code).toContain("maxInterestRate:");
 		expect(result.code).toContain("minInterestRate:");
 		expect(result.code).toContain("loanTemplateNumber:");
-		expect(result.code).toContain("loanPortfolioName:");
 	});
 
 	it("should generate Decision branching code", () => {
@@ -5591,6 +5590,53 @@ describe("NLS node code generation", () => {
 		);
 	});
 
+	it("should auto-inject productCode into _nlsBody for createLoan when not mapped", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [{ fieldId: "source", value: "PORTAL", source: "discovered" }],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain(
+			'_nlsBody["productCode"] = event.payload.productCode as string;',
+		);
+	});
+
+	it("should NOT duplicate the productCode injection when the node already maps it", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [
+				{
+					fieldId: "productCode",
+					value: "${start.productCode}",
+					source: "discovered",
+				},
+			],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		const occurrences = (result.code.match(/_nlsBody\["productCode"\]/g) ?? [])
+			.length;
+		expect(occurrences).toBe(1);
+		expect(result.code).not.toContain(
+			'_nlsBody["productCode"] = event.payload.productCode as string;',
+		);
+	});
+
 	it("should NOT duplicate the caseNumber injection when the node already maps it", () => {
 		const cfg: NLSNodeConfig = {
 			functionId: "createLoan",
@@ -5634,6 +5680,7 @@ describe("NLS node code generation", () => {
 		const { nodes, edges } = makeNlsWorkflow(cfg);
 		const result = generateWorkflowCode(nodes, edges);
 		expect(result.code).not.toContain("caseNumber");
+		expect(result.code).not.toContain("productCode");
 	});
 
 	it("should generate RPC call for getAmortization", () => {

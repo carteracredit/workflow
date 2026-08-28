@@ -932,7 +932,6 @@ describe("graph-utils", () => {
 				"financedAmount",
 				"template",
 				"loanTemplateNumber",
-				"loanPortfolioName",
 				"maxInterestRate",
 				"minInterestRate",
 				"selectedBy",

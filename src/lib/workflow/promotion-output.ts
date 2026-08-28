@@ -111,13 +111,6 @@ export const PROMOTION_OUTPUT_SCHEMA: OutputSchemaProperty[] = [
 		readOnly: true,
 	},
 	{
-		id: "promotion-out-loanPortfolioName",
-		name: "loanPortfolioName",
-		type: "string",
-		description: "NLS loan portfolio name from the selected promotion",
-		readOnly: true,
-	},
-	{
 		id: "promotion-out-maxInterestRate",
 		name: "maxInterestRate",
 		type: "number",
