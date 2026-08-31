@@ -1,3 +1,15 @@
+# [1.11.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.10.0...v1.11.0-rc.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **translations:** update pull type labels and descriptions for clarity ([1264f84](https://github.com/carteracredit/workflow/commit/1264f847a51112ad1aedaa6b69f5f8daada41e37))
+
+
+### Features
+
+* **workflow:** enhance NLS code generation for createLoan function ([9e9709d](https://github.com/carteracredit/workflow/commit/9e9709d75fe835494ae281db356ca4aff25e110c))
+
 # [1.10.0](https://github.com/carteracredit/workflow/compare/v1.9.0...v1.10.0) (2026-08-26)
 
 
@@ -5,6 +17,20 @@
 
 * **workflow:** add formVersion to workflow configurations ([6b836da](https://github.com/carteracredit/workflow/commit/6b836da56044e147f8236cdaaf82327f087a9253))
 * **workflow:** add new case variables and promotion output fields ([829b673](https://github.com/carteracredit/workflow/commit/829b6739a045885325dce7555bf2128df0b09330))
+
+# [1.10.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.10.0-rc.3...v1.10.0-rc.4) (2026-08-28)
+
+
+### Features
+
+* **workflow:** enhance NLS code generation for createLoan function ([9e9709d](https://github.com/carteracredit/workflow/commit/9e9709d75fe835494ae281db356ca4aff25e110c))
+
+# [1.10.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.10.0-rc.2...v1.10.0-rc.3) (2026-08-27)
+
+
+### Bug Fixes
+
+* **translations:** update pull type labels and descriptions for clarity ([1264f84](https://github.com/carteracredit/workflow/commit/1264f847a51112ad1aedaa6b69f5f8daada41e37))
 
 # [1.10.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.10.0-rc.1...v1.10.0-rc.2) (2026-08-26)
 
