@@ -405,6 +405,69 @@ describe("validateWorkflow", () => {
 		});
 	});
 
+	describe("caseStatus validation", () => {
+		it("does not error when caseStatus is undefined", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller"],
+					config: { formId: "form-1", formVersion: 1 },
+					position: { x: 100, y: 0 },
+					groupId: null,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(errors.some((e) => e.message.includes("estado de caso"))).toBe(
+				false,
+			);
+		});
+
+		it("errors when caseStatus is not assignable", () => {
+			const nodes: WorkflowNode[] = [
+				{
+					id: "start-1",
+					type: "Start",
+					title: "Start",
+					description: "",
+					roles: [],
+					config: {},
+					position: { x: 0, y: 0 },
+					groupId: null,
+				},
+				{
+					id: "form-1",
+					type: "Form",
+					title: "Form",
+					description: "",
+					roles: ["seller"],
+					config: { formId: "form-1", formVersion: 1 },
+					position: { x: 100, y: 0 },
+					groupId: null,
+					caseStatus: "approved" as never,
+				},
+			];
+			const errors = validateWorkflow(nodes, []);
+			expect(
+				errors.some(
+					(e) => e.nodeId === "form-1" && e.message.includes("estado de caso"),
+				),
+			).toBe(true);
+		});
+	});
+
 	describe("Decision node validation", () => {
 		it("should error when Decision node has less than 2 outgoing edges", () => {
 			const nodes: WorkflowNode[] = [

@@ -84,6 +84,19 @@ export const NodeSelected: Story = {
 	},
 };
 
+export const NodeWithCaseStatus: Story = {
+	name: "Form — Case status (pending_approval)",
+	args: {
+		selectedNodes: [
+			{
+				...mockNode,
+				caseStatus: "pending_approval",
+			},
+		],
+		selectedEdges: [],
+	},
+};
+
 export const NodeWithPartialVisibility: Story = {
 	name: "Form — Visibility roles (partial)",
 	args: {
