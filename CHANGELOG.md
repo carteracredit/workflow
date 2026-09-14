@@ -1,3 +1,10 @@
+# [1.11.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.1...v1.11.0-rc.2) (2026-09-14)
+
+
+### Features
+
+* **workflow:** add case status functionality to PropertiesPanel ([6ab9cd0](https://github.com/carteracredit/workflow/commit/6ab9cd0d80b62166b753a019d98572deea77ba39))
+
 # [1.11.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.10.0...v1.11.0-rc.1) (2026-08-31)
 
 
