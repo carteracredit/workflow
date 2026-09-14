@@ -34,6 +34,7 @@ import type {
 	ExternalLinkNodeConfig,
 	ExternalLinkMode,
 	ExternalLinkChannel,
+	AssignableCaseStatus,
 } from "@/lib/workflow/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -76,6 +77,7 @@ import {
 	MAX_CHALLENGE_RETRIES,
 	DEFAULT_CHALLENGE_RETRY_CONFIG,
 	createAiNameMatchOutputSchema,
+	ASSIGNABLE_CASE_STATUSES,
 } from "@/lib/workflow/types";
 import {
 	validateTransformCode,
@@ -317,6 +319,21 @@ const NODES_WITH_ROLES = [
 	"AddCard",
 ];
 const NODES_WITH_VISIBILITY_ROLES = [
+	"Form",
+	"Challenge",
+	"Message",
+	"Promotion",
+	"Decision",
+	"Transform",
+	"API",
+	"Checkpoint",
+	"FlagChange",
+	"NLS",
+	"ExternalLink",
+	"AddCard",
+	"GeneratePDF",
+];
+const NODES_WITH_CASE_STATUS = [
 	"Form",
 	"Challenge",
 	"Message",
@@ -7937,6 +7954,45 @@ export function PropertiesPanel({
 											}`}
 										>
 											{t("propertiesPanel.visibilityRolesHelp")}
+										</p>
+									</div>
+								)}
+								{NODES_WITH_CASE_STATUS.includes(selectedNode.type) && (
+									<div className="space-y-2">
+										<Label htmlFor="node-case-status">
+											{t("propertiesPanel.caseStatusLabel")}
+										</Label>
+										<Select
+											value={selectedNode.caseStatus ?? "auto"}
+											onValueChange={(value) =>
+												onUpdateNode(selectedNode.id, {
+													caseStatus:
+														value === "auto"
+															? undefined
+															: (value as AssignableCaseStatus),
+												})
+											}
+										>
+											<SelectTrigger id="node-case-status">
+												<SelectValue
+													placeholder={t(
+														"propertiesPanel.caseStatusPlaceholder",
+													)}
+												/>
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="auto">
+													{t("propertiesPanel.caseStatusAuto")}
+												</SelectItem>
+												{ASSIGNABLE_CASE_STATUSES.map((status) => (
+													<SelectItem key={status} value={status}>
+														{t(`propertiesPanel.caseStatus.${status}`)}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										<p className="text-xs text-muted-foreground">
+											{t("propertiesPanel.caseStatusHelp")}
 										</p>
 									</div>
 								)}

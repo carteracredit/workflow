@@ -13,7 +13,11 @@ import type {
 	GeneratePdfNodeConfig,
 	TimeoutUnit,
 } from "./types";
-import { MAX_CHALLENGE_RETRIES, ROLE_OPTIONS } from "./types";
+import {
+	MAX_CHALLENGE_RETRIES,
+	ROLE_OPTIONS,
+	ASSIGNABLE_CASE_STATUSES,
+} from "./types";
 import {
 	findNearestPreviousCheckpoint,
 	findUpstreamNodes,
@@ -156,6 +160,19 @@ export function validateWorkflow(
 			errors.push({
 				nodeId: node.id,
 				message: `"${node.title}" tiene roles responsables que no están en roles de visibilidad: ${missing.join(", ")}`,
+				severity: "error",
+			});
+		}
+	});
+
+	// Validación 2e: caseStatus only assignable values
+	const VALID_CASE_STATUSES = new Set<string>(ASSIGNABLE_CASE_STATUSES);
+	nodes.forEach((node) => {
+		if (node.caseStatus === undefined) return;
+		if (!VALID_CASE_STATUSES.has(node.caseStatus)) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" tiene un estado de caso no asignable: ${node.caseStatus}`,
 				severity: "error",
 			});
 		}
