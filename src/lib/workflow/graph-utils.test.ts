@@ -1351,7 +1351,7 @@ describe("buildVariableSourceNodes — prequalification variables", () => {
 		expect(bureau?.children).toHaveLength(11);
 	});
 
-	it("exposes all 9 top-level prequalification fields plus the bureau object", () => {
+	it("exposes all 10 top-level prequalification fields plus the bureau object", () => {
 		const result = buildVariableSourceNodes([startNode], {
 			allNodes: [startNode],
 		});
@@ -1359,7 +1359,21 @@ describe("buildVariableSourceNodes — prequalification variables", () => {
 		const prequal = startSource.variables.find(
 			(v) => v.name === "prequalification",
 		);
-		// 9 scalar + 1 bureau object = 10 children
-		expect(prequal?.children).toHaveLength(10);
+		// 10 scalar (incl. cifNo) + 1 bureau object = 11 children
+		expect(prequal?.children).toHaveLength(11);
+	});
+
+	it("exposes start.prequalification.cifNo as a leaf variable", () => {
+		const result = buildVariableSourceNodes([startNode], {
+			allNodes: [startNode],
+		});
+		const startSource = result[0];
+		const prequal = startSource.variables.find(
+			(v) => v.name === "prequalification",
+		);
+		const cifNo = prequal?.children?.find((c) => c.name === "cifNo");
+		expect(cifNo).toBeDefined();
+		expect(cifNo?.path).toBe("start.prequalification.cifNo");
+		expect(cifNo?.type).toBe("number");
 	});
 });
