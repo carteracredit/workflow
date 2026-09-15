@@ -1,3 +1,10 @@
+# [1.11.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.2...v1.11.0-rc.3) (2026-09-15)
+
+
+### Features
+
+* **workflow:** add cifNo case variable and update tests ([bbc0743](https://github.com/carteracredit/workflow/commit/bbc0743ee7051393af8d17d3a0e9e05efbcc6dd4))
+
 # [1.11.0-rc.2](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.1...v1.11.0-rc.2) (2026-09-14)
 
 
