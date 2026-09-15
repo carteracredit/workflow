@@ -288,6 +288,14 @@ export const CASE_VARIABLES: OutputSchemaProperty[] = [
 				readOnly: true,
 			},
 			{
+				id: "case-var-prequal-cifNo",
+				name: "cifNo",
+				type: "number",
+				description:
+					"NLS-assigned numeric id (Cifno). Null until the phase-1 → phase-2 CIF rename completes.",
+				readOnly: true,
+			},
+			{
 				id: "case-var-prequal-bureau",
 				name: "bureau",
 				type: "object",
