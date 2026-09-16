@@ -5571,7 +5571,7 @@ describe("NLS node code generation", () => {
 		expect(result.code).toContain('"source"');
 	});
 
-	it("should auto-inject caseNumber into _nlsBody for createLoan when not mapped", () => {
+	it("should auto-inject an allocated loan number into _nlsBody for createLoan when not mapped", () => {
 		const cfg: NLSNodeConfig = {
 			functionId: "createLoan",
 			fields: [{ fieldId: "source", value: "PORTAL", source: "discovered" }],
@@ -5586,7 +5586,10 @@ describe("NLS node code generation", () => {
 		const { nodes, edges } = makeNlsWorkflow(cfg);
 		const result = generateWorkflowCode(nodes, edges);
 		expect(result.code).toContain(
-			'_nlsBody["caseNumber"] = event.payload.caseNumber as string;',
+			'_nlsBody["loanNumber"] = await this.env.CASES_SVC.allocateLoanNumber(event.payload.caseId as string);',
+		);
+		expect(result.code).toContain(
+			"allocateLoanNumber: (caseId: string) => Promise<string>;",
 		);
 	});
 
@@ -5637,13 +5640,13 @@ describe("NLS node code generation", () => {
 		);
 	});
 
-	it("should NOT duplicate the caseNumber injection when the node already maps it", () => {
+	it("should NOT duplicate the loanNumber injection when the node already maps it", () => {
 		const cfg: NLSNodeConfig = {
 			functionId: "createLoan",
 			fields: [
 				{
-					fieldId: "caseNumber",
-					value: "${start.myCaseNumber}",
+					fieldId: "loanNumber",
+					value: "${start.myLoanNumber}",
 					source: "discovered",
 				},
 			],
@@ -5657,15 +5660,15 @@ describe("NLS node code generation", () => {
 		};
 		const { nodes, edges } = makeNlsWorkflow(cfg);
 		const result = generateWorkflowCode(nodes, edges);
-		const occurrences = (result.code.match(/_nlsBody\["caseNumber"\]/g) ?? [])
+		const occurrences = (result.code.match(/_nlsBody\["loanNumber"\]/g) ?? [])
 			.length;
 		expect(occurrences).toBe(1);
 		expect(result.code).not.toContain(
-			'_nlsBody["caseNumber"] = event.payload.caseNumber as string;',
+			'_nlsBody["loanNumber"] = await this.env.CASES_SVC.allocateLoanNumber',
 		);
 	});
 
-	it("should NOT inject caseNumber for non-createLoan NLS functions", () => {
+	it("should NOT inject a loan number or productCode for non-createLoan NLS functions", () => {
 		const cfg: NLSNodeConfig = {
 			functionId: "cancelLoan",
 			fields: [{ fieldId: "loanNumber", value: "99", source: "discovered" }],
@@ -5679,7 +5682,7 @@ describe("NLS node code generation", () => {
 		};
 		const { nodes, edges } = makeNlsWorkflow(cfg);
 		const result = generateWorkflowCode(nodes, edges);
-		expect(result.code).not.toContain("caseNumber");
+		expect(result.code).not.toContain("allocateLoanNumber");
 		expect(result.code).not.toContain("productCode");
 	});
 
