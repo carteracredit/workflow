@@ -1,3 +1,10 @@
+# [1.11.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.3...v1.11.0-rc.4) (2026-09-22)
+
+
+### Features
+
+* **workflow:** update NLS code generation for createLoan function ([e08fec6](https://github.com/carteracredit/workflow/commit/e08fec6838633459ed90245c0a1e0e15111ee3e0))
+
 # [1.11.0-rc.3](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.2...v1.11.0-rc.3) (2026-09-15)
 
 
