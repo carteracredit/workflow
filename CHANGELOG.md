@@ -1,3 +1,10 @@
+# [1.11.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.4...v1.11.0-rc.5) (2026-10-01)
+
+
+### Features
+
+* **workflow:** add AGENTS.md and update build scripts ([5030ee4](https://github.com/carteracredit/workflow/commit/5030ee44f1dd9916c7442eab3b0340ef3ae36797))
+
 # [1.11.0-rc.4](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.3...v1.11.0-rc.4) (2026-09-22)
 
 
