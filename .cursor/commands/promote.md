@@ -22,13 +22,18 @@ git log --oneline origin/dev..origin/main
 - `dev` behind → merge `main` into `dev` first; wait for CI.
 - `dev` == `main` → already promoted; stop.
 
-Run that repo's quality gate. Do not add product commits on the promote
-branch.
+Run that repo's quality gate. Do not add commits while promoting.
 
 ## Merge
 
-Open a PR `dev` → `main`. Merge with a **merge commit** (never squash —
-semantic-release on `main` needs the original `feat:` / `fix:` commits).
+Open the pull request with **head `dev` and base `main`**. Do not create a
+branch. Agent branch prefixes (`rs/…`) do not apply to `/promote`. A side
+branch is the wrong promote even when it points at the same commit as `dev`.
+
+Merge with a **merge commit** (never squash, never rebase). Leave the
+default merge subject, `Merge pull request #N from <owner>/dev`. Do not set
+a custom title. Semantic-release on `main` needs the original `feat:` /
+`fix:` commits.
 
 Wait for `release.yml` on `main`. Confirm the stable tag (and npm `latest`
 for libraries).

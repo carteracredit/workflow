@@ -49,7 +49,7 @@ Inside a single-repo checkout (cloud agent / Bugbot), the fragments below are th
   stable `chore(release)` or hotfix on `main`, merge `main` back into dev**
   (fast-forward when dev has nothing new). Skipping that fold makes the
   next dev → `main` PR conflict on `package.json` / CHANGELOG. Do not
-  re-promote a dev-sync-only merge. Runbook:
+  re-promote a dev-sync-only merge. `/promote` opens the pull request from `dev` into `main`. Do not create a side branch for it. Runbook:
   [`harness/platform/promote-dev-to-main.md`](../harness/platform/promote-dev-to-main.md)
   (`/promote`). ADR 0010.
 - Prefer service-binding RPC between Workers; Bearer JWT for frontend→Worker (except auth-svc cookies).
