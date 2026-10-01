@@ -1,0 +1,27 @@
+---
+description: Cartera Credit human design principles for all frontend UI
+alwaysApply: true
+---
+
+# Human design principles
+
+Applies to `cases`, `admin`, `auth`, `contractor`, `forms`, `workflow`, and
+`widgets`. Emotion targets: **confident, professional, calm**.
+
+## When changing UI
+
+- **Destructive**: Confirm dialog before revoke / suspend / delete. Do not invent a one-off without a confirm.
+- **Feedback**: Toast (Sonner) or `role="status"` / `role="alert"` for success/failure.
+- **Empty**: Shared empty-state component with **one** primary CTA when a path exists.
+- **Loading**: Layout-matched skeleton — never bare "Loading…".
+- **Motion / touch**: Honor `prefers-reduced-motion`; no hover-only critical controls.
+- **Routes**: English path segments only (see English-route-paths rule).
+- **Shared UI**: Prefer `@algenium/blocks` for shared product chrome. Copy shadcn/ui primitives into the repo (`src/components/ui/*`).
+
+## Do not
+
+- Destructive actions without confirmation
+- Bare "Loading…" when a skeleton exists for that surface
+- Hover-only critical controls on touch devices
+- Decorative motion that ignores reduced-motion preferences
+- Empty states with no next step when one clearly exists

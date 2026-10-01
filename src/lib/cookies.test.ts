@@ -58,11 +58,11 @@ describe("cookies", () => {
 			expect(detectEnvironment()).toBe("dev");
 		});
 
-		it("should return 'preview' for PR preview deployments", () => {
+		it("should return 'dev' for workers.dev preview aliases", () => {
 			vi.stubGlobal("window", {
-				location: { hostname: "pr-123-workflow.carteracredit.workers.dev" },
+				location: { hostname: "feat-x-workflow.carteracredit.workers.dev" },
 			});
-			expect(detectEnvironment()).toBe("preview");
+			expect(detectEnvironment()).toBe("dev");
 		});
 
 		it("should return 'local' for undefined window (SSR)", () => {

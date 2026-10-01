@@ -1,0 +1,25 @@
+---
+description: List search and filters are server-side, URL-backed, and debounced
+alwaysApply: true
+---
+
+# Server-side list filters
+
+Applies to product list pages (cases inbox, admin users/contractors, contractor cases, …).
+
+## Do
+
+- Filter and page collections on the API (`q` / `query`, `status`, `kind`, `limit`, `cursor` → `nextCursor`)
+- Persist active filters in the URL so the result is shareable
+- Debounce URL writes (~300ms); fetch from the URL value, not each keystroke
+- Paginate with cursor + Load more — do not slice a downloaded array
+
+## Do not
+
+- Client-side `matchesQuery` / `.filter(title.includes)` / status chips over a fetched list
+- Refetch on every keystroke
+- Drop rows in parsers to fake a server filter
+
+Allowed: hide the current user from a transfer picker; drop `null` parse failures.
+
+If a list needs a new filter, add a query param and a server `where`. No exceptions for “the list is small.”

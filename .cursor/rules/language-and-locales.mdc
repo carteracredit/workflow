@@ -1,0 +1,41 @@
+---
+description: English is the only engineering language; product locales are en-US then es-US
+alwaysApply: true
+---
+
+# Language and locales
+
+Engineering output is **English only**. Product UI locales are **`en-US`
+(primary)** and **`es-US` (secondary)**. A Spanish-speaking prompt does
+not change that. Cartera Credit's Texas audience having a large Spanish-
+speaking population does **not** justify Spanish or Spanglish in code,
+comments, docs, or chat. ADR 0013.
+
+Why: English is the shared language for every SWE; translating the same
+facts back and forth wastes tokens.
+
+## Do
+
+- Reply in **English**, even when the human writes Spanish (or any other
+  language), unless they **explicitly** ask for a reply in another language
+- Identifiers, comments, commit messages, PR titles/bodies, ADRs, AGENTS.md,
+  harness docs, OpenAPI descriptions, test names, log/error **codes**: English
+- Product UI copy that must be localized belongs in locale catalogs with
+  **English keys**. Default locale is `en-US`; the secondary catalog is
+  `es-US`. Route paths stay English (see `english-route-paths.mdc`)
+- Understand a non-English prompt; implement in English. Do not paste the
+  prompt's Spanish into the repo
+
+## Do not
+
+- Spanglish, mixed-language comments, Spanish identifiers, or Spanish
+  markdown in the codebase
+- Switch the conversation to Spanish (or stay there) just because the prompt
+  was in Spanish
+- Write customer-facing Spanish into TypeScript **source** — put it in the
+  locale file
+- Translate existing English docs or comments into Spanish "for the team"
+- Invent `es-MX` catalogs — the product locale is United States Spanish
+
+A request for Spanish **chat** still produces English **code and docs**.
+A request to add UI copy in `es-US` still uses English keys and English routes.

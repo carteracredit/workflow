@@ -1,0 +1,32 @@
+---
+description: Mandatory quality gates before marking work done in workflow
+alwaysApply: true
+---
+
+# Pre-completion checklist (workflow)
+
+**CRITICAL**: Do not mark work done until the gate is green.
+
+## Quality gate
+
+```bash
+pnpm run ci:check
+```
+
+## Always
+
+1. Implement/update code.
+2. Run the **full** quality gate above (format/lint included — not just tests). Fix until green. Tests passing is not done.
+3. Update `AGENTS.md` `## Learnings` / harness docs if you changed a durable fact or contract.
+4. Do **not** local-deploy. Local/desktop agents: do not commit/push unless the user asks. Cloud agents: commit and push with conventional commits.
+5. Background/cloud agents only: conventional commits per that repo's commitlint config. Branch from `origin/dev` and open the PR **into `dev`** (harness: `main` only) unless the user asked for a hotfix or `/promote`. That PR is what starts ADR 0011 previews — do not target `main` for feature work and do not add `no-preview` unless asked.
+6. Engineering output is English (ADR 0013): replies, code, comments, commits, PRs, docs. A Spanish prompt does not switch the session or the codebase. Product locales are `en-US` (primary) and `es-US` (secondary). Locale catalogs may hold UI copy with English keys. Spanglish is a defect.
+7. If the task changed user-visible or cross-service behavior: look up the area in `e2e/COVERAGE.md` and run `pnpm test:prod:verify --grep @<area>` (or add a spec / `required-missing` row in the same task).
+
+## Frontend extras
+
+- Empty states: one primary CTA. Loading: layout-matched skeleton. Destructive: confirm dialog. Feedback: Sonner.
+- Honor `prefers-reduced-motion`; no hover-only critical controls.
+- English route path segments only.
+- UI / route changes also need the matching `@area` e2e verify (see checklist item 7).
+- Keep Storybook stories next to the component; Chromatic snapshots must stay green.
