@@ -11,6 +11,7 @@ Applies to every `carteracredit` repo that has `dev` (not `harness`).
 
 - Land product work (features, fixes, lockfiles, library pins) on **`dev`**
 - Reach `main` only by promoting dev (`dev` → `main` **merge commit**, never squash)
+- A `/promote` pull request uses head **`dev`** and base **`main`**. Do not create `rs/promote-*` or any other branch. Agent branch prefixes do not apply. The merge subject stays `Merge pull request #N from <owner>/dev`
 - After `release.yml` on `main` (or a hotfix on `main`), merge **`main` back into dev**
   - Fast-forward dev when dev has nothing new
   - Otherwise a merge commit
@@ -23,6 +24,7 @@ Runbook: `harness/platform/promote-dev-to-main.md` (`/promote`). ADR 0010. Previ
 
 ## Do not
 
+- Open a promote PR from any branch other than `dev`
 - Skip `dev` ← `main` after a stable cut because dev "already has the product work" — the release commit is new history on `main`. The next dev → `main` PR will conflict on `package.json` / CHANGELOG
 - Re-promote a dev-sync-only merge (that fold is not a second product path)
 - Open the same product change on dev and `main` in parallel
