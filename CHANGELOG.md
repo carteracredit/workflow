@@ -1,3 +1,14 @@
+# [1.12.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.11.0...v1.12.0-rc.1) (2026-10-03)
+
+
+### Features
+
+* **workflow:** add AGENTS.md and update build scripts ([5030ee4](https://github.com/carteracredit/workflow/commit/5030ee44f1dd9916c7442eab3b0340ef3ae36797))
+* **workflow:** add case status functionality to PropertiesPanel ([6ab9cd0](https://github.com/carteracredit/workflow/commit/6ab9cd0d80b62166b753a019d98572deea77ba39))
+* **workflow:** add cifNo case variable and update tests ([bbc0743](https://github.com/carteracredit/workflow/commit/bbc0743ee7051393af8d17d3a0e9e05efbcc6dd4))
+* **workflow:** add coapplicant prequalification validation and tests ([7f7e820](https://github.com/carteracredit/workflow/commit/7f7e820999bea5325b62eecf1a2ac3a728c2c18a))
+* **workflow:** update NLS code generation for createLoan function ([e08fec6](https://github.com/carteracredit/workflow/commit/e08fec6838633459ed90245c0a1e0e15111ee3e0))
+
 # [1.11.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.5...v1.11.0-rc.6) (2026-10-03)
 
 
