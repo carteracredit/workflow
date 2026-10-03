@@ -2424,6 +2424,99 @@ describe("NLS node validation", () => {
 		).toBe(false);
 	});
 
+	function coapplicantPrequalNode(): WorkflowNode {
+		const prequal: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "prequalification",
+			fields: [
+				{ fieldId: "actorType", value: "coapplicant", source: "manual" },
+			],
+		};
+		return {
+			id: "prequal-co",
+			type: "NLS",
+			title: "Coapplicant prequalification",
+			description: "",
+			roles: [],
+			config: prequal as unknown as Record<string, unknown>,
+			position: { x: 50, y: 0 },
+			groupId: null,
+		};
+	}
+
+	function coBorrowerWarning(errors: ReturnType<typeof validateWorkflow>) {
+		return errors.find(
+			(e) =>
+				e.nodeId === "nls-1" &&
+				e.severity === "warning" &&
+				e.message.includes("coBorrower1CifNo"),
+		);
+	}
+
+	it("should warn when a coapplicant prequalification exists and createLoan maps neither CIF field", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			fields: [
+				{ fieldId: "coBorrower1CifNumber", value: "  ", source: "manual" },
+			],
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg, [coapplicantPrequalNode()]);
+		const warning = coBorrowerWarning(validateWorkflow(nodes, edges));
+		expect(warning?.severity).toBe("warning");
+	});
+
+	it("should not warn when createLoan maps coBorrower1CifNumber", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			fields: [
+				{
+					fieldId: "coBorrower1CifNumber",
+					value: "${prequal.cifNumber}",
+					source: "discovered",
+				},
+			],
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg, [coapplicantPrequalNode()]);
+		expect(coBorrowerWarning(validateWorkflow(nodes, edges))).toBeUndefined();
+	});
+
+	it("should not warn when createLoan maps coBorrower1CifNo", () => {
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			fields: [
+				{
+					fieldId: "coBorrower1CifNo",
+					value: "${prequal.cifNo}",
+					source: "discovered",
+				},
+			],
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg, [coapplicantPrequalNode()]);
+		expect(coBorrowerWarning(validateWorkflow(nodes, edges))).toBeUndefined();
+	});
+
+	it("should not warn when prequalification actorType is applicant", () => {
+		const applicant: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "prequalification",
+			fields: [{ fieldId: "actorType", value: "applicant", source: "manual" }],
+		};
+		const applicantNode: WorkflowNode = {
+			...coapplicantPrequalNode(),
+			config: applicant as unknown as Record<string, unknown>,
+		};
+		const cfg: NLSNodeConfig = {
+			...createDefaultNLSConfig(),
+			functionId: "createLoan",
+			fields: [],
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg, [applicantNode]);
+		expect(coBorrowerWarning(validateWorkflow(nodes, edges))).toBeUndefined();
+	});
+
 	it("should error when maxRetries exceeds 2", () => {
 		const cfg: NLSNodeConfig = {
 			...createDefaultNLSConfig(),
