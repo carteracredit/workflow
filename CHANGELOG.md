@@ -1,3 +1,10 @@
+# [1.11.0-rc.6](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.5...v1.11.0-rc.6) (2026-10-03)
+
+
+### Features
+
+* **workflow:** add coapplicant prequalification validation and tests ([7f7e820](https://github.com/carteracredit/workflow/commit/7f7e820999bea5325b62eecf1a2ac3a728c2c18a))
+
 # [1.11.0-rc.5](https://github.com/carteracredit/workflow/compare/v1.11.0-rc.4...v1.11.0-rc.5) (2026-10-01)
 
 
