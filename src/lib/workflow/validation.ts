@@ -670,6 +670,29 @@ export function validateWorkflow(
 						severity: "warning",
 					});
 				}
+				const hasCoapplicantPrequal = nodes.some((candidate) => {
+					if (candidate.type !== "NLS") return false;
+					const candidateCfg = candidate.config as NLSNodeConfig | undefined;
+					if (candidateCfg?.functionId !== "prequalification") return false;
+					return (candidateCfg.fields ?? []).some(
+						(field) =>
+							field.fieldId === "actorType" &&
+							field.value?.trim() === "coapplicant",
+					);
+				});
+				const coBorrowerCifMapped = (nlsCfg.fields ?? []).some(
+					(field) =>
+						(field.fieldId === "coBorrower1CifNo" ||
+							field.fieldId === "coBorrower1CifNumber") &&
+						Boolean(field.value?.trim()),
+				);
+				if (hasCoapplicantPrequal && !coBorrowerCifMapped) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": hay un nodo prequalification con actorType coapplicant; mapea coBorrower1CifNo o coBorrower1CifNumber`,
+						severity: "warning",
+					});
+				}
 			}
 		}
 
