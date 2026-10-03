@@ -21,6 +21,15 @@ export type CheckpointType = "normal" | "safe";
 
 export type Role = "client" | "seller" | "credit_agent" | "org_manager";
 
+export const ASSIGNABLE_CASE_STATUSES = [
+	"under_review",
+	"pending_documents",
+	"pending_verification",
+	"pending_approval",
+] as const;
+
+export type AssignableCaseStatus = (typeof ASSIGNABLE_CASE_STATUSES)[number];
+
 export const ROLE_OPTIONS: Role[] = [
 	"client",
 	"seller",
@@ -448,6 +457,8 @@ export interface WorkflowNode {
 	descriptionEs?: string;
 	roles: Role[];
 	visibilityRoles?: Role[];
+	/** Optional case.status written while this node is the current step. */
+	caseStatus?: AssignableCaseStatus;
 	config: Record<string, unknown>;
 	staleTimeout?: StaleTimeoutConfig | null;
 	position: { x: number; y: number };

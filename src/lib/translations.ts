@@ -562,6 +562,17 @@ export const translations = {
 				"Select which roles can see this node in the case. If no roles are selected, no one will see it. By default, all roles can see it.",
 			visibilityRolesLocked:
 				"This role is responsible for this node and cannot be hidden from it.",
+			caseStatusLabel: "Case status",
+			caseStatusPlaceholder: "Automatic",
+			caseStatusAuto: "Automatic (from node type)",
+			caseStatusHelp:
+				"Optional. Maps this step to a case status. Leave automatic to derive it from the node type. Terminal statuses cannot be assigned here.",
+			caseStatus: {
+				under_review: "Under review",
+				pending_documents: "Pending documents",
+				pending_verification: "Pending verification",
+				pending_approval: "Pending approval",
+			},
 			startSchemaLabel: "Workflow Input Schema",
 			caseVariablesLabel: "Case data",
 			caseVariablesHint:
@@ -1734,6 +1745,17 @@ export const translations = {
 				"Selecciona qué roles pueden ver este nodo en el caso. Si no seleccionas ningún rol, nadie lo verá. Por defecto todos los roles pueden verlo.",
 			visibilityRolesLocked:
 				"Este rol es responsable de este nodo y no puede ocultarse de él.",
+			caseStatusLabel: "Estado del caso",
+			caseStatusPlaceholder: "Automático",
+			caseStatusAuto: "Automático (según tipo de nodo)",
+			caseStatusHelp:
+				"Opcional. Asocia este paso a un estado del caso. Déjalo automático para derivarlo del tipo de nodo. Los estados terminales no se pueden asignar aquí.",
+			caseStatus: {
+				under_review: "En revisión",
+				pending_documents: "Documentos pendientes",
+				pending_verification: "Verificación pendiente",
+				pending_approval: "Aprobación pendiente",
+			},
 			startSchemaLabel: "Esquema de Entrada del Workflow",
 			caseVariablesLabel: "Datos del caso",
 			caseVariablesHint:

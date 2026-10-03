@@ -1,0 +1,20 @@
+---
+description: Use English path segments in app URLs
+alwaysApply: true
+---
+
+# English-only route paths
+
+App **URLs / pathnames** must use English segments. UI copy may be localized
+in locale catalogs (ADR 0013). All other engineering output is English
+(`language-and-locales.mdc`) — a Spanish prompt does not change pathnames.
+
+## Do
+
+- Routes, `href`, `Link`, `redirect`, `pathname` checks, and nav config: English only
+  (`/login`, `/cases`, `/contractors`, `/settings`, …)
+
+## Do not
+
+- Non-English path segments
+- Mixing locale into the primary route tree until aliases are explicitly requested

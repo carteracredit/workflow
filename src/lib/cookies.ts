@@ -5,11 +5,10 @@
  * enabling shared preferences (theme, language) across all apps.
  */
 
-export type Environment = "local" | "preview" | "dev" | "production";
+export type Environment = "local" | "dev" | "production";
 
 const COOKIE_DOMAIN_BY_ENV: Record<Environment, string | undefined> = {
 	local: undefined, // localhost doesn't use domain
-	preview: ".carteracredit.workers.dev",
 	dev: ".carteracredit.workers.dev",
 	production: ".cartera.credit",
 };
@@ -36,10 +35,6 @@ export function detectEnvironment(): Environment {
 	}
 
 	if (hostname.endsWith(".carteracredit.workers.dev")) {
-		// Check for preview deployments (e.g., pr-123-forms.carteracredit.workers.dev)
-		if (hostname.match(/^pr-\d+-.*\.carteracredit\.workers\.dev$/)) {
-			return "preview";
-		}
 		return "dev";
 	}
 

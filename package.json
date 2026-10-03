@@ -1,6 +1,6 @@
 {
 	"name": "workflow",
-	"version": "1.11.0",
+	"version": "1.12.0-rc.1",
 	"description": "Build a full-stack web application with Next.js.",
 	"cloudflare": {
 		"label": "Next.js Framework Starter",
@@ -92,7 +92,7 @@
 	"private": true,
 	"scripts": {
 		"build": "next build",
-		"cf-build": "opennextjs-cloudflare build && node ./scripts/logrocket-sourcemaps.mjs",
+		"cf-build": "node ./scripts/cf-build.mjs",
 		"cf-typegen": "wrangler types --env-interface CloudflareEnv env.d.ts",
 		"prepare": "husky",
 		"typecheck": "tsc --noEmit",
@@ -108,14 +108,13 @@
 		"test:unit": "vitest run",
 		"test:watch": "vitest",
 		"ci:check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
-		"predeploy:preview": "pnpm run cf-build",
-		"versions:upload": "node ./scripts/versions-upload.mjs",
 		"logrocket:sourcemaps": "node ./scripts/logrocket-sourcemaps.mjs",
 		"storybook": "pnpm exec storybook dev -p 6006",
 		"build-storybook": "node scripts/build-storybook.mjs",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
 		"release": "semantic-release",
-		"start": "next start"
+		"start": "next start",
+		"preview:upload": "node ./scripts/preview-upload.mjs"
 	},
 	"lint-staged": {
 		"**/*.{js,jsx,ts,tsx,md,mdx,json,yml,yaml,css,scss}": [

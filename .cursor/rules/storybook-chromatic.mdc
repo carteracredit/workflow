@@ -1,0 +1,22 @@
+---
+description: Keep Storybook stories next to components; Chromatic is the visual gate
+globs:
+  - "src/**/*.{ts,tsx,mdx}"
+---
+
+# Storybook and Chromatic
+
+All Cartera frontends ship Storybook. Chromatic runs in CI on `dev` / `main`.
+
+## Do
+
+- Put stories next to the component (`Component.stories.tsx`)
+- Cover empty, loading, error, and the primary filled state
+- Keep axe checks in unit tests for interactive chrome
+- Treat a Chromatic failure as a real UI regression unless the change is intentional (then accept the snapshot in Chromatic)
+
+## Do not
+
+- Put stories only under a distant `src/stories/` dump unless the file is a composition demo
+- Skip stories for a new shared primitive
+- Disable Chromatic to "make CI green"

@@ -13,7 +13,11 @@ import type {
 	GeneratePdfNodeConfig,
 	TimeoutUnit,
 } from "./types";
-import { MAX_CHALLENGE_RETRIES, ROLE_OPTIONS } from "./types";
+import {
+	MAX_CHALLENGE_RETRIES,
+	ROLE_OPTIONS,
+	ASSIGNABLE_CASE_STATUSES,
+} from "./types";
 import {
 	findNearestPreviousCheckpoint,
 	findUpstreamNodes,
@@ -156,6 +160,19 @@ export function validateWorkflow(
 			errors.push({
 				nodeId: node.id,
 				message: `"${node.title}" tiene roles responsables que no están en roles de visibilidad: ${missing.join(", ")}`,
+				severity: "error",
+			});
+		}
+	});
+
+	// Validación 2e: caseStatus only assignable values
+	const VALID_CASE_STATUSES = new Set<string>(ASSIGNABLE_CASE_STATUSES);
+	nodes.forEach((node) => {
+		if (node.caseStatus === undefined) return;
+		if (!VALID_CASE_STATUSES.has(node.caseStatus)) {
+			errors.push({
+				nodeId: node.id,
+				message: `"${node.title}" tiene un estado de caso no asignable: ${node.caseStatus}`,
 				severity: "error",
 			});
 		}
@@ -650,6 +667,29 @@ export function validateWorkflow(
 					errors.push({
 						nodeId: node.id,
 						message: `"${node.title}": hay un nodo Promotion aguas arriba; mapea loanAmount a \${promo.netLoanAmount} del nodo de promoción que corresponda`,
+						severity: "warning",
+					});
+				}
+				const hasCoapplicantPrequal = nodes.some((candidate) => {
+					if (candidate.type !== "NLS") return false;
+					const candidateCfg = candidate.config as NLSNodeConfig | undefined;
+					if (candidateCfg?.functionId !== "prequalification") return false;
+					return (candidateCfg.fields ?? []).some(
+						(field) =>
+							field.fieldId === "actorType" &&
+							field.value?.trim() === "coapplicant",
+					);
+				});
+				const coBorrowerCifMapped = (nlsCfg.fields ?? []).some(
+					(field) =>
+						(field.fieldId === "coBorrower1CifNo" ||
+							field.fieldId === "coBorrower1CifNumber") &&
+						Boolean(field.value?.trim()),
+				);
+				if (hasCoapplicantPrequal && !coBorrowerCifMapped) {
+					errors.push({
+						nodeId: node.id,
+						message: `"${node.title}": hay un nodo prequalification con actorType coapplicant; mapea coBorrower1CifNo o coBorrower1CifNumber`,
 						severity: "warning",
 					});
 				}
