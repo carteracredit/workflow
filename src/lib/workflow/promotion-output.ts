@@ -56,7 +56,8 @@ export const PROMOTION_OUTPUT_SCHEMA: OutputSchemaProperty[] = [
 		id: "promotion-out-interestRate",
 		name: "interestRate",
 		type: "number",
-		description: "Annual interest rate (percentage) of the selected promotion",
+		description:
+			"Annual interest rate (percentage) resolved from the promotion's amount condition at selection time",
 		readOnly: true,
 	},
 	{
@@ -78,7 +79,7 @@ export const PROMOTION_OUTPUT_SCHEMA: OutputSchemaProperty[] = [
 		name: "commission",
 		type: "number",
 		description:
-			"Commission resolved from the promotion's condition (operator + threshold vs requestedAmount) at selection time",
+			"Commission resolved from the promotion's amount condition (single or range vs requestedAmount) at selection time",
 		readOnly: true,
 	},
 	{
