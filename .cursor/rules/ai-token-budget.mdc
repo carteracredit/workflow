@@ -1,0 +1,16 @@
+---
+description: No production AI release without an approved token estimate
+alwaysApply: true
+---
+
+# AI token budget
+
+## Do
+
+- Record a dev measurement in `harness/platform/token-estimates/<feature>.md` before a production AI release.
+- Set per-user, per-conversation, and per-call caps from that measurement.
+- Wait for a written approval on that file.
+
+## Do not
+
+- Ship Workers AI, an AI Gateway route, or an external model connector to production without that file.
