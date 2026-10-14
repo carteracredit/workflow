@@ -1,0 +1,18 @@
+---
+description: Agent tools never use text-to-SQL; the catalog lives in mcp-gateway
+alwaysApply: true
+---
+
+# Agent tools
+
+## Do
+
+- Call curated tools only. Never translate a user prompt into SQL or another authoritative language.
+- Define tools in the mcp-gateway catalog (`src/tools/`) with a name `<domain>_<verb>_<object>`, annotations, and `outputSchema`.
+- Execute the tool in the owning service. The gateway maps and calls.
+- Audit denials.
+
+## Do not
+
+- Add a text-to-SQL tool, a raw SQL binding for agents, or a second tool catalog.
+- Let the gateway contain domain queries.

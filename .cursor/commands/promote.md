@@ -38,6 +38,12 @@ a custom title. Semantic-release on `main` needs the original `feat:` /
 Wait for `release.yml` on `main`. Confirm the stable tag (and npm `latest`
 for libraries).
 
+For Workers Builds repos, confirm the merge commit has a successful
+`Workers Builds: <worker>` check from the prod account. The `[skip ci]`
+release commit never deploys. If the check is missing or its suite stays
+`queued`, ask a human to start a build of `main` in the prod dashboard
+(runbook section "Confirm the prod deploy").
+
 ## After release — `dev` ← `main` (required)
 
 Promote is **not done** when `main` is green. Semantic-release may write
