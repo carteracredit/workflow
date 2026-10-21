@@ -1,0 +1,20 @@
+---
+description: JWT and admin RBAC go through the harness-managed auth-core file
+alwaysApply: true
+---
+
+# Auth core
+
+`src/lib/auth-core.ts` is generated from `harness/fragments/auth-core/`. It is not a package and not a repo.
+
+## Do
+
+- Verify platform JWTs and resolve admin permissions with `createAuthCore`.
+- Change the source under `harness/fragments/auth-core/` and run `node harness/scripts/sync.mjs`.
+- Treat a missing auth binding or a failed RPC as HTTP 503.
+
+## Do not
+
+- Edit `src/lib/auth-core.ts` in a worker.
+- Reimplement JWT verification or RBAC beside the core.
+- Return `"*"` or allow a request when authorization fails.
