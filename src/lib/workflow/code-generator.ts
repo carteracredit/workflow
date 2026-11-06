@@ -1729,6 +1729,12 @@ function generateNLSStep(
 		) {
 			code += `${indent}\t_nlsBody["productCode"] = event.payload.productCode as string;\n`;
 		}
+		if (
+			functionId === "createLoan" &&
+			!fields.some((f) => f.fieldId === "createdAt" && f.value)
+		) {
+			code += `${indent}\t_nlsBody["createdAt"] = event.payload.caseCreatedAt as string | undefined;\n`;
+		}
 
 		code += `${indent}\tconst _nlsResult = await this.env.PROXY_SVC.${rpcMethod}({\n`;
 		code += `${indent}\t\tbearerToken: event.payload._jwt as string,\n`;

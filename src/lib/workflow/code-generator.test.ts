@@ -5612,6 +5612,51 @@ describe("NLS node code generation", () => {
 		);
 	});
 
+	it("should auto-inject createdAt from the case for createLoan when not mapped", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [{ fieldId: "source", value: "PORTAL", source: "discovered" }],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		expect(result.code).toContain(
+			'_nlsBody["createdAt"] = event.payload.caseCreatedAt as string | undefined;',
+		);
+	});
+
+	it("should NOT duplicate the createdAt injection when the node already maps it", () => {
+		const cfg: NLSNodeConfig = {
+			functionId: "createLoan",
+			fields: [
+				{
+					fieldId: "createdAt",
+					value: "${start.createdAt}",
+					source: "discovered",
+				},
+			],
+			failureHandling: {
+				onFailure: "continue",
+				maxRetries: 0,
+				retryCount: 0,
+				cacheStrategy: "always-execute",
+				timeout: 30000,
+			},
+		};
+		const { nodes, edges } = makeNlsWorkflow(cfg);
+		const result = generateWorkflowCode(nodes, edges);
+		const occurrences = (result.code.match(/_nlsBody\["createdAt"\]/g) ?? [])
+			.length;
+		expect(occurrences).toBe(1);
+		expect(result.code).not.toContain("caseCreatedAt");
+	});
+
 	it("should NOT duplicate the productCode injection when the node already maps it", () => {
 		const cfg: NLSNodeConfig = {
 			functionId: "createLoan",
@@ -5684,6 +5729,7 @@ describe("NLS node code generation", () => {
 		const result = generateWorkflowCode(nodes, edges);
 		expect(result.code).not.toContain("allocateLoanNumber");
 		expect(result.code).not.toContain("productCode");
+		expect(result.code).not.toContain("caseCreatedAt");
 	});
 
 	it("should generate RPC call for getAmortization", () => {
