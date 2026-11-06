@@ -1,3 +1,10 @@
+# [1.13.0-rc.1](https://github.com/carteracredit/workflow/compare/v1.12.0...v1.13.0-rc.1) (2026-11-06)
+
+
+### Features
+
+* **createLoan:** fill createdAt from the case start payload ([fa87a3a](https://github.com/carteracredit/workflow/commit/fa87a3a4f2c1bafd1a446f3512824e7949737ec5))
+
 # [1.12.0](https://github.com/carteracredit/workflow/compare/v1.11.0...v1.12.0) (2026-10-03)
 
 
